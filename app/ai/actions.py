@@ -13,6 +13,8 @@ class ActionTypes:
     OPEN_URL = "open_url"
     PRESS_ENTER = "press_enter"
 
+    VISION_ANALYZE = "vision_analyze"
+
     UNKNOWN = "unknown"
 
 

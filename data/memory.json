@@ -57,6 +57,16 @@
             "user": "wyszukaj w google RTX 5080 ASUS",
             "jarvis": "Szukam w Google: rtx 5080 asus",
             "created_at": "2026-07-05T13:43:30.328706"
+        },
+        {
+            "user": "co widzisz?",
+            "jarvis": "Analiza ekranu:\n\nWidzę następujące okna:\n\n1. JARVIS OS\n2. Zdalny dostęp do komputera – Opera\n3. Wiersz polecenia - python  main.py\n4. planner_llm.py - JarvisAI - Visual Studio Code\n5. JarvisAI — Eksplorator plików\n6. #ogólne | Burdel - Discord\n7. Program uruchamiający Epic Games\n8. Program Manager\n\n\nZrzut ekranu zapisany tutaj:\ndata\\screenshots\\screen_2026-07-05_14-16-12.png",
+            "created_at": "2026-07-05T14:16:12.348912"
+        },
+        {
+            "user": "co widzisz?",
+            "jarvis": "Analiza ekranu przez JARVIS Vision:\n\n=== OTWARTE OKNA ===\nWidzę następujące okna:\n\n1. JARVIS OS\n2. Wiersz polecenia - python  main.py\n3. Zdalny dostęp do komputera – Opera\n4. JarvisAI - Visual Studio Code\n5. Menedżer zadań\n6. Wiersz polecenia\n7. @Plutex - Discord\n8. Program Manager\n\n\n=== ANALIZA QWEN VISION ===\n@@@@@@@@@@@\n\n=== SCREENSHOT ===\ndata\\screenshots\\screen_2026-07-05_15-17-07.png",
+            "created_at": "2026-07-05T15:18:38.895111"
         }
     ]
 }

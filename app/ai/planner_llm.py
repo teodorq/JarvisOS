@@ -10,13 +10,40 @@ class PlannerLLM:
         original = user_command.strip()
         command = original.lower()
 
-        # Szybkie, pewne reguły przed AI
+        # ===== VISION =====
+        if (
+            "co widzisz" in command
+            or "przeanalizuj ekran" in command
+            or "analiza ekranu" in command
+            or "jakie okna" in command
+            or "co jest na ekranie" in command
+        ):
+            return {
+                "goal": "Przeanalizować ekran",
+                "steps": [
+                    "Sprawdzić otwarte okna",
+                    "Zrobić screenshot",
+                    "Zwrócić analizę"
+                ],
+                "execute": True,
+                "action_type": "vision_analyze",
+                "target": "",
+                "text": "",
+                "url": "",
+                "query": ""
+            }
+
+        # ===== GOOGLE =====
         if "wyszukaj w google" in command or "szukaj w google" in command:
             query = original.lower()
             query = query.replace("wyszukaj w google", "").replace("szukaj w google", "").strip()
+
             return {
                 "goal": f"Wyszukać w Google: {query}",
-                "steps": ["Otworzyć Google z gotowym wyszukiwaniem", f"Wyszukać: {query}"],
+                "steps": [
+                    "Otworzyć Google",
+                    f"Wyszukać: {query}"
+                ],
                 "execute": True,
                 "action_type": "google_search",
                 "target": "",
@@ -25,12 +52,17 @@ class PlannerLLM:
                 "query": query
             }
 
+        # ===== YOUTUBE =====
         if "wyszukaj na youtube" in command or "szukaj na youtube" in command:
             query = original.lower()
             query = query.replace("wyszukaj na youtube", "").replace("szukaj na youtube", "").strip()
+
             return {
                 "goal": f"Wyszukać na YouTube: {query}",
-                "steps": ["Otworzyć YouTube z gotowym wyszukiwaniem", f"Wyszukać: {query}"],
+                "steps": [
+                    "Otworzyć YouTube",
+                    f"Wyszukać: {query}"
+                ],
                 "execute": True,
                 "action_type": "youtube_search",
                 "target": "",
@@ -40,34 +72,12 @@ class PlannerLLM:
             }
 
         prompt = f"""
-Jesteś modułem planowania JARVIS OS.
-Zamień polecenie użytkownika na JEDNĄ akcję.
+Jesteś Plannerem JARVIS OS.
 
-Zwróć WYŁĄCZNIE poprawny JSON.
+Odpowiadaj WYŁĄCZNIE poprawnym JSON.
 
-Format:
-{{
-    "goal": "...",
-    "steps": ["...", "..."],
-    "execute": true,
-    "action_type": "",
-    "target": "",
-    "text": "",
-    "url": "",
-    "query": ""
-}}
+Polecenie:
 
-Dostępne action_type:
-open_website, open_app, click, type_text, screenshot, remember, task,
-memory_summary, google_search, youtube_search, open_url, press_enter, unknown
-
-Zasady:
-- Dla wyszukiwania w Google użyj google_search i wpisz frazę w query.
-- Dla wyszukiwania na YouTube użyj youtube_search i wpisz frazę w query.
-- Nie używaj open_website dla wyszukiwania.
-- open_website służy tylko do otwierania strony głównej.
-
-Polecenie użytkownika:
 {original}
 """
 
@@ -77,15 +87,17 @@ Polecenie użytkownika:
             start = response.find("{")
             end = response.rfind("}") + 1
 
-            if start == -1 or end == 0:
-                raise Exception("Brak JSON")
+            if start == -1:
+                raise Exception()
 
             return json.loads(response[start:end])
 
         except Exception:
             return {
-                "goal": "Nie udało się utworzyć planu.",
-                "steps": ["Model zwrócił niepoprawną odpowiedź."],
+                "goal": "Nie rozpoznano polecenia.",
+                "steps": [
+                    "Brak poprawnej odpowiedzi AI."
+                ],
                 "execute": False,
                 "action_type": "unknown",
                 "target": "",

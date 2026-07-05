@@ -6,12 +6,14 @@ from app.ai.actions import ActionTypes
 from app.browser.browser import BrowserAgent
 from app.desktop.controller import DesktopController
 from app.vision.screen import ScreenVision
+from app.vision.vision_ai import VisionAI
 
 
 class CommandExecutor:
     def __init__(self):
         self.desktop = DesktopController()
         self.vision = ScreenVision()
+        self.vision_ai = VisionAI()
         self.browser = BrowserAgent()
 
     def execute_action(self, action: dict) -> str:
@@ -20,6 +22,9 @@ class CommandExecutor:
         text = action.get("text", "")
         url = action.get("url", "")
         query = action.get("query", "")
+
+        if action_type == ActionTypes.VISION_ANALYZE:
+            return self.vision_ai.analyze_screen()
 
         if action_type == ActionTypes.OPEN_URL:
             return self.browser.open_url(url)
@@ -55,7 +60,6 @@ class CommandExecutor:
 
     def normalize_target(self, target: str) -> str:
         target = target.lower().strip()
-
         target = target.replace("https://", "")
         target = target.replace("http://", "")
         target = target.replace("www.", "")
