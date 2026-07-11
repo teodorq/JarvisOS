@@ -1,0 +1,17 @@
+ Volume in drive C has no label.
+ Volume Serial Number is 5467-7685
+
+ Directory of C:\JarvisAI\app\ai
+
+05.07.2026  16:52             1ÿ398 actions.py
+06.07.2026  19:42             1ÿ266 brain.py
+05.07.2026  13:23             1ÿ049 llm.py
+05.07.2026  13:25             4ÿ204 planner.py
+05.07.2026  13:25             4ÿ204 planner_backup.py
+05.07.2026  18:16             7ÿ059 planner_llm.py
+05.07.2026  14:14             3ÿ174 planner_llm_backup.py
+               7 File(s)         22ÿ354 bytes
+
+     Total Files Listed:
+               7 File(s)         22ÿ354 bytes
+               0 Dir(s)  285ÿ127ÿ049ÿ216 bytes free

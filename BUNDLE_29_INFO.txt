@@ -1,0 +1,17 @@
+JARVIS OS — BUNDLE 29
+
+Zmiany:
+- Dodano AutoDevAutonomyV7.
+- Dodano bezpieczna brame decyzji przed wykonaniem zmian.
+- Cel jest pobierany z realnego wyniku Autonomy V6.
+- Wysokie ryzyko jest blokowane.
+- Każda dopuszczona zmiana nadal wymaga zatwierdzenia.
+- Moduł nie zapisuje kodu.
+
+Weryfikacja:
+- py_compile: OK
+- 8 testow AutoDev V5/V6/V7: OK
+- zawartosc ZIP: sprawdzona
+
+Instalacja:
+Rozpakuj bezposrednio do C:\JarvisAI i zaakceptuj scalenie folderow.

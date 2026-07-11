@@ -6,16 +6,22 @@ import time
 class DesktopController:
 
     def move_mouse(self, x, y, duration=0.5):
-        pyautogui.moveTo(x, y, duration=duration)
+        pyautogui.moveTo(int(x), int(y), duration=duration)
 
     def click(self):
-        pyautogui.click()
+        time.sleep(0.15)
+        pyautogui.click(button="left")
+        time.sleep(0.15)
 
     def double_click(self):
-        pyautogui.doubleClick()
+        time.sleep(0.15)
+        pyautogui.doubleClick(button="left")
+        time.sleep(0.15)
 
     def right_click(self):
+        time.sleep(0.15)
         pyautogui.rightClick()
+        time.sleep(0.15)
 
     def write(self, text):
         pyautogui.write(text, interval=0.03)

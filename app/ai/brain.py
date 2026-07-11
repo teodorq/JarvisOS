@@ -1,60 +1,124 @@
-from app.ai.actions import ActionTypes
-from app.ai.planner_llm import PlannerLLM
-from app.automation.command_executor import CommandExecutor
-from app.memory.memory import Memory
 
-
-class Brain:
-    def __init__(self):
-        self.planner = PlannerLLM()
-        self.executor = CommandExecutor()
-        self.memory = Memory()
-
-    def think(self, command: str) -> dict:
-        plan_data = self.planner.create_plan(command)
-
-        action = {
-            "action_type": plan_data.get("action_type", ActionTypes.UNKNOWN),
-            "target": plan_data.get("target", ""),
-            "text": plan_data.get("text", ""),
-            "url": plan_data.get("url", ""),
-            "query": plan_data.get("query", "")
-        }
-
-        steps = plan_data.get("steps", [])
-
-        can_execute = (
-            bool(plan_data.get("execute", False))
-            and action["action_type"] != ActionTypes.UNKNOWN
+     "status",
+            response.get(
+                "status",
+                "UNKNOWN",
+            ),
         )
 
-        return {
-            "command": command,
-            "goal": plan_data.get("goal", ""),
-            "action": action,
-            "plan": steps,
-            "can_execute": can_execute
-        }
+        requires_confirmation = result.get(
+            "requires_confirmation",
+            strategy.get(
+                "requires_confirmation",
+                False,
+            ),
+        )
 
-    def execute(self, thought: dict) -> str:
-        action = thought["action"]
-        action_type = action["action_type"]
+        blocking_reasons = result.get(
+            "blocking_reasons",
+            strategy.get(
+                "blocking_reasons",
+                [],
+            ),
+        )
 
-        if action_type == ActionTypes.REMEMBER:
-            response = self.memory.remember_note(action["text"])
-            self.memory.add_history(thought["command"], response)
-            return response
+        lines = [
+            "AI Reasoner zakończył analizę.",
+            f"Status: {status}",
+            f"Strategia: {strategy_name}",
+            f"Poziom ryzyka: {risk_level}",
+        ]
 
-        if action_type == ActionTypes.ADD_TASK:
-            response = self.memory.add_task(action["text"])
-            self.memory.add_history(thought["command"], response)
-            return response
+        if session_id:
+            lines.append(
+                f"Session ID: {session_id}"
+            )
 
-        if action_type == ActionTypes.MEMORY_SUMMARY:
-            response = self.memory.get_summary()
-            self.memory.add_history(thought["command"], response)
-            return response
+        if requires_confirmation:
+            lines.append(
+                "Wymagana jest akceptacja "
+                "przed wykonaniem zmian."
+            )
 
-        response = self.executor.execute_action(action)
-        self.memory.add_history(thought["command"], response)
-        return response
+        if isinstance(
+            blocking_reasons,
+            list,
+        ) and blocking_reasons:
+            lines.append(
+                "Blokady: "
+                + "; ".join(
+                    str(reason)
+                    for reason in blocking_reasons
+                )
+            )
+
+        return "\n".join(lines)
+
+    def _format_research_response(
+        self,
+        response: dict,
+    ) -> str:
+
+        if not isinstance(
+            response,
+            dict,
+        ):
+            return str(
+                response
+            )
+
+        report = response.get(
+            "report",
+            "",
+        )
+
+        if report:
+            return str(
+                report
+            )
+
+        success = response.get(
+            "success",
+            False,
+        )
+
+        if success:
+            return (
+                "Research Agent zakończył "
+                "analizę projektu."
+            )
+
+        error = response.get(
+            "error",
+            "",
+        )
+
+        if error:
+            return (
+                "Research Agent nie zakończył "
+                f"analizy: {error}"
+            )
+
+        return (
+            "Research Agent nie zwrócił raportu."
+        )
+
+    def _remember_execution(
+        self,
+        command: str,
+        result,
+    ) -> None:
+
+        result_text = str(
+            result
+        )
+
+        self.memory.add_history(
+            command,
+            result_text,
+        )
+
+        self.cognitive.after_execute(
+            command,
+            result_text,
+        )

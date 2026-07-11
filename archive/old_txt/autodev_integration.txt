@@ -1,0 +1,63 @@
+===== planner_llm.py =====
+
+===== brain.py =====
+
+===== actions.py =====
+class ActionTypes:
+    OPEN_WEBSITE = "open_website"
+    OPEN_APP = "open_app"
+    TYPE_TEXT = "type_text"
+    CLICK = "click"
+    SCREENSHOT = "screenshot"
+
+    REMEMBER = "remember"
+    ADD_TASK = "add_task"
+    MEMORY_SUMMARY = "memory_summary"
+
+    GOOGLE_SEARCH = "google_search"
+    YOUTUBE_SEARCH = "youtube_search"
+    YOUTUBE_FIRST_VIDEO = "youtube_first_video"
+
+    OPEN_URL = "open_url"
+    PRESS_ENTER = "press_enter"
+
+    VISION_ANALYZE = "vision_analyze"
+    VISION_CLICK = "vision_click"
+
+    UNKNOWN = "unknown"
+
+
+class Action:
+    def __init__(
+        self,
+        action_type: str,
+        target: str = "",
+        text: str = "",
+        url: str = "",
+        query: str = ""
+    ):
+        self.action_type = action_type
+        self.target = target
+        self.text = text
+        self.url = url
+        self.query = query
+
+    def to_dict(self) -> dict:
+        return {
+            "action_type": self.action_type,
+            "target": self.target,
+            "text": self.text,
+            "url": self.url,
+            "query": self.query
+        }
+
+    @staticmethod
+    def from_dict(data: dict):
+        return Action(
+            action_type=data.get("action_type", ActionTypes.UNKNOWN),
+            target=data.get("target", ""),
+            text=data.get("text", ""),
+            url=data.get("url", ""),
+            query=data.get("query", "")
+        )
+===== command_executor.py =====

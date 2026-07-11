@@ -1,121 +1,313 @@
+from __future__ import annotations
+
 import os
 import subprocess
-import webbrowser
 
 from app.ai.actions import ActionTypes
 from app.browser.browser import BrowserAgent
-from app.desktop.controller import DesktopController
-from app.vision.screen import ScreenVision
-from app.vision.vision_ai import VisionAI
+from app.skills.skill_manager import SkillManager
 
 
 class CommandExecutor:
-    def __init__(self):
-        self.desktop = DesktopController()
-        self.vision = ScreenVision()
-        self.vision_ai = VisionAI()
+
+    def __init__(
+        self,
+    ) -> None:
+
+        self.skill_manager = SkillManager()
         self.browser = BrowserAgent()
 
-    def execute_action(self, action: dict) -> str:
-        action_type = action.get("action_type")
-        target = action.get("target", "")
-        text = action.get("text", "")
-        url = action.get("url", "")
-        query = action.get("query", "")
+    def execute_action(
+        self,
+        action: dict,
+    ):
 
-        if action_type == ActionTypes.VISION_ANALYZE:
-            return self.vision_ai.analyze_screen()
+        if not isinstance(
+            action,
+            dict,
+        ):
+            return (
+                "Nieprawidłowa akcja."
+            )
 
-        if action_type == ActionTypes.OPEN_URL:
-            return self.browser.open_url(url)
+        action_type = action.get(
+            "action_type",
+            ActionTypes.UNKNOWN,
+        )
 
-        if action_type == ActionTypes.GOOGLE_SEARCH:
-            return self.browser.google_search(query)
+        if (
+            action_type
+            == ActionTypes.OPEN_APP
+        ):
+            return self.open_app(
+                action.get(
+                    "target",
+                    "",
+                )
+            )
 
-        if action_type == ActionTypes.YOUTUBE_SEARCH:
-            return self.browser.youtube_search(query)
+        if (
+            action_type
+            == ActionTypes.OPEN_WEBSITE
+        ):
+            return self.open_website(
+                action.get(
+                    "target",
+                    "",
+                )
+            )
 
-        if action_type == ActionTypes.PRESS_ENTER:
-            return self.browser.press_enter()
+        if (
+            action_type
+            == ActionTypes.GOOGLE_SEARCH
+        ):
+            return self.browser.google_search(
+                action.get(
+                    "query",
+                    "",
+                )
+            )
 
-        if action_type == ActionTypes.OPEN_WEBSITE:
-            return self.open_website(target)
+        if (
+            action_type
+            == ActionTypes.YOUTUBE_SEARCH
+        ):
+            return self.browser.youtube_search(
+                action.get(
+                    "query",
+                    "",
+                )
+            )
 
-        if action_type == ActionTypes.OPEN_APP:
-            return self.open_app(target)
+        if (
+            action_type
+            == ActionTypes.OPEN_URL
+        ):
+            return self.browser.open_url(
+                action.get(
+                    "url",
+                    action.get(
+                        "target",
+                        "",
+                    ),
+                )
+            )
 
-        if action_type == ActionTypes.TYPE_TEXT:
-            self.desktop.write(text)
-            return f"Piszę: {text}"
+        skill_result = (
+            self.skill_manager.execute(
+                action
+            )
+        )
 
-        if action_type == ActionTypes.CLICK:
-            self.desktop.click()
-            return "Klikam."
+        if skill_result is not None:
+            return skill_result
 
-        if action_type == ActionTypes.SCREENSHOT:
-            path = self.vision.take_screenshot()
-            return f"Zrobiłem zrzut ekranu: {path}"
+        return (
+            f"Nieznana akcja: "
+            f"{action_type}"
+        )
 
-        return "Nie znam jeszcze tej akcji."
+    def normalize_target(
+        self,
+        target,
+    ) -> str:
 
-    def normalize_target(self, target: str) -> str:
-        target = target.lower().strip()
-        target = target.replace("https://", "")
-        target = target.replace("http://", "")
-        target = target.replace("www.", "")
+        normalized = str(
+            target
+        ).lower().strip()
 
-        if target.endswith(".com"):
-            target = target[:-4]
+        normalized = normalized.replace(
+            "https://",
+            "",
+        )
 
-        if target.endswith(".pl"):
-            target = target[:-3]
+        normalized = normalized.replace(
+            "http://",
+            "",
+        )
 
-        return target
+        normalized = normalized.replace(
+            "www.",
+            "",
+        )
 
-    def open_website(self, target: str) -> str:
-        target = self.normalize_target(target)
+        normalized = normalized.rstrip(
+            "/"
+        )
+
+        if normalized.endswith(
+            ".pl"
+        ):
+            normalized = normalized[:-3]
+
+        if normalized.endswith(
+            ".com"
+        ):
+            normalized = normalized[:-4]
+
+        return normalized
+
+    def open_website(
+        self,
+        target,
+    ) -> str:
+
+        normalized_target = (
+            self.normalize_target(
+                target
+            )
+        )
+
+        if normalized_target == "youtube":
+            return self.browser.open_youtube()
+
+        if normalized_target == "google":
+            return self.browser.open_google()
 
         websites = {
-            "youtube": "https://youtube.com",
-            "google": "https://google.com",
-            "facebook": "https://facebook.com",
-            "github": "https://github.com",
-            "gmail": "https://mail.google.com",
-            "chatgpt": "https://chat.openai.com",
+            "facebook": (
+                "https://www.facebook.com"
+            ),
+            "github": (
+                "https://github.com"
+            ),
+            "gmail": (
+                "https://mail.google.com"
+            ),
+            "chatgpt": (
+                "https://chatgpt.com"
+            ),
         }
 
-        url = websites.get(target)
+        url = websites.get(
+            normalized_target
+        )
 
-        if url:
-            webbrowser.open(url)
-            return f"Otwieram {target}."
-
-        return f"Nie znam strony: {target}"
-
-    def open_app(self, target: str):
-        target = self.normalize_target(target)
-
-        if target == "chrome":
-            subprocess.Popen(
-                r"C:\Program Files\Google\Chrome\Application\chrome.exe"
+        if not url:
+            return (
+                "Nie znam strony: "
+                f"{normalized_target}"
             )
-            return "Otwieram Chrome."
 
-        if target == "notatnik":
-            os.system("notepad")
-            return "Otwieram Notatnik."
+        return self.browser.open_url(
+            url
+        )
 
-        if target == "steam":
-            os.system("start steam://open/main")
-            return "Otwieram Steam."
+    def open_app(
+        self,
+        target,
+    ) -> str:
 
-        if target == "discord":
+        normalized_target = (
+            self.normalize_target(
+                target
+            )
+        )
+
+        if normalized_target in {
+            "chrome",
+            "opera",
+            "opera gx",
+            "operagx",
+            "gx",
+        }:
+            opera_path = (
+                r"C:\Users\Kacperek"
+                r"\AppData\Local\Programs"
+                r"\Opera GX\opera.exe"
+            )
+
+            if not os.path.exists(
+                opera_path
+            ):
+                return (
+                    "Nie znaleziono pliku "
+                    "Opera GX."
+                )
+
             try:
                 subprocess.Popen(
-                    r"C:\Users\Kacper\AppData\Local\Discord\Update.exe --processStart Discord.exe"
+                    [opera_path]
                 )
-                return "Otwieram Discord."
-            except Exception:
-                return "Nie udało się otworzyć Discorda."
 
-        return f"Nie znam aplikacji: {target}"
+                return (
+                    "Otwieram Opera GX."
+                )
+
+            except OSError as error:
+                return (
+                    "Nie udało się otworzyć "
+                    f"Opera GX: {error}"
+                )
+
+        if normalized_target in {
+            "notatnik",
+            "notepad",
+        }:
+            try:
+                subprocess.Popen(
+                    ["notepad.exe"]
+                )
+
+                return (
+                    "Otwieram Notatnik."
+                )
+
+            except OSError as error:
+                return (
+                    "Nie udało się otworzyć "
+                    f"Notatnika: {error}"
+                )
+
+        if normalized_target == "steam":
+            try:
+                os.startfile(
+                    "steam://open/main"
+                )
+
+                return "Otwieram Steam."
+
+            except OSError as error:
+                return (
+                    "Nie udało się otworzyć "
+                    f"Steam: {error}"
+                )
+
+        if normalized_target == "discord":
+            discord_path = (
+                r"C:\Users\Kacperek"
+                r"\AppData\Local\Discord"
+                r"\Update.exe"
+            )
+
+            if not os.path.exists(
+                discord_path
+            ):
+                return (
+                    "Nie znaleziono pliku "
+                    "Discord Update.exe."
+                )
+
+            try:
+                subprocess.Popen(
+                    [
+                        discord_path,
+                        "--processStart",
+                        "Discord.exe",
+                    ]
+                )
+
+                return (
+                    "Otwieram Discord."
+                )
+
+            except OSError as error:
+                return (
+                    "Nie udało się otworzyć "
+                    f"Discorda: {error}"
+                )
+
+        return (
+            "Nie znam aplikacji: "
+            f"{normalized_target}"
+        )

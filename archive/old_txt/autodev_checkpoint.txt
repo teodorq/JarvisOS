@@ -1,0 +1,1813 @@
+===== diff_builder.py =====
+import difflib
+
+
+class DiffBuilder:
+
+    def build(
+        self,
+        old_content: str,
+        new_content: str,
+        path: str = "file.py"
+    ) -> str:
+
+        old_lines = old_content.splitlines(
+            keepends=True
+        )
+
+        new_lines = new_content.splitlines(
+            keepends=True
+        )
+
+        diff = difflib.unified_diff(
+            old_lines,
+            new_lines,
+            fromfile=f"{path} (stara wersja)",
+            tofile=f"{path} (nowa wersja)",
+            lineterm=""
+        )
+
+        result = "\n".join(diff)
+
+        if not result.strip():
+            return "Brak różnic."
+
+        return result
+
+    def build_many(
+        self,
+        changes: list[dict]
+    ) -> str:
+
+        sections = []
+
+        for change in changes:
+            path = change.get(
+                "path",
+                "unknown.py"
+            )
+
+            old_content = change.get(
+                "old_content",
+                ""
+            )
+
+            new_content = change.get(
+                "new_content",
+                ""
+            )
+
+            sections.append(
+                self.build(
+                    old_content=old_content,
+                    new_content=new_content,
+                    path=path
+                )
+            )
+
+        if not sections:
+            return "Brak zmian do pokazania."
+
+        return (
+            "\n\n"
+            + "\n\n".join(sections)
+        )
+===== patch_preview.py =====
+from app.autodev.change_transaction import ChangeTransaction
+from app.autodev.diff_builder import DiffBuilder
+
+
+class PatchPreview:
+
+    def __init__(self):
+        self.diff_builder = DiffBuilder()
+
+    def build(
+        self,
+        transaction: ChangeTransaction
+    ) -> str:
+
+        lines = [
+            "AUTODEV PATCH PREVIEW",
+            f"Cel: {transaction.goal}",
+            f"Target: {transaction.target or 'brak'}",
+            f"Status: {transaction.status}",
+            f"Liczba plików: {len(transaction.changes)}",
+            ""
+        ]
+
+        if not transaction.changes:
+            lines.append(
+                "Brak zmian w transakcji."
+            )
+
+            return "\n".join(lines)
+
+        for index, change in enumerate(
+            transaction.changes,
+            start=1
+        ):
+            lines.append("=" * 70)
+            lines.append(
+                f"ZMIANA {index}"
+            )
+            lines.append(
+                f"Plik: {change.path}"
+            )
+            lines.append(
+                f"Status: {change.status}"
+            )
+            lines.append("")
+
+            diff = self.diff_builder.build(
+                old_content=change.old_content,
+                new_content=change.new_content,
+                path=change.path
+            )
+
+            lines.append(diff)
+            lines.append("")
+
+        lines.append("=" * 70)
+        lines.append(
+            "To jest wyłącznie podgląd. "
+            "Żaden plik nie został zmieniony."
+        )
+
+        return "\n".join(lines)
+===== code_generator.py =====
+import ast
+from pathlib import Path
+
+
+class CodeGenerator:
+
+    def generate_file_replacement(
+        self,
+        path: str,
+        instruction: str,
+        proposed_content: str
+    ) -> dict:
+
+        file_path = Path(path)
+
+        result = {
+            "success": False,
+            "path": str(file_path),
+            "instruction": instruction,
+            "old_content": "",
+            "new_content": proposed_content,
+            "errors": []
+        }
+
+        if not file_path.exists():
+            result["errors"].append(
+                f"Plik nie istnieje: {file_path}"
+            )
+
+            return result
+
+        try:
+            old_content = file_path.read_text(
+                encoding="utf-8"
+            )
+
+            result["old_content"] = old_content
+
+        except Exception as error:
+            result["errors"].append(
+                f"Nie udało się odczytać pliku: {error}"
+            )
+
+            return result
+
+        if old_content == proposed_content:
+            result["errors"].append(
+                "Nowa zawartość jest identyczna "
+                "z obecną zawartością."
+            )
+
+            return result
+
+        syntax_error = self._check_python_syntax(
+            file_path,
+            proposed_content
+        )
+
+        if syntax_error:
+            result["errors"].append(
+                syntax_error
+            )
+
+            return result
+
+        result["success"] = True
+        return result
+
+    def generate_function_replacement(
+        self,
+        path: str,
+        function_name: str,
+        new_function_code: str
+    ) -> dict:
+
+        file_path = Path(path)
+
+        result = {
+            "success": False,
+            "path": str(file_path),
+            "function_name": function_name,
+            "old_content": "",
+            "new_content": "",
+            "old_function": "",
+            "new_function": new_function_code,
+            "errors": []
+        }
+
+        if not file_path.exists():
+            result["errors"].append(
+                f"Plik nie istnieje: {file_path}"
+            )
+
+            return result
+
+        try:
+            source = file_path.read_text(
+                encoding="utf-8"
+            )
+
+            tree = ast.parse(source)
+            lines = source.splitlines()
+
+        except Exception as error:
+            result["errors"].append(
+                f"Nie udało się odczytać kodu: {error}"
+            )
+
+            return result
+
+        target_node = None
+
+        for node in ast.walk(tree):
+            if (
+                isinstance(
+                    node,
+                    (
+                        ast.FunctionDef,
+                        ast.AsyncFunctionDef
+                    )
+                )
+                and node.name == function_name
+            ):
+                target_node = node
+                break
+
+        if target_node is None:
+            result["errors"].append(
+                f"Nie znaleziono funkcji: {function_name}"
+            )
+
+            return result
+
+        end_line = getattr(
+            target_node,
+            "end_lineno",
+            None
+        )
+
+        if end_line is None:
+            result["errors"].append(
+                "Nie udało się ustalić końca funkcji."
+            )
+
+            return result
+
+        start_line = target_node.lineno
+
+        old_function = "\n".join(
+            lines[start_line - 1:end_line]
+        )
+
+        new_function_code = self._match_indentation(
+            old_function,
+            new_function_code
+        )
+
+        new_lines = (
+            lines[:start_line - 1]
+            + new_function_code.splitlines()
+            + lines[end_line:]
+        )
+
+        new_content = "\n".join(new_lines)
+
+        if source.endswith("\n"):
+            new_content += "\n"
+
+        syntax_error = self._check_python_syntax(
+            file_path,
+            new_content
+        )
+
+        if syntax_error:
+            result["errors"].append(
+                syntax_error
+            )
+
+            return result
+
+        result["success"] = True
+        result["old_content"] = source
+        result["new_content"] = new_content
+        result["old_function"] = old_function
+        result["new_function"] = new_function_code
+
+        return result
+
+    def _match_indentation(
+        self,
+        old_code: str,
+        new_code: str
+    ) -> str:
+
+        old_lines = old_code.splitlines()
+
+        if not old_lines:
+            return new_code.strip("\n")
+
+        first_line = old_lines[0]
+        indentation = first_line[
+            :len(first_line) - len(first_line.lstrip())
+        ]
+
+        new_lines = new_code.strip("\n").splitlines()
+
+        if not new_lines:
+            return new_code
+
+        minimum_indent = self._minimum_indent(
+            new_lines
+        )
+
+        normalized = []
+
+        for line in new_lines:
+            if not line.strip():
+                normalized.append("")
+                continue
+
+            if minimum_indent > 0:
+                line = line[minimum_indent:]
+
+            normalized.append(
+                indentation + line
+            )
+
+        return "\n".join(normalized)
+
+    def _minimum_indent(
+        self,
+        lines: list[str]
+    ) -> int:
+
+        values = []
+
+        for line in lines:
+            if not line.strip():
+                continue
+
+            indent = (
+                len(line)
+                - len(line.lstrip())
+            )
+
+            values.append(indent)
+
+        if not values:
+            return 0
+
+        return min(values)
+
+    def _check_python_syntax(
+        self,
+        file_path: Path,
+        content: str
+    ) -> str:
+
+        if file_path.suffix.lower() != ".py":
+            return ""
+
+        try:
+            ast.parse(
+                content,
+                filename=str(file_path)
+            )
+
+            return ""
+
+        except SyntaxError as error:
+            return (
+                "Błąd składni w proponowanym kodzie: "
+                f"linia {error.lineno}, "
+                f"kolumna {error.offset}: "
+                f"{error.msg}"
+            )
+===== developer_session.py =====
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Optional
+
+from app.autodev.change_transaction import ChangeTransaction
+
+
+@dataclass
+class DeveloperSession:
+
+    goal: str = ""
+    target: str = ""
+    status: str = "idle"
+    approved: bool = False
+
+    transaction: Optional[
+        ChangeTransaction
+    ] = None
+
+    notes: list[str] = field(
+        default_factory=list
+    )
+
+    created_at: str = field(
+        default_factory=lambda: datetime.now().isoformat()
+    )
+
+    updated_at: str = field(
+        default_factory=lambda: datetime.now().isoformat()
+    )
+
+    def start(
+        self,
+        goal: str,
+        target: str = ""
+    ):
+        self.goal = goal
+        self.target = target
+        self.status = "planning"
+        self.approved = False
+        self.transaction = None
+        self.notes = []
+        self._touch()
+
+    def set_transaction(
+        self,
+        transaction: ChangeTransaction
+    ):
+        self.transaction = transaction
+        self.status = "waiting_for_approval"
+        self.approved = False
+        self._touch()
+
+    def approve(self):
+        if self.transaction is None:
+            return False
+
+        self.approved = True
+        self.status = "approved"
+        self._touch()
+
+        return True
+
+    def mark_executing(self):
+        self.status = "executing"
+        self._touch()
+
+    def mark_completed(self):
+        self.status = "completed"
+        self._touch()
+
+    def mark_failed(
+        self,
+        error: str = ""
+    ):
+        self.status = "failed"
+
+        if error:
+            self.notes.append(error)
+
+        self._touch()
+
+    def mark_rolled_back(self):
+        self.status = "rolled_back"
+        self._touch()
+
+    def cancel(self):
+        self.status = "cancelled"
+        self.approved = False
+        self.transaction = None
+        self._touch()
+
+    def add_note(
+        self,
+        note: str
+    ):
+        if note:
+            self.notes.append(note)
+            self._touch()
+
+    def has_transaction(self) -> bool:
+        return self.transaction is not None
+
+    def can_execute(self) -> bool:
+        return (
+            self.transaction is not None
+            and self.approved
+            and self.status == "approved"
+        )
+
+    def summary(self) -> str:
+        lines = [
+            "DEVELOPER SESSION",
+            f"Cel: {self.goal or 'brak'}",
+            f"Target: {self.target or 'brak'}",
+            f"Status: {self.status}",
+            f"Zatwierdzona: {self.approved}",
+            f"Transakcja: "
+            f"{'TAK' if self.transaction else 'NIE'}",
+            f"Utworzono: {self.created_at}",
+            f"Zaktualizowano: {self.updated_at}"
+        ]
+
+        if self.transaction:
+            lines.append("")
+            lines.append(
+                self.transaction.summary()
+            )
+
+        if self.notes:
+            lines.append("")
+            lines.append("Notatki:")
+
+            for note in self.notes[-20:]:
+                lines.append(f"- {note}")
+
+        return "\n".join(lines)
+
+    def _touch(self):
+        self.updated_at = (
+            datetime.now().isoformat()
+        )
+===== patch_generator.py =====
+from app.autodev.change_transaction import ChangeTransaction
+from app.autodev.code_generator import CodeGenerator
+
+
+class PatchGenerator:
+
+    def __init__(self):
+        self.code_generator = CodeGenerator()
+
+    def build_file_patch(
+        self,
+        goal: str,
+        target: str,
+        path: str,
+        proposed_content: str
+    ) -> tuple[
+        ChangeTransaction | None,
+        list[str]
+    ]:
+
+        generated = (
+            self.code_generator
+            .generate_file_replacement(
+                path=path,
+                instruction=goal,
+                proposed_content=proposed_content
+            )
+        )
+
+        if not generated.get(
+            "success",
+            False
+        ):
+            return (
+                None,
+                generated.get(
+                    "errors",
+                    ["Nieznany błąd generatora."]
+                )
+            )
+
+        transaction = ChangeTransaction(
+            goal=goal,
+            target=target
+        )
+
+        transaction.add_change(
+            path=generated["path"],
+            old_content=generated["old_content"],
+            new_content=generated["new_content"]
+        )
+
+        return transaction, []
+
+    def build_function_patch(
+        self,
+        goal: str,
+        target: str,
+        path: str,
+        function_name: str,
+        new_function_code: str
+    ) -> tuple[
+        ChangeTransaction | None,
+        list[str]
+    ]:
+
+        generated = (
+            self.code_generator
+            .generate_function_replacement(
+                path=path,
+                function_name=function_name,
+                new_function_code=new_function_code
+            )
+        )
+
+        if not generated.get(
+            "success",
+            False
+        ):
+            return (
+                None,
+                generated.get(
+                    "errors",
+                    ["Nieznany błąd generatora."]
+                )
+            )
+
+        transaction = ChangeTransaction(
+            goal=goal,
+            target=target
+        )
+
+        transaction.add_change(
+            path=generated["path"],
+            old_content=generated["old_content"],
+            new_content=generated["new_content"]
+        )
+
+        transaction.metadata[
+            "function_name"
+        ] = function_name
+
+        return transaction, []
+===== change_transaction.py =====
+from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
+from typing import Dict, List
+
+
+@dataclass
+class FileChange:
+    path: str
+    old_content: str
+    new_content: str
+    status: str = "pending"
+    error: str = ""
+
+
+@dataclass
+class ChangeTransaction:
+    goal: str
+    target: str = ""
+    changes: List[FileChange] = field(default_factory=list)
+    status: str = "created"
+    backup_bundle_path: str = ""
+    created_at: str = field(
+        default_factory=lambda: datetime.now().isoformat()
+    )
+    metadata: Dict[str, str] = field(default_factory=dict)
+
+    def add_change(
+        self,
+        path: str,
+        old_content: str,
+        new_content: str
+    ) -> FileChange:
+        change = FileChange(
+            path=path,
+            old_content=old_content,
+            new_content=new_content
+        )
+
+        self.changes.append(change)
+        return change
+
+    def files(self) -> list[str]:
+        return [
+            change.path
+            for change in self.changes
+        ]
+
+    def validate(self) -> tuple[bool, list[str]]:
+        errors = []
+
+        if not self.goal.strip():
+            errors.append("Brak celu transakcji.")
+
+        if not self.changes:
+            errors.append("Transakcja nie zawiera zmian.")
+
+        seen_paths = set()
+
+        for change in self.changes:
+            file_path = Path(change.path)
+
+            if change.path in seen_paths:
+                errors.append(
+                    f"Plik występuje kilka razy: {change.path}"
+                )
+
+            seen_paths.add(change.path)
+
+            if not file_path.exists():
+                errors.append(
+                    f"Plik nie istnieje: {change.path}"
+                )
+
+            if change.old_content == change.new_content:
+                errors.append(
+                    f"Brak rzeczywistej zmiany w pliku: {change.path}"
+                )
+
+        return not errors, errors
+
+    def mark_backed_up(self, bundle_path: str):
+        self.backup_bundle_path = bundle_path
+        self.status = "backed_up"
+
+    def mark_applying(self):
+        self.status = "applying"
+
+    def mark_applied(self):
+        self.status = "applied"
+
+    def mark_validated(self):
+        self.status = "validated"
+
+    def mark_failed(self):
+        self.status = "failed"
+
+    def mark_rolled_back(self):
+        self.status = "rolled_back"
+
+    def summary(self) -> str:
+        lines = [
+            "CHANGE TRANSACTION",
+            f"Cel: {self.goal}",
+            f"Target: {self.target or 'brak'}",
+            f"Status: {self.status}",
+            f"Pliki: {len(self.changes)}",
+            f"Backup: {self.backup_bundle_path or 'brak'}",
+            f"Utworzono: {self.created_at}"
+        ]
+
+        if self.changes:
+            lines.append("")
+            lines.append("Zmiany:")
+
+            for change in self.changes:
+                lines.append(
+                    f"- {change.path} | "
+                    f"status: {change.status}"
+                )
+
+                if change.error:
+                    lines.append(
+                        f"  błąd: {change.error}"
+                    )
+
+        return "\n".join(lines)
+===== rollback_manager.py =====
+from app.autodev.backup_bundle import BackupBundleManager
+from app.autodev.change_transaction import ChangeTransaction
+from app.autodev.execution_result import ExecutionResult
+
+
+class RollbackManager:
+
+    def __init__(self):
+        self.backups = BackupBundleManager()
+
+    def rollback(
+        self,
+        transaction: ChangeTransaction
+    ) -> ExecutionResult:
+
+        if not transaction.backup_bundle_path:
+            return ExecutionResult(
+                success=False,
+                step_name="rollback",
+                message="Transakcja nie ma backupu.",
+                data={
+                    "status": transaction.status
+                },
+                errors=[
+                    "Brak ścieżki do backupu."
+                ]
+            )
+
+        restore_result = self.backups.restore_bundle(
+            transaction.backup_bundle_path
+        )
+
+        success = restore_result.get(
+            "success",
+            False
+        )
+
+        if success:
+            transaction.mark_rolled_back()
+
+            for change in transaction.changes:
+                change.status = "rolled_back"
+
+            return ExecutionResult(
+                success=True,
+                step_name="rollback",
+                message="Przywrócono pliki z backupu.",
+                data={
+                    "bundle_path": (
+                        transaction.backup_bundle_path
+                    ),
+                    "restored": restore_result.get(
+                        "restored",
+                        []
+                    )
+                }
+            )
+
+        transaction.mark_failed()
+
+        return ExecutionResult(
+            success=False,
+            step_name="rollback",
+            message="Rollback nie powiódł się.",
+            data={
+                "bundle_path": (
+                    transaction.backup_bundle_path
+                ),
+                "restored": restore_result.get(
+                    "restored",
+                    []
+                )
+            },
+            errors=restore_result.get(
+                "errors",
+                []
+            )
+        )
+===== developer_executor.py =====
+from pathlib import Path
+
+from app.autodev.backup_bundle import BackupBundleManager
+from app.autodev.change_transaction import ChangeTransaction
+from app.autodev.developer_validator import DeveloperValidator
+from app.autodev.execution_result import ExecutionResult
+from app.autodev.rollback_manager import RollbackManager
+
+
+class DeveloperExecutor:
+
+    def __init__(self, project_root="C:/JarvisAI"):
+        self.project_root = Path(project_root)
+
+        self.backups = BackupBundleManager()
+        self.validator = DeveloperValidator(
+            project_root=project_root
+        )
+        self.rollback_manager = RollbackManager()
+
+        self.last_transaction = None
+
+    def execute(
+        self,
+        transaction: ChangeTransaction,
+        auto_rollback: bool = True
+    ) -> ExecutionResult:
+
+        self.last_transaction = transaction
+
+        valid, validation_errors = transaction.validate()
+
+        if not valid:
+            transaction.mark_failed()
+
+            return ExecutionResult(
+                success=False,
+                step_name="transaction_validation",
+                message="Transakcja jest niepoprawna.",
+                data={
+                    "transaction": transaction.summary()
+                },
+                errors=validation_errors
+            )
+
+        backup_result = self._create_backup(
+            transaction
+        )
+
+        if not backup_result.success:
+            transaction.mark_failed()
+            return backup_result
+
+        apply_result = self._apply_changes(
+            transaction
+        )
+
+        if not apply_result.success:
+            if auto_rollback:
+                rollback_result = (
+                    self.rollback_manager.rollback(
+                        transaction
+                    )
+                )
+
+                apply_result.data["rollback"] = (
+                    rollback_result.as_dict()
+                )
+
+            return apply_result
+
+        validation_result = self._validate_transaction(
+            transaction
+        )
+
+        if not validation_result.success:
+            if auto_rollback:
+                rollback_result = (
+                    self.rollback_manager.rollback(
+                        transaction
+                    )
+                )
+
+                validation_result.data["rollback"] = (
+                    rollback_result.as_dict()
+                )
+
+            return validation_result
+
+        transaction.mark_validated()
+
+        return ExecutionResult(
+            success=True,
+            step_name="developer_executor",
+            message=(
+                "Zmiany zostały zapisane "
+                "i przeszły walidację."
+            ),
+            data={
+                "transaction": transaction.summary(),
+                "backup_bundle": (
+                    transaction.backup_bundle_path
+                ),
+                "changed_files": transaction.files()
+            }
+        )
+
+    def rollback_last(self) -> ExecutionResult:
+        if self.last_transaction is None:
+            return ExecutionResult(
+                success=False,
+                step_name="rollback_last",
+                message=(
+                    "Brak ostatniej transakcji "
+                    "do cofnięcia."
+                ),
+                errors=[
+                    "Nie wykonano jeszcze żadnej transakcji."
+                ]
+            )
+
+        return self.rollback_manager.rollback(
+            self.last_transaction
+        )
+
+    def preview(
+        self,
+        transaction: ChangeTransaction
+    ) -> str:
+
+        lines = [
+            "AUTODEV TRANSACTION PREVIEW",
+            f"Cel: {transaction.goal}",
+            f"Target: {transaction.target or 'brak'}",
+            f"Pliki: {len(transaction.changes)}",
+            ""
+        ]
+
+        for change in transaction.changes:
+            lines.append(
+                f"PLIK: {change.path}"
+            )
+            lines.append("")
+            lines.append("STARA WERSJA:")
+            lines.append(change.old_content)
+            lines.append("")
+            lines.append("NOWA WERSJA:")
+            lines.append(change.new_content)
+            lines.append("")
+            lines.append("=" * 60)
+
+        return "\n".join(lines)
+
+    def _create_backup(
+        self,
+        transaction: ChangeTransaction
+    ) -> ExecutionResult:
+
+        manifest = self.backups.create_bundle(
+            files=transaction.files(),
+            goal=transaction.goal
+        )
+
+        bundle_path = manifest.get(
+            "bundle_path",
+            ""
+        )
+
+        files = manifest.get(
+            "files",
+            []
+        )
+
+        errors = manifest.get(
+            "errors",
+            []
+        )
+
+        if errors or len(files) != len(transaction.changes):
+            return ExecutionResult(
+                success=False,
+                step_name="create_backup",
+                message=(
+                    "Nie udało się przygotować "
+                    "pełnego backupu."
+                ),
+                data={
+                    "bundle_path": bundle_path,
+                    "backed_up_files": len(files),
+                    "expected_files": len(
+                        transaction.changes
+                    )
+                },
+                errors=errors or [
+                    "Nie wszystkie pliki zostały zapisane."
+                ]
+            )
+
+        transaction.mark_backed_up(
+            bundle_path
+        )
+
+        return ExecutionResult(
+            success=True,
+            step_name="create_backup",
+            message="Utworzono backup transakcji.",
+            data={
+                "bundle_path": bundle_path,
+                "files_count": len(files)
+            }
+        )
+
+    def _apply_changes(
+        self,
+        transaction: ChangeTransaction
+    ) -> ExecutionResult:
+
+        transaction.mark_applying()
+        changed_files = []
+
+        for change in transaction.changes:
+            file_path = Path(change.path)
+
+            try:
+                current_content = file_path.read_text(
+                    encoding="utf-8"
+                )
+
+                if current_content != change.old_content:
+                    change.status = "failed"
+                    change.error = (
+                        "Zawartość pliku zmieniła się "
+                        "od momentu utworzenia planu."
+                    )
+
+                    transaction.mark_failed()
+
+                    return ExecutionResult(
+                        success=False,
+                        step_name="apply_changes",
+                        message=(
+                            "Przerwano zapis zmian."
+                        ),
+                        data={
+                            "changed_files": changed_files,
+                            "failed_file": change.path
+                        },
+                        errors=[
+                            change.error
+                        ]
+                    )
+
+                file_path.write_text(
+                    change.new_content,
+                    encoding="utf-8"
+                )
+
+                change.status = "applied"
+                changed_files.append(
+                    change.path
+                )
+
+            except Exception as error:
+                change.status = "failed"
+                change.error = str(error)
+                transaction.mark_failed()
+
+                return ExecutionResult(
+                    success=False,
+                    step_name="apply_changes",
+                    message=(
+                        "Nie udało się zapisać zmian."
+                    ),
+                    data={
+                        "changed_files": changed_files,
+                        "failed_file": change.path
+                    },
+                    errors=[
+                        str(error)
+                    ]
+                )
+
+        transaction.mark_applied()
+
+        return ExecutionResult(
+            success=True,
+            step_name="apply_changes",
+            message="Zapisano wszystkie zmiany.",
+            data={
+                "changed_files": changed_files
+            }
+        )
+
+    def _validate_transaction(
+        self,
+        transaction: ChangeTransaction
+    ) -> ExecutionResult:
+
+        files_result = self.validator.validate_files(
+            transaction.files()
+        )
+
+        if not files_result.success:
+            transaction.mark_failed()
+            return files_result
+
+        import_result = self.validator.run_import_test()
+
+        if not import_result.success:
+            transaction.mark_failed()
+            return import_result
+
+        return ExecutionResult(
+            success=True,
+            step_name="validate_transaction",
+            message=(
+                "Walidacja transakcji "
+                "zakończona powodzeniem."
+            ),
+            data={
+                "files": files_result.as_dict(),
+                "imports": import_result.as_dict()
+            }
+        )
+===== transaction_builder.py =====
+from pathlib import Path
+
+from app.autodev.change_transaction import ChangeTransaction
+
+
+class TransactionBuilder:
+
+    def build_file_replacement(
+        self,
+        goal: str,
+        target: str,
+        path: str,
+        new_content: str
+    ) -> ChangeTransaction:
+
+        file_path = Path(path)
+
+        if not file_path.exists():
+            raise FileNotFoundError(
+                f"Plik nie istnieje: {file_path}"
+            )
+
+        old_content = file_path.read_text(
+            encoding="utf-8"
+        )
+
+        transaction = ChangeTransaction(
+            goal=goal,
+            target=target
+        )
+
+        transaction.add_change(
+            path=str(file_path),
+            old_content=old_content,
+            new_content=new_content
+        )
+
+        return transaction
+
+    def build_multi_file_replacement(
+        self,
+        goal: str,
+        target: str,
+        replacements: dict[str, str]
+    ) -> ChangeTransaction:
+
+        transaction = ChangeTransaction(
+            goal=goal,
+            target=target
+        )
+
+        for path, new_content in replacements.items():
+            file_path = Path(path)
+
+            if not file_path.exists():
+                raise FileNotFoundError(
+                    f"Plik nie istnieje: {file_path}"
+                )
+
+            old_content = file_path.read_text(
+                encoding="utf-8"
+            )
+
+            transaction.add_change(
+                path=str(file_path),
+                old_content=old_content,
+                new_content=new_content
+            )
+
+        return transaction
+===== developer_validator.py =====
+import ast
+import subprocess
+from pathlib import Path
+
+from app.autodev.execution_result import ExecutionResult
+
+
+class DeveloperValidator:
+
+    def __init__(self, project_root="C:/JarvisAI"):
+        self.project_root = Path(project_root)
+
+    def validate_file(self, path: str) -> ExecutionResult:
+        file_path = Path(path)
+
+        if not file_path.exists():
+            return ExecutionResult(
+                success=False,
+                step_name="validate_file",
+                message="Plik nie istnieje.",
+                data={
+                    "path": str(file_path)
+                },
+                errors=[
+                    f"Plik nie istnieje: {file_path}"
+                ]
+            )
+
+        syntax_result = self.check_syntax(str(file_path))
+
+        if not syntax_result.success:
+            return syntax_result
+
+        compile_result = self.compile_file(str(file_path))
+
+        if not compile_result.success:
+            return compile_result
+
+        return ExecutionResult(
+            success=True,
+            step_name="validate_file",
+            message="Plik przeszedł walidację.",
+            data={
+                "path": str(file_path),
+                "syntax": "OK",
+                "compile": "OK"
+            }
+        )
+
+    def validate_files(self, files: list[str]) -> ExecutionResult:
+        checked_files = []
+        errors = []
+
+        for path in files:
+            result = self.validate_file(path)
+
+            checked_files.append({
+                "path": path,
+                "success": result.success,
+                "message": result.message
+            })
+
+            if not result.success:
+                errors.extend(result.errors)
+
+        return ExecutionResult(
+            success=not errors,
+            step_name="validate_files",
+            message=(
+                "Wszystkie pliki są poprawne."
+                if not errors
+                else "Niektóre pliki zawierają błędy."
+            ),
+            data={
+                "checked_files": checked_files,
+                "files_count": len(checked_files)
+            },
+            errors=errors
+        )
+
+    def check_syntax(self, path: str) -> ExecutionResult:
+        file_path = Path(path)
+
+        try:
+            source = file_path.read_text(
+                encoding="utf-8"
+            )
+
+            ast.parse(
+                source,
+                filename=str(file_path)
+            )
+
+            return ExecutionResult(
+                success=True,
+                step_name="check_syntax",
+                message="Składnia jest poprawna.",
+                data={
+                    "path": str(file_path)
+                }
+            )
+
+        except SyntaxError as error:
+            return ExecutionResult(
+                success=False,
+                step_name="check_syntax",
+                message="Wykryto błąd składni.",
+                data={
+                    "path": str(file_path),
+                    "line": error.lineno or 0,
+                    "offset": error.offset or 0
+                },
+                errors=[
+                    str(error)
+                ]
+            )
+
+        except Exception as error:
+            return ExecutionResult(
+                success=False,
+                step_name="check_syntax",
+                message="Nie udało się sprawdzić składni.",
+                data={
+                    "path": str(file_path)
+                },
+                errors=[
+                    str(error)
+                ]
+            )
+
+    def compile_file(self, path: str) -> ExecutionResult:
+        try:
+            result = subprocess.run(
+                [
+                    "python",
+                    "-m",
+                    "py_compile",
+                    path
+                ],
+                cwd=str(self.project_root),
+                capture_output=True,
+                text=True,
+                timeout=20
+            )
+
+            if result.returncode == 0:
+                return ExecutionResult(
+                    success=True,
+                    step_name="compile_file",
+                    message="Kompilacja pliku zakończona powodzeniem.",
+                    data={
+                        "path": path
+                    }
+                )
+
+            return ExecutionResult(
+                success=False,
+                step_name="compile_file",
+                message="Kompilacja pliku nie powiodła się.",
+                data={
+                    "path": path,
+                    "stdout": result.stdout
+                },
+                errors=[
+                    result.stderr or "Nieznany błąd kompilacji."
+                ]
+            )
+
+        except subprocess.TimeoutExpired:
+            return ExecutionResult(
+                success=False,
+                step_name="compile_file",
+                message="Przekroczono czas kompilacji.",
+                data={
+                    "path": path
+                },
+                errors=[
+                    "Timeout po 20 sekundach."
+                ]
+            )
+
+        except Exception as error:
+            return ExecutionResult(
+                success=False,
+                step_name="compile_file",
+                message="Nie udało się uruchomić kompilacji.",
+                data={
+                    "path": path
+                },
+                errors=[
+                    str(error)
+                ]
+            )
+
+    def run_import_test(self) -> ExecutionResult:
+        try:
+            result = subprocess.run(
+                [
+                    "python",
+                    "-c",
+                    (
+                        "from app.gui.main_window "
+                        "import MainWindow; "
+                        "print('IMPORT OK')"
+                    )
+                ],
+                cwd=str(self.project_root),
+                capture_output=True,
+                text=True,
+                timeout=25
+            )
+
+            if result.returncode == 0:
+                return ExecutionResult(
+                    success=True,
+                    step_name="run_import_test",
+                    message="Test importów zakończony powodzeniem.",
+                    data={
+                        "stdout": result.stdout.strip()
+                    }
+                )
+
+            return ExecutionResult(
+                success=False,
+                step_name="run_import_test",
+                message="Test importów nie powiódł się.",
+                data={
+                    "stdout": result.stdout
+                },
+                errors=[
+                    result.stderr or "Nieznany błąd importu."
+                ]
+            )
+
+        except subprocess.TimeoutExpired:
+            return ExecutionResult(
+                success=False,
+                step_name="run_import_test",
+                message="Test importów przekroczył limit czasu.",
+                errors=[
+                    "Timeout po 25 sekundach."
+                ]
+            )
+
+        except Exception as error:
+            return ExecutionResult(
+                success=False,
+                step_name="run_import_test",
+                message="Nie udało się uruchomić testu importów.",
+                errors=[
+                    str(error)
+                ]
+            )
+===== backup_bundle.py =====
+import json
+import shutil
+from datetime import datetime
+from pathlib import Path
+
+
+class BackupBundleManager:
+
+    def __init__(self):
+        self.backup_root = Path("data/backups/autodev")
+        self.backup_root.mkdir(parents=True, exist_ok=True)
+
+        self.last_bundle_path = None
+
+    def create_bundle(self, files: list[str], goal: str = "") -> dict:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        bundle_path = self.backup_root / timestamp
+        files_path = bundle_path / "files"
+
+        files_path.mkdir(parents=True, exist_ok=True)
+
+        manifest = {
+            "created_at": datetime.now().isoformat(),
+            "goal": goal,
+            "bundle_path": str(bundle_path),
+            "files": [],
+            "errors": []
+        }
+
+        unique_files = []
+
+        for raw_path in files:
+            if not raw_path:
+                continue
+
+            normalized = str(Path(raw_path))
+
+            if normalized not in unique_files:
+                unique_files.append(normalized)
+
+        for raw_path in unique_files:
+            source = Path(raw_path)
+
+            if not source.exists():
+                manifest["errors"].append(
+                    f"Plik nie istnieje: {source}"
+                )
+                continue
+
+            if not source.is_file():
+                manifest["errors"].append(
+                    f"To nie jest plik: {source}"
+                )
+                continue
+
+            relative_name = self._safe_backup_name(source)
+            backup_path = files_path / relative_name
+
+            try:
+                shutil.copy2(source, backup_path)
+
+                manifest["files"].append({
+                    "source": str(source),
+                    "backup": str(backup_path)
+                })
+
+            except Exception as error:
+                manifest["errors"].append(
+                    f"Nie udało się zapisać {source}: {error}"
+                )
+
+        manifest_path = bundle_path / "manifest.json"
+
+        with open(manifest_path, "w", encoding="utf-8") as file:
+            json.dump(
+                manifest,
+                file,
+                ensure_ascii=False,
+                indent=4
+            )
+
+        self.last_bundle_path = str(bundle_path)
+
+        return manifest
+
+    def restore_bundle(self, bundle_path: str | None = None) -> dict:
+        selected_path = bundle_path or self.last_bundle_path
+
+        result = {
+            "success": False,
+            "bundle_path": selected_path or "",
+            "restored": [],
+            "errors": []
+        }
+
+        if not selected_path:
+            result["errors"].append(
+                "Nie wskazano backupu do przywrócenia."
+            )
+            return result
+
+        bundle = Path(selected_path)
+        manifest_path = bundle / "manifest.json"
+
+        if not manifest_path.exists():
+            result["errors"].append(
+                f"Brak manifestu: {manifest_path}"
+            )
+            return result
+
+        try:
+            with open(manifest_path, "r", encoding="utf-8") as file:
+                manifest = json.load(file)
+
+        except Exception as error:
+            result["errors"].append(
+                f"Nie udało się odczytać manifestu: {error}"
+            )
+            return result
+
+        for item in manifest.get("files", []):
+            source_path = Path(item.get("source", ""))
+            backup_path = Path(item.get("backup", ""))
+
+            if not backup_path.exists():
+                result["errors"].append(
+                    f"Brak pliku backupu: {backup_path}"
+                )
+                continue
+
+            try:
+                source_path.parent.mkdir(
+                    parents=True,
+                    exist_ok=True
+                )
+
+                shutil.copy2(
+                    backup_path,
+                    source_path
+                )
+
+                result["restored"].append(
+                    str(source_path)
+                )
+
+            except Exception as error:
+                result["errors"].append(
+                    f"Nie udało się przywrócić "
+                    f"{source_path}: {error}"
+                )
+
+        result["success"] = (
+            len(result["restored"]) > 0
+            and not result["errors"]
+        )
+
+        return result
+
+    def list_bundles(self) -> list[dict]:
+        bundles = []
+
+        for path in self.backup_root.iterdir():
+            if not path.is_dir():
+                continue
+
+            manifest_path = path / "manifest.json"
+
+            if not manifest_path.exists():
+                continue
+
+            try:
+                with open(
+                    manifest_path,
+                    "r",
+                    encoding="utf-8"
+                ) as file:
+                    manifest = json.load(file)
+
+                bundles.append({
+                    "path": str(path),
+                    "created_at": manifest.get(
+                        "created_at",
+                        ""
+                    ),
+                    "goal": manifest.get(
+                        "goal",
+                        ""
+                    ),
+                    "files_count": len(
+                        manifest.get("files", [])
+                    ),
+                    "errors_count": len(
+                        manifest.get("errors", [])
+                    )
+                })
+
+            except Exception:
+                continue
+
+        bundles.sort(
+            key=lambda item: item.get(
+                "created_at",
+                ""
+            ),
+            reverse=True
+        )
+
+        return bundles
+
+    def summary(self) -> str:
+        bundles = self.list_bundles()
+
+        if not bundles:
+            return "Brak backupów AutoDev."
+
+        lines = ["AUTODEV BACKUPS"]
+
+        for item in bundles[:20]:
+            lines.append(
+                f"- {item['created_at']} | "
+                f"pliki: {item['files_count']} | "
+                f"błędy: {item['errors_count']} | "
+                f"{item['goal']}"
+            )
+            lines.append(
+                f"  {item['path']}"
+            )
+
+        return "\n".join(lines)
+
+    def _safe_backup_name(self, source: Path) -> str:
+        raw = str(source.resolve())
+
+        safe = raw.replace(":", "")
+        safe = safe.replace("\\", "__")
+        safe = safe.replace("/", "__")
+
+        return safe
+===== execution_result.py =====
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Any, Dict, List
+
+
+@dataclass
+class ExecutionResult:
+    success: bool
+    step_name: str
+    message: str
+    data: Dict[str, Any] = field(default_factory=dict)
+    errors: List[str] = field(default_factory=list)
+    created_at: str = field(
+        default_factory=lambda: datetime.now().isoformat()
+    )
+
+    def add_error(self, error: str):
+        if error:
+            self.errors.append(str(error))
+            self.success = False
+
+    def as_dict(self) -> dict:
+        return {
+            "success": self.success,
+            "step_name": self.step_name,
+            "message": self.message,
+            "data": self.data,
+            "errors": self.errors,
+            "created_at": self.created_at
+        }
+
+    def summary(self) -> str:
+        lines = [
+            "EXECUTION RESULT",
+            f"Krok: {self.step_name}",
+            f"Status: {'SUCCESS' if self.success else 'FAILED'}",
+            f"Wiadomość: {self.message}",
+            f"Data: {self.created_at}"
+        ]
+
+        if self.data:
+            lines.append("")
+            lines.append("Dane:")
+
+            for key, value in self.data.items():
+                lines.append(f"- {key}: {value}")
+
+        if self.errors:
+            lines.append("")
+            lines.append("Błędy:")
+
+            for error in self.errors:
+                lines.append(f"- {error}")
+
+        return "\n".join(lines)

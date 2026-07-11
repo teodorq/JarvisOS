@@ -1,0 +1,386 @@
+===== planner_llm.py =====
+from app.ai.actions import ActionTypes
+from app.ai.commands.registry import CommandRegistry
+
+
+class PlannerLLM:
+
+    def __init__(self):
+        self.registry = CommandRegistry()
+
+    def _plan(self, goal, actions):
+        actions = self._contextual_actions(actions)
+        actions = self._cleanup_actions(actions)
+
+        return {
+            "goal": goal,
+            "steps": [self._step_text(a) for a in actions],
+            "execute": len(actions) > 0,
+            "action_type": actions[0]["action_type"] if actions else ActionTypes.UNKNOWN,
+            "target": actions[0].get("target", "") if actions else "",
+            "text": actions[0].get("text", "") if actions else "",
+            "url": actions[0].get("url", "") if actions else "",
+            "query": actions[0].get("query", "") if actions else "",
+            "actions": actions
+        }
+
+    def create_plan(self, user_command: str) -> dict:
+        command = user_command.lower().strip()
+
+        if not command:
+            return self._plan("Puste polecenie", [])
+
+        command = command.replace("operę", "opera")
+        command = command.replace("przeglądarkę", "opera")
+        command = command.replace("przegladarke", "opera")
+
+        actions = []
+
+        for part in self._split_command(command):
+            action = self.registry.parse(part)
+
+            if action:
+                actions.append(action)
+
+        if actions:
+            return self._plan("Wykonać polecenie", actions)
+
+        return self._plan("Nie rozpoznano polecenia", [])
+
+    def _split_command(self, command: str):
+        command = command.replace(" oraz ", ",")
+        command = command.replace(" potem ", ",")
+        command = command.replace(" następnie ", ",")
+        command = command.replace(" nastepnie ", ",")
+        command = command.replace(" i ", ",")
+        return [p.strip() for p in command.split(",") if p.strip()]
+
+    def _contextual_actions(self, actions):
+        last_website = ""
+
+        for action in actions:
+            if action.get("action_type") == ActionTypes.OPEN_WEBSITE:
+                last_website = action.get("target", "")
+
+            if action.get("action_type") == ActionTypes.TYPE_TEXT:
+                text = action.get("text", "").strip()
+
+                if last_website == "youtube":
+                    action["action_type"] = ActionTypes.YOUTUBE_SEARCH
+                    action["query"] = text
+                    action["text"] = ""
+
+                elif last_website == "google":
+                    action["action_type"] = ActionTypes.GOOGLE_SEARCH
+                    action["query"] = text
+                    action["text"] = ""
+
+        return actions
+
+    def _cleanup_actions(self, actions):
+        cleaned = []
+
+        for i, action in enumerate(actions):
+            action_type = action.get("action_type")
+            target = action.get("target")
+
+            next_action = actions[i + 1] if i + 1 < len(actions) else None
+
+            if (
+                action_type == ActionTypes.OPEN_WEBSITE
+                and target == "youtube"
+                and next_action
+                and next_action.get("action_type") == ActionTypes.YOUTUBE_SEARCH
+            ):
+                continue
+
+            if (
+                action_type == ActionTypes.OPEN_WEBSITE
+                and target == "google"
+                and next_action
+                and next_action.get("action_type") == ActionTypes.GOOGLE_SEARCH
+            ):
+                continue
+
+            cleaned.append(action)
+
+        has_browser_action = any(
+            a.get("action_type") in [
+                ActionTypes.OPEN_WEBSITE,
+                ActionTypes.YOUTUBE_SEARCH,
+                ActionTypes.GOOGLE_SEARCH,
+                ActionTypes.YOUTUBE_FIRST_VIDEO
+            ]
+            for a in cleaned
+        )
+
+        if has_browser_action:
+            cleaned = [
+                a for a in cleaned
+                if not (
+                    a.get("action_type") == ActionTypes.OPEN_APP
+                    and a.get("target") in ["opera", "chrome"]
+                )
+            ]
+
+        return cleaned
+
+    def _step_text(self, action):
+        action_type = action.get("action_type")
+        target = action.get("target", "")
+        text = action.get("text", "")
+        query = action.get("query", "")
+
+        steps = {
+            "SYSTEM_STATUS": "Sprawdzić status systemu",
+            "DESKTOP_HISTORY": "Pokazać historię akcji pulpitu",
+            "SCROLL_DOWN": "Przewinąć w dół",
+            "SCROLL_UP": "Przewinąć w górę",
+            "COPY": "Skopiować",
+            "PASTE": "Wkleić",
+            "CUT": "Wyciąć",
+            "SELECT_ALL": "Zaznaczyć wszystko",
+            "CLOSE_WINDOW": "Zamknąć okno",
+            "SWITCH_WINDOW": "Przełączyć okno",
+            "MINIMIZE_WINDOW": "Zminimalizować okno",
+            "MAXIMIZE_WINDOW": "Zmaksymalizować okno",
+            "OPEN_START_MENU": "Otworzyć menu Start",
+            "WINDOWS_LIST": "Pokazać listę okien",
+            "WINDOW_FOCUS": f"Aktywować okno: {target}",
+            "WINDOW_CLOSE": f"Zamknąć okno: {target}",
+            "FILE_LIST": f"Pokazać folder: {target}",
+            "FOLDER_CREATE": f"Utworzyć folder: {target}",
+            "APP_OPEN": f"Uruchomić aplikację: {target}",
+        }
+
+        if action_type in steps:
+            return steps[action_type]
+
+        if action_type == ActionTypes.OPEN_APP:
+            return f"Otworzyć aplikację: {target}"
+
+        if action_type == ActionTypes.OPEN_WEBSITE:
+            return f"Otworzyć stronę: {target}"
+
+        if action_type == ActionTypes.TYPE_TEXT:
+            return f"Wpisać tekst: {text}"
+
+        if action_type == ActionTypes.PRESS_ENTER:
+            return "Nacisnąć Enter"
+
+        if action_type == ActionTypes.VISION_CLICK:
+            return f"Kliknąć element: {target}"
+
+        if action_type == ActionTypes.GOOGLE_SEARCH:
+            return f"Wyszukać w Google: {query}"
+
+        if action_type == ActionTypes.YOUTUBE_SEARCH:
+            return f"Wyszukać na YouTube: {query}"
+
+        if action_type == ActionTypes.YOUTUBE_FIRST_VIDEO:
+            return "Kliknąć pierwszy film na YouTube"
+
+        if action_type == ActionTypes.VISION_ANALYZE:
+            return "Przeanalizować ekran"
+
+        if action_type == ActionTypes.SCREENSHOT:
+            return "Zrobić screenshot"
+
+        if action_type == ActionTypes.REMEMBER:
+            return "Zapisać w pamięci"
+
+        if action_type == ActionTypes.ADD_TASK:
+            return "Dodać zadanie"
+
+        if action_type == ActionTypes.MEMORY_SUMMARY:
+            return "Pokazać pamięć"
+
+        return f"Wykonać akcję: {action_type}"
+===== brain.py =====
+import time
+
+from app.ai.actions import ActionTypes
+from app.ai.cognitive_engine import CognitiveEngine
+from app.ai.planner_llm import PlannerLLM
+from app.automation.command_executor import CommandExecutor
+from app.memory.memory import Memory
+
+from app.agent.task_planner import TaskPlanner
+from app.agent.loop import AgentLoop
+
+
+class Brain:
+
+    def __init__(self):
+
+        self.planner = PlannerLLM()
+        self.executor = CommandExecutor()
+        self.memory = Memory()
+
+        self.task_planner = TaskPlanner()
+        self.agent_loop = AgentLoop()
+
+        self.cognitive = CognitiveEngine()
+
+    def think(self, command: str) -> dict:
+
+        self.cognitive.before_think(command)
+
+        plan = self.planner.create_plan(command)
+
+        self.cognitive.after_plan(plan)
+
+        return {
+            "command": command,
+            "goal": plan.get("goal", ""),
+            "plan": plan.get("steps", []),
+            "actions": plan.get("actions", []),
+            "can_execute": plan.get("execute", False)
+        }
+
+    def execute(self, thought):
+
+        actions = thought.get("actions", [])
+
+        if actions:
+            results = []
+
+            for action in actions:
+                result = self.executor.execute_action(action)
+                results.append(result)
+
+                if action.get("action_type") == ActionTypes.OPEN_APP:
+                    time.sleep(2)
+
+            final_result = " | ".join(results)
+
+            self.memory.add_history(
+                thought["command"],
+                final_result
+            )
+
+            self.cognitive.after_execute(
+                thought["command"],
+                final_result
+            )
+
+            return final_result
+
+        task = self.task_planner.create_task(
+            thought["command"]
+        )
+
+        result = self.agent_loop.run(task)
+
+        self.memory.add_history(
+            thought["command"],
+            result
+        )
+
+        self.cognitive.after_execute(
+            thought["command"],
+            result
+        )
+
+        return result
+===== command_executor.py =====
+import os
+import subprocess
+import webbrowser
+
+from app.ai.actions import ActionTypes
+from app.skills.skill_manager import SkillManager
+
+
+class CommandExecutor:
+
+    def __init__(self):
+        self.skill_manager = SkillManager()
+
+    def execute_action(self, action: dict):
+        action_type = action.get("action_type", ActionTypes.UNKNOWN)
+
+        skill_result = self.skill_manager.execute(action)
+
+        if skill_result is not None:
+            return skill_result
+
+        if action_type == ActionTypes.OPEN_APP:
+            return self.open_app(action.get("target", ""))
+
+        if action_type == ActionTypes.OPEN_WEBSITE:
+            return self.open_website(action.get("target", ""))
+
+        return "Nieznana akcja."
+
+    def normalize_target(self, target):
+        target = target.lower().strip()
+
+        target = target.replace("https://", "")
+        target = target.replace("http://", "")
+        target = target.replace("www.", "")
+
+        if target.endswith(".pl"):
+            target = target[:-3]
+
+        if target.endswith(".com"):
+            target = target[:-4]
+
+        return target
+
+    def open_website(self, target):
+        target = self.normalize_target(target)
+
+        websites = {
+            "youtube": "https://www.youtube.com",
+            "google": "https://www.google.com",
+            "facebook": "https://www.facebook.com",
+            "github": "https://github.com",
+            "gmail": "https://mail.google.com",
+            "chatgpt": "https://chatgpt.com"
+        }
+
+        if target not in websites:
+            return f"Nie znam strony: {target}"
+
+        webbrowser.open(websites[target])
+
+        return f"Otwieram {target}."
+
+    def open_app(self, target):
+        target = self.normalize_target(target)
+
+        if target in [
+            "chrome",
+            "opera",
+            "opera gx",
+            "operagx",
+            "gx"
+        ]:
+            opera = (
+                r"C:\Users\Kacperek\AppData\Local\Programs"
+                r"\Opera GX\opera.exe"
+            )
+
+            subprocess.Popen([opera])
+
+            return "Otwieram Opera GX."
+
+        if target == "notatnik":
+            os.system("notepad")
+            return "Otwieram Notatnik."
+
+        if target == "steam":
+            os.system("start steam://open/main")
+            return "Otwieram Steam."
+
+        if target == "discord":
+            try:
+                subprocess.Popen(
+                    r"C:\Users\Kacperek\AppData\Local\Discord\Update.exe --processStart Discord.exe"
+                )
+                return "Otwieram Discord."
+            except Exception:
+                return "Nie udało się otworzyć Discorda."
+
+        return f"Nie znam aplikacji: {target}"

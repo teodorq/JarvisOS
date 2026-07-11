@@ -1,8 +1,8 @@
 import base64
 import json
-import os
 import urllib.request
 import urllib.error
+from pathlib import Path
 from PIL import Image
 
 
@@ -16,8 +16,7 @@ class QwenVision:
         return self._chat_with_image(image_path, prompt)
 
     def ask_about_image(self, image_path: str, question: str) -> str:
-        prompt = f"Odpowiedz po polsku krótko na pytanie o screenshot: {question}"
-        return self._chat_with_image(image_path, prompt)
+        return self._chat_with_image(image_path, question)
 
     def _chat_with_image(self, image_path: str, prompt: str) -> str:
         try:
@@ -35,7 +34,9 @@ class QwenVision:
                     }
                 ],
                 "options": {
-                    "num_ctx": 8192
+                    "num_ctx": 4096,
+                    "temperature": 0.1,
+                    "top_p": 0.8
                 }
             }
 
@@ -46,7 +47,7 @@ class QwenVision:
                 method="POST"
             )
 
-            with urllib.request.urlopen(request, timeout=300) as response:
+            with urllib.request.urlopen(request, timeout=180) as response:
                 raw = response.read().decode("utf-8", errors="ignore")
                 data = json.loads(raw)
 
@@ -72,11 +73,12 @@ class QwenVision:
             return f"BŁĄD Qwen Vision: {error}"
 
     def _optimize_image(self, image_path: str) -> str:
-        output_path = image_path.replace(".png", "_optimized.jpg")
+        path = Path(image_path)
+        output_path = str(path.with_name(path.stem + "_optimized.jpg"))
 
         image = Image.open(image_path).convert("RGB")
 
-        max_width = 1280
+        max_width = 960
         width, height = image.size
 
         if width > max_width:
@@ -84,7 +86,7 @@ class QwenVision:
             new_height = int(height * ratio)
             image = image.resize((max_width, new_height))
 
-        image.save(output_path, "JPEG", quality=65, optimize=True)
+        image.save(output_path, "JPEG", quality=60, optimize=True)
 
         return output_path
 

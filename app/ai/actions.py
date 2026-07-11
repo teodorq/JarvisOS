@@ -4,16 +4,20 @@ class ActionTypes:
     TYPE_TEXT = "type_text"
     CLICK = "click"
     SCREENSHOT = "screenshot"
+
     REMEMBER = "remember"
     ADD_TASK = "add_task"
     MEMORY_SUMMARY = "memory_summary"
 
     GOOGLE_SEARCH = "google_search"
     YOUTUBE_SEARCH = "youtube_search"
+    YOUTUBE_FIRST_VIDEO = "youtube_first_video"
+
     OPEN_URL = "open_url"
     PRESS_ENTER = "press_enter"
 
     VISION_ANALYZE = "vision_analyze"
+    VISION_CLICK = "vision_click"
 
     UNKNOWN = "unknown"
 
@@ -41,3 +45,13 @@ class Action:
             "url": self.url,
             "query": self.query
         }
+
+    @staticmethod
+    def from_dict(data: dict):
+        return Action(
+            action_type=data.get("action_type", ActionTypes.UNKNOWN),
+            target=data.get("target", ""),
+            text=data.get("text", ""),
+            url=data.get("url", ""),
+            query=data.get("query", "")
+        )

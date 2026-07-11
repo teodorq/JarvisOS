@@ -1,0 +1,10 @@
+===== SZUKANIE PlannerLLM =====
+app\ai\planner_llm.py:5:class PlannerLLM:
+app\ai\planner_llm_backup.py:5:class PlannerLLM:
+
+===== SZUKANIE Brain =====
+app\ai\brain.py:13:class Brain:
+
+===== SZUKANIE CommandExecutor =====
+app\automation\command_executor.py:9:class CommandExecutor:
+data\backups\code\20260709_230808_C_JarvisAI_app_automation_command_executor.py:9:class CommandExecutor:
