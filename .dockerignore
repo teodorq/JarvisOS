@@ -1,0 +1,12 @@
+**
+!.dockerignore
+!cloud_service/
+!cloud_service/**
+!app/
+!app/cloud/
+!app/cloud/**
+!app/ai/
+!app/ai/actions.py
+!app/ai/planner_llm.py
+!app/ai/commands/
+!app/ai/commands/**
