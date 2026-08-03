@@ -1,0 +1,33 @@
+name: Cleanup legacy JARVIS package
+
+on:
+  push:
+    branches:
+      - develop
+    paths:
+      - .github/workflows/cleanup-legacy-package.yml
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  delete-legacy-package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete legacy jarvisai-cloud package
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          status="$(curl --silent --show-error --location \
+            --output response.json --write-out '%{http_code}' \
+            --request DELETE \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/user/packages/container/jarvisai-cloud)"
+          if [ "${status}" = "204" ] || [ "${status}" = "404" ]; then
+            exit 0
+          fi
+          cat response.json
+          exit 1
