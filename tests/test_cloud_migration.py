@@ -150,6 +150,13 @@ class CloudMigrationTests(unittest.TestCase):
         self.assertIn("lokalny — bezpieczny fallback", summary)
         self.assertIn("Tryb awaryjny: gotowy", summary)
 
+    def test_system_status_uses_live_voice_state(self) -> None:
+        state = SystemState(
+            cloud_client=_HealthyCloudClient(),
+            voice_status_probe=lambda: True,
+        )
+        self.assertTrue(state.as_dict()["voice"])
+
     def test_cloud_status_command_uses_safe_system_action(self) -> None:
         action = SystemCommand().parse("status chmury")
         self.assertIsNotNone(action)
