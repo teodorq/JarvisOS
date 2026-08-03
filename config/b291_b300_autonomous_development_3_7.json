@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "stage": "B291-B300",
+  "name": "Autonomous Development 3.7 - Deployment Continuity Gate",
+  "workflow": {
+    "B291": "latest_verified_target_baseline",
+    "B292": "explicit_no_history_bootstrap_policy",
+    "B293": "predeploy_baseline_continuity",
+    "B294": "previous_live_and_backup_attestation",
+    "B295": "unhealthy_ledger_deployment_block",
+    "B296": "receipt_v2_previous_digest_link",
+    "B297": "target_receipt_chain_audit",
+    "B298": "rollback_latest_receipt_ownership",
+    "B299": "fail_closed_deployment_integration",
+    "B300": "real_runtime_continuity_and_regression"
+  },
+  "safety": {
+    "automatic_approval": false,
+    "automatic_deployment": false,
+    "bulk_deployment_supported": false,
+    "deployment_continuity_gate": true,
+    "no_history_bootstrap_allowed": true,
+    "latest_receipt_defines_expected_source": true,
+    "previous_receipt_live_attestation_required": true,
+    "previous_receipt_backup_attestation_required": true,
+    "unhealthy_ledger_blocks_deployment": true,
+    "v2_receipts_require_previous_digest_field": true,
+    "receipt_chain_conflicts_fail_closed": true,
+    "rollback_supersession_blocked": true,
+    "blocked_operations_write_no_project_files": true
+  },
+  "runtime_store": "data/autodev/safe_development_2/receipt_ledger",
+  "receipt_schema_version": 2,
+  "index_schema_version": 4
+}

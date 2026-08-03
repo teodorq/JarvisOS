@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.core.project_paths import default_project_root
+
 from typing import Any
 
 from app.ai.project_director.director_engine import (
@@ -17,7 +19,7 @@ class DirectorController:
 
     def __init__(
         self,
-        project_root: str = "C:/JarvisAI",
+        project_root: str | None = None,
         director_engine: DirectorEngine | None = None,
         director_memory: DirectorMemory | None = None,
         director_planner: DirectorPlanner | None = None,
@@ -32,6 +34,7 @@ class DirectorController:
 
         self.project_root = str(
             project_root
+            or default_project_root()
         ).strip()
 
         if not self.project_root:
@@ -200,6 +203,56 @@ class DirectorController:
 
         return result
 
+    def plan_project_autonomously(
+        self,
+        *,
+        objective: str = (
+            "Analizuj projekt JARVIS OS i wygeneruj "
+            "najważniejsze bezpieczne cele rozwoju."
+        ),
+        context: dict[str, Any] | None = None,
+        limit: int = 10,
+    ) -> dict[str, Any]:
+
+        controller = self.autonomous_dev_controller
+
+        if controller is None:
+            return {
+                "success": False,
+                "status": "AUTODEV_UNAVAILABLE",
+            }
+
+        generator = getattr(
+            controller,
+            "generate_autonomous_goals",
+            None,
+        )
+
+        if not callable(generator):
+            return {
+                "success": False,
+                "status": "AUTODEV_INCOMPATIBLE",
+            }
+
+        normalized_context = self._safe_dict(context)
+        normalized_context["director_objective"] = objective
+
+        result = generator(
+            context=normalized_context,
+            limit=max(1, int(limit)),
+        )
+
+        return {
+            "success": bool(
+                result.get("success", False)
+            ),
+            "status": str(
+                result.get("status", "UNKNOWN")
+            ),
+            "objective": objective,
+            "autonomous_planner": result,
+        }
+
     def approve_session(
         self,
         director_id: str,
@@ -251,7 +304,7 @@ class DirectorController:
             "developer_controller_available": (
                 self.developer_controller is not None
             ),
-            "controller_version": "1.2.0",
+            "controller_version": "1.3.0",
         }
 
     def handle(
@@ -320,6 +373,24 @@ class DirectorController:
                     context=normalized_context,
                     approved=True,
                 )
+
+        if lowered in {
+            "project director autonomous plan",
+            "director autonomous plan",
+            "dyrektor projektu zaplanuj sam",
+            "dyrektor projektu samorozwój",
+            "dyrektor projektu samorozwoj",
+        }:
+            return self.plan_project_autonomously(
+                context=normalized_context,
+                limit=int(
+                    normalized_context.get(
+                        "limit",
+                        10,
+                    )
+                    or 10
+                ),
+            )
 
         plan_prefixes = (
             "project director plan ",

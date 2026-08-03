@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from app.core.project_paths import (
+    default_project_path,
+    default_project_root,
+)
+
 from typing import Any
 
 from app.autodev.autonomous_planner import (
@@ -26,7 +31,7 @@ class AutoDevIntelligenceService:
 
     def __init__(
         self,
-        project_root: str = "C:/JarvisAI",
+        project_root: str = default_project_root(),
         self_review: SelfReviewEngine | None = None,
         planner: AutonomousPlanner | None = None,
         memory: ImprovementMemory | None = None,

@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+from app.core.project_paths import default_project_root
+
 from typing import Any
+
+from .meta_execution_service import MetaExecutionService
 
 from app.ai.meta_executive.meta_memory import (
     MetaMemory,
@@ -13,11 +17,14 @@ from app.ai.meta_executive.meta_state import (
 )
 
 
+_META_EXECUTION_SERVICE = MetaExecutionService()
+
+
 class MetaEngine:
 
     def __init__(
         self,
-        project_root: str = "C:/JarvisAI",
+        project_root: str | None = None,
         planner: MetaPlanner | None = None,
         memory: MetaMemory | None = None,
         executive_controller: Any | None = None,
@@ -31,6 +38,7 @@ class MetaEngine:
 
         self.project_root = str(
             project_root
+            or default_project_root()
         ).strip()
 
         if not self.project_root:
@@ -255,129 +263,13 @@ class MetaEngine:
             context=context,
         )
 
-    def run_cycle(
-        self,
-        meta_id: str,
-        context: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
-
-        state = self._get_state(
-            meta_id
+    def run_cycle(self, meta_id: str, context: dict[str, Any] | None=None) -> dict[str, Any]:
+        return _META_EXECUTION_SERVICE.run_cycle(
+            self,
+            meta_id,
+            context
         )
 
-        if state is None:
-            return {
-                "success": False,
-                "status": "NOT_FOUND",
-                "meta_id": meta_id,
-            }
-
-        if not state.can_continue():
-            return self._finish_session(
-                state=state,
-                status=(
-                    state.status
-                    if state.is_terminal()
-                    else "COMPLETED"
-                ),
-            )
-
-        try:
-            state.increment_cycle()
-
-            delegated_result = self._execute_selected_layer(
-                state=state,
-                context=context,
-            )
-
-            success = bool(
-                delegated_result.get(
-                    "success",
-                    False,
-                )
-            )
-
-            status = str(
-                delegated_result.get(
-                    "status",
-                    "UNKNOWN",
-                )
-            ).upper()
-
-            state.add_result(
-                source=state.selected_layer,
-                status=status,
-                result=delegated_result,
-                success=success,
-            )
-
-            if success:
-                state.add_lesson(
-                    (
-                        "Warstwa "
-                        f"{state.selected_layer} "
-                        "zakończyła delegację bez błędu."
-                    )
-                )
-
-                if status in {
-                    "WAITING_FOR_APPROVAL",
-                    "WAITING",
-                    "PAUSED",
-                }:
-                    state.set_status(
-                        status,
-                        "DELEGATION_WAITING",
-                    )
-
-                    return self._build_result(
-                        state=state,
-                        success=True,
-                        status=status,
-                        delegated_result=delegated_result,
-                    )
-
-                return self._finish_session(
-                    state=state,
-                    status="COMPLETED",
-                    delegated_result=delegated_result,
-                )
-
-            error = str(
-                delegated_result.get(
-                    "error",
-                    "Delegowana warstwa zakończyła operację błędem.",
-                )
-            )
-
-            state.add_error(
-                error
-            )
-
-            return self._finish_session(
-                state=state,
-                status="FAILED",
-                delegated_result=delegated_result,
-            )
-
-        except Exception as exc:
-            state.add_error(
-                str(
-                    exc
-                )
-            )
-
-            return self._finish_session(
-                state=state,
-                status="FAILED",
-                delegated_result={
-                    "success": False,
-                    "status": "FAILED",
-                    "error": str(
-                        exc
-                    ),
-                },
-            )
 
     def approve(
         self,
@@ -484,180 +376,13 @@ class MetaEngine:
             "memory": self.memory.summary(),
         }
 
-    def _execute_selected_layer(
-        self,
-        state: MetaState,
-        context: dict[str, Any] | None,
-    ) -> dict[str, Any]:
+    def _execute_selected_layer(self, state: MetaState, context: dict[str, Any] | None) -> dict[str, Any]:
+        return _META_EXECUTION_SERVICE._execute_selected_layer(
+            self,
+            state,
+            context
+        )
 
-        layer = state.selected_layer
-        command = state.objective
-
-        execution_context = {
-            "project_root": self.project_root,
-            "meta_id": state.meta_id,
-            "cycle": state.cycle,
-            "metadata": {
-                "source": "MetaEngine",
-            },
-            **self._safe_dict(
-                context
-            ),
-        }
-
-        if layer == MetaPlanner.LAYER_EXECUTIVE_AI:
-            if self.executive_controller is None:
-                return self._missing_layer(
-                    layer
-                )
-
-            executive_command = command
-
-            if not command.lower().startswith(
-                (
-                    "executive ai ",
-                    "executive ",
-                    "ceo ai ",
-                )
-            ):
-                executive_command = (
-                    "executive ai start "
-                    + command
-                )
-
-            return self._normalize_result(
-                self.executive_controller.handle(
-                    command=executive_command,
-                    context=execution_context,
-                )
-            )
-
-        if layer == MetaPlanner.LAYER_PROJECT_DIRECTOR:
-            if self.project_director is None:
-                return self._missing_layer(
-                    layer
-                )
-
-            director_command = command
-
-            if not command.lower().startswith(
-                (
-                    "project director ",
-                    "director ",
-                    "dyrektor projektu ",
-                )
-            ):
-                director_command = (
-                    "project director start "
-                    + command
-                )
-
-            return self._normalize_result(
-                self.project_director.handle(
-                    command=director_command,
-                    context=execution_context,
-                )
-            )
-
-        if layer == MetaPlanner.LAYER_SELF_IMPROVEMENT:
-            if self.improvement_controller is None:
-                return self._missing_layer(
-                    layer
-                )
-
-            improvement_command = command
-
-            if not command.lower().startswith(
-                (
-                    "self improvement ",
-                    "improvement brain ",
-                    "samodoskonalenie ",
-                )
-            ):
-                improvement_command = (
-                    "self improvement analyze "
-                    + command
-                )
-
-            return self._normalize_result(
-                self.improvement_controller.handle(
-                    command=improvement_command,
-                    context=execution_context,
-                )
-            )
-
-        if layer == MetaPlanner.LAYER_EVOLUTION:
-            if self.evolution_controller is None:
-                return self._missing_layer(
-                    layer
-                )
-
-            evolution_command = command
-
-            if not command.lower().startswith(
-                (
-                    "evolution ",
-                    "auto evolution ",
-                    "ewolucja ",
-                )
-            ):
-                evolution_command = (
-                    "evolution start "
-                    + command
-                )
-
-            return self._normalize_result(
-                self.evolution_controller.handle(
-                    command=evolution_command,
-                    context=execution_context,
-                )
-            )
-
-        if layer == MetaPlanner.LAYER_CONTINUOUS_DEV:
-            if self.continuous_dev_controller is None:
-                return self._missing_layer(
-                    layer
-                )
-
-            return self._normalize_result(
-                self.continuous_dev_controller.handle(
-                    command=command,
-                    context=execution_context,
-                )
-            )
-
-        if layer == MetaPlanner.LAYER_REASONER:
-            if self.reasoning_service is None:
-                return self._missing_layer(
-                    layer
-                )
-
-            return self._normalize_result(
-                self.reasoning_service.handle(
-                    command=command,
-                    context=execution_context,
-                )
-            )
-
-        if layer == MetaPlanner.LAYER_RESEARCH:
-            if self.research_service is None:
-                return self._missing_layer(
-                    layer
-                )
-
-            return self._normalize_result(
-                self.research_service.execute(
-                    command
-                )
-            )
-
-        return {
-            "success": False,
-            "status": "NO_ACTION",
-            "error": (
-                "Meta Executive nie wybrał obsługiwanej warstwy."
-            ),
-        }
 
     def _finish_session(
         self,

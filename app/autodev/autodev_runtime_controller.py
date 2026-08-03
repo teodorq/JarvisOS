@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from app.core.project_paths import (
+    default_project_path,
+    default_project_root,
+)
+
 from typing import Any
 
 from app.autodev.autodev_cycle_executor import (
@@ -31,7 +36,7 @@ class AutoDevRuntimeController:
 
     def __init__(
         self,
-        project_root: str = "C:/JarvisAI",
+        project_root: str = default_project_root(),
         runtime_service: AutoDevRuntimeService | None = None,
     ) -> None:
         self.runtime_service = (

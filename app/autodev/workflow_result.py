@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional
 
 from app.autodev.change_transaction import ChangeTransaction
 from app.autodev.execution_result import ExecutionResult
+from app.autodev.error_reporting import AutoDevErrorReporter
 
 
 @dataclass
@@ -25,17 +26,53 @@ class WorkflowResult:
     created_at: str = field(
         default_factory=lambda: datetime.now().isoformat()
     )
+    error_details: List[Dict[str, Any]] = field(
+        default_factory=list
+    )
 
     def add_error(
         self,
         error: str,
+        *,
+        details: Dict[str, Any] | None = None,
     ) -> None:
 
-        if not error:
-            return
+        text = str(error).strip()
 
-        self.errors.append(str(error))
-        self.success = False
+        if text and text not in self.errors:
+            self.errors.append(text)
+
+        if (
+            details
+            and details not in self.error_details
+        ):
+            self.error_details.append(
+                dict(details)
+            )
+
+        if text or details:
+            self.success = False
+
+    def add_exception(
+        self,
+        error: BaseException,
+        *,
+        stage: str | None = None,
+        context: Dict[str, Any] | None = None,
+        project_root: str | None = None,
+    ) -> Dict[str, Any]:
+        report = AutoDevErrorReporter.capture(
+            error,
+            stage=stage or self.status,
+            context=context,
+            project_root=project_root,
+        )
+        details = report.as_dict()
+        self.add_error(
+            report.summary(),
+            details=details,
+        )
+        return details
 
     def add_lesson(
         self,
@@ -85,6 +122,10 @@ class WorkflowResult:
             "transaction": transaction_data,
             "execution_result": execution_data,
             "errors": list(self.errors),
+            "error_details": [
+                dict(item)
+                for item in self.error_details
+            ],
             "data": dict(self.data),
             "learning_data": dict(self.learning_data),
             "created_at": self.created_at,

@@ -1,9 +1,14 @@
+from app.core.project_paths import (
+    default_project_path,
+    default_project_root,
+)
+
 from pathlib import Path
 
 
 class ProjectScanner:
 
-    def __init__(self, root_path="C:/JarvisAI"):
+    def __init__(self, root_path=default_project_root()):
         self.root_path = Path(root_path)
 
     def list_python_files(self):
@@ -41,7 +46,7 @@ class ProjectScanner:
                     results.append(str(path))
 
             except Exception:
-                pass
+                raise RuntimeError("AutoDev: przechwycony wyjątek")
 
         return results
 

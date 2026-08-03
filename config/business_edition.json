@@ -1,0 +1,39 @@
+{
+    "schema_version": 2,
+    "edition": "BUSINESS",
+    "product_name": "JARVIS OS",
+    "organization": "Kacper",
+    "environment": "OWNER DEVELOPMENT",
+    "accent_color": "#FFB454",
+    "support_contact": "LOCAL OWNER",
+    "license": {
+        "mode": "OWNER_DEVELOPMENT",
+        "product_code": "JARVIS-OS-BUSINESS"
+    },
+    "safety": {
+        "auto_approve": false,
+        "require_confirmation": true,
+        "max_active_executions": 1,
+        "allow_remote_code_execution": false
+    },
+    "ui": {
+        "start_page": "console",
+        "show_quick_actions": true,
+        "density": "comfortable"
+    },
+    "features": {
+        "business_dashboard": true,
+        "autonomy_control_center": true,
+        "incident_response": true,
+        "recovery_orchestration": true,
+        "release_management": true,
+        "security_audit": true,
+        "disaster_recovery": true,
+        "local_update_center": true,
+        "production_24x7": true,
+        "business_installer": true,
+        "release_candidate": true,
+        "commercial_platform": true,
+        "production_release": true
+    }
+}

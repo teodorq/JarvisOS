@@ -1,3 +1,8 @@
+from app.core.project_paths import (
+    default_project_path,
+    default_project_root,
+)
+
 from app.autodev.research_query import (
     ResearchQuery
 )
@@ -116,7 +121,7 @@ class ResearchRouter:
 
     def __init__(
         self,
-        project_root: str = "C:/JarvisAI"
+        project_root: str = default_project_root()
     ):
         self.project_root = project_root
 

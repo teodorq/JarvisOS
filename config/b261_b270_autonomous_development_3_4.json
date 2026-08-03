@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "stage": "B261-B270",
+  "name": "Autonomous Development 3.4 - Ledger Recovery and Concurrency",
+  "workflow": {
+    "B261": "verified_receipt_index_digest",
+    "B262": "full_archive_inventory_audit",
+    "B263": "atomic_index_rebuild_from_verified_archives",
+    "B264": "automatic_missing_or_corrupt_index_recovery",
+    "B265": "index_tamper_detection_and_repair",
+    "B266": "cross_process_writer_lock",
+    "B267": "expired_writer_lock_recovery",
+    "B268": "concurrent_archive_preservation",
+    "B269": "invalid_artifact_fail_closed_service_integration",
+    "B270": "legacy_index_upgrade_and_runtime_contract"
+  },
+  "safety": {
+    "automatic_approval": false,
+    "automatic_deployment": false,
+    "bulk_deployment_supported": false,
+    "verified_index_digest": true,
+    "automatic_index_recovery": true,
+    "rebuild_only_from_verified_archives": true,
+    "cross_process_writer_lock": true,
+    "expired_writer_lock_recovery": true,
+    "invalid_artifacts_fail_closed": true,
+    "missing_artifacts_fail_closed": true,
+    "append_only_receipt_archive": true
+  },
+  "runtime_store": "data/autodev/safe_development_2/receipt_ledger"
+}

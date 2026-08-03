@@ -1,6 +1,11 @@
 
 from __future__ import annotations
 
+from app.core.project_paths import (
+    default_project_path,
+    default_project_root,
+)
+
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -19,7 +24,7 @@ from app.autodev.llm_patch_generator import (
 
 @dataclass(slots=True)
 class DeveloperAIEnginePolicy:
-    project_root: str = "C:/JarvisAI"
+    project_root: str = default_project_root()
     prefer_local_refactoring: bool = True
     allow_llm_fallback: bool = True
     max_source_chars: int = 200_000

@@ -1,37 +1,76 @@
-import json
+from __future__ import annotations
+
 from pathlib import Path
+from typing import Any
+
+from app.core.json_store import JsonStore
+from app.core.project_paths import ProjectPaths
 
 
 class SelfReflection:
 
-    def __init__(self):
-        self.memory_file = Path("data/memory/reflections.json")
-        self.memory_file.parent.mkdir(parents=True, exist_ok=True)
-
-        self.history = []
+    def __init__(
+        self,
+        project_root: str | Path | None = None,
+        *,
+        memory_file: str | Path | None = None,
+    ) -> None:
+        paths = ProjectPaths.from_value(
+            project_root
+        )
+        self.memory_file = (
+            Path(memory_file)
+            if memory_file is not None
+            else paths.reflection_memory_file
+        ).expanduser().resolve(
+            strict=False
+        )
+        self._store = JsonStore(
+            self.memory_file,
+            list,
+        )
+        self.history: list[dict[str, Any]] = []
         self.load()
 
-    def reflect(self, task, goal_manager):
+    def reflect(
+        self,
+        task,
+        goal_manager,
+    ):
         reflection = {
             "goal": task.goal,
             "finished": task.finished,
             "failed": task.failed,
-            "completed_steps": len(goal_manager.completed_steps),
-            "failed_steps": len(goal_manager.failed_steps),
-            "notes": list(goal_manager.notes),
-            "summary": self._build_summary(task, goal_manager)
+            "completed_steps": len(
+                goal_manager.completed_steps
+            ),
+            "failed_steps": len(
+                goal_manager.failed_steps
+            ),
+            "notes": list(
+                goal_manager.notes
+            ),
+            "summary": self._build_summary(
+                task,
+                goal_manager,
+            ),
         }
 
-        self.history.append(reflection)
+        self.history.append(
+            reflection
+        )
 
         if len(self.history) > 100:
             self.history = self.history[-100:]
 
         self.save()
-
         return reflection
 
-    def _build_summary(self, task, goal_manager):
+    def _build_summary(
+        self,
+        task,
+        goal_manager,
+    ):
         if task.failed:
             return (
                 f"Nie udało się ukończyć celu "
@@ -46,32 +85,37 @@ class SelfReflection:
             f"{len(goal_manager.completed_steps)} kroków."
         )
 
-    def last(self):
+    def last(
+        self,
+    ):
         if not self.history:
             return None
 
         return self.history[-1]
 
-    def save(self):
-        with open(self.memory_file, "w", encoding="utf-8") as file:
-            json.dump(
-                self.history,
-                file,
-                indent=4,
-                ensure_ascii=False
-            )
+    def save(
+        self,
+    ):
+        self._store.save(
+            self.history
+        )
 
-    def load(self):
-        if not self.memory_file.exists():
-            return
+    def load(
+        self,
+    ):
+        data = self._store.load()
 
-        try:
-            with open(self.memory_file, "r", encoding="utf-8") as file:
-                self.history = json.load(file)
-        except Exception:
+        if isinstance(
+            data,
+            list,
+        ):
+            self.history = data
+        else:
             self.history = []
 
-    def summary(self):
+    def summary(
+        self,
+    ):
         if not self.history:
             return "Brak historii refleksji."
 
@@ -85,7 +129,9 @@ class SelfReflection:
             f"Kroki wykonane: {last['completed_steps']}",
             f"Kroki nieudane: {last['failed_steps']}",
             "",
-            last["summary"]
+            last["summary"],
         ]
 
-        return "\n".join(lines)
+        return "\n".join(
+            lines
+        )

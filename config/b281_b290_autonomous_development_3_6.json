@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "stage": "B281-B290",
+  "name": "Autonomous Development 3.6 - Semantic Receipt Timeline",
+  "workflow": {
+    "B281": "completed_at_receipt_ordering",
+    "B282": "timezone_normalized_timeline",
+    "B283": "late_backfill_supersession_protection",
+    "B284": "duplicate_deployment_transition_rejection",
+    "B285": "rollback_cardinality_and_orphan_visibility",
+    "B286": "rollback_after_deployment_requirement",
+    "B287": "rollback_evidence_continuity",
+    "B288": "ledger_wide_timeline_audit",
+    "B289": "timeline_index_v3_migration",
+    "B290": "real_runtime_timeline_and_regression"
+  },
+  "safety": {
+    "automatic_approval": false,
+    "automatic_deployment": false,
+    "bulk_deployment_supported": false,
+    "completed_at_defines_latest_state": true,
+    "timezone_normalized_ordering": true,
+    "late_backfill_never_supersedes_newer_state": true,
+    "duplicate_session_operations_rejected": true,
+    "rollback_requires_matching_deployment_evidence": true,
+    "orphan_automatic_rollback_reported": true,
+    "timeline_conflicts_fail_closed": true
+  },
+  "runtime_store": "data/autodev/safe_development_2/receipt_ledger",
+  "index_schema_version": 3
+}

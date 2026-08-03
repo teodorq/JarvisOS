@@ -1,0 +1,13 @@
+{
+  "stage": "B182",
+  "status": "EXACT_SAFE_CONFLICT_PROPOSAL_READY",
+  "contract": {
+    "uses_exact_alert_context": true,
+    "rereads_google_calendar": true,
+    "target_must_be_free": true,
+    "preserves_duration": true,
+    "proposal_is_read_only": true,
+    "automatic_calendar_writes": false,
+    "execution_requires_confirmation": true
+  }
+}

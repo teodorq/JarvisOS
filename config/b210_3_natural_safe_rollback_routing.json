@@ -1,0 +1,16 @@
+{
+  "stage": "B210.3",
+  "name": "Natural Safe Rollback Routing Fix",
+  "routing": {
+    "exact_owner_phrase": "Cofnij ostatnią poprawkę projektu",
+    "priority_before_legacy_planner": true,
+    "calendar_undo_excluded": true,
+    "same_deployed_session_required": true
+  },
+  "safety": {
+    "auto_approve": false,
+    "auto_deploy": false,
+    "rollback_requires_confirmation": true,
+    "newer_live_changes_are_protected": true
+  }
+}

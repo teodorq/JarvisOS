@@ -1,0 +1,13 @@
+{
+  "stage": "B220.1",
+  "name": "Natural Autonomous Cycle Routing Fix",
+  "exact_owner_phrase": true,
+  "backlog_word_required": false,
+  "workspace_only": true,
+  "stop_before_deployment": true,
+  "requires_confirmation": false,
+  "auto_approve": false,
+  "auto_deploy": false,
+  "calendar_commands_excluded": true,
+  "recovery_cycles_excluded": true
+}

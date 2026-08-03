@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "stage": "B231-B240",
+  "name": "Autonomous Development 3.1 - Campaign Review Gate",
+  "workflow": {
+    "B231": "exact_campaign_session_reconciliation",
+    "B232": "read_only_patch_inventory",
+    "B233": "live_source_freshness_check",
+    "B234": "isolated_artifact_integrity_check",
+    "B235": "cross_patch_target_conflict_detection",
+    "B236": "deterministic_review_manifest_digest",
+    "B237": "exact_single_patch_discard",
+    "B238": "resolved_session_state_visibility",
+    "B239": "ambiguous_and_bulk_deployment_block",
+    "B240": "regression_and_safety_contract"
+  },
+  "safety": {
+    "review_is_read_only": true,
+    "discard_is_isolated_workspace_only": true,
+    "bulk_deployment_supported": false,
+    "automatic_approval": false,
+    "automatic_deployment": false,
+    "manual_confirmation_required": true,
+    "stop_before_deployment": true
+  },
+  "runtime_store": "data/autodev/autonomous_development_3"
+}

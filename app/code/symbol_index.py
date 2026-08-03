@@ -1,98 +1,164 @@
-import json
+from __future__ import annotations
+
 from pathlib import Path
+from typing import Any
 
 from app.code.code_parser import CodeParser
 from app.code.project_scanner import ProjectScanner
+from app.core.json_store import JsonStore
+from app.core.project_paths import ProjectPaths
 
 
 class SymbolIndex:
 
-    def __init__(self):
-        self.scanner = ProjectScanner()
-        self.parser = CodeParser()
-        self.index = None
-        self.cache_file = Path("data/cache/symbol_index.json")
-        self.cache_file.parent.mkdir(parents=True, exist_ok=True)
+    def __init__(
+        self,
+        project_root: str | Path | None = None,
+        *,
+        cache_file: str | Path | None = None,
+        scanner: object | None = None,
+        parser: object | None = None,
+    ) -> None:
+        paths = ProjectPaths.from_value(
+            project_root
+        )
+        self.scanner = scanner or ProjectScanner()
+        self.parser = parser or CodeParser()
+        self.index: dict[str, Any] | None = None
+        self.cache_file = (
+            Path(cache_file)
+            if cache_file is not None
+            else paths.symbol_index_cache
+        ).expanduser().resolve(
+            strict=False
+        )
+        self._store = JsonStore(
+            self.cache_file,
+            self._empty_index,
+        )
 
-    def build(self):
+    @staticmethod
+    def _empty_index(
+    ) -> dict[str, list[Any]]:
+        return {
+            "classes": [],
+            "functions": [],
+            "imports": [],
+        }
+
+    def build(
+        self,
+    ):
         classes = []
         functions = []
         imports = []
 
         for path in self.scanner.list_python_files():
-            parsed = self.parser.parse_file(path)
+            parsed = self.parser.parse_file(
+                path
+            )
 
-            if parsed.get("error"):
+            if parsed.get(
+                "error"
+            ):
                 continue
 
-            for cls in parsed.get("classes", []):
-                classes.append({
-                    "name": cls["name"],
-                    "path": path,
-                    "line": cls["line"],
-                    "methods": cls.get("methods", [])
-                })
+            for cls in parsed.get(
+                "classes",
+                [],
+            ):
+                classes.append(
+                    {
+                        "name": cls["name"],
+                        "path": path,
+                        "line": cls["line"],
+                        "methods": cls.get(
+                            "methods",
+                            [],
+                        ),
+                    }
+                )
 
-            for func in parsed.get("functions", []):
-                functions.append({
-                    "name": func["name"],
-                    "path": path,
-                    "line": func["line"]
-                })
+            for func in parsed.get(
+                "functions",
+                [],
+            ):
+                functions.append(
+                    {
+                        "name": func["name"],
+                        "path": path,
+                        "line": func["line"],
+                    }
+                )
 
-            for imp in parsed.get("imports", []):
-                imports.append({
-                    **imp,
-                    "path": path
-                })
+            for imp in parsed.get(
+                "imports",
+                [],
+            ):
+                imports.append(
+                    {
+                        **imp,
+                        "path": path,
+                    }
+                )
 
         self.index = {
             "classes": classes,
             "functions": functions,
-            "imports": imports
+            "imports": imports,
         }
-
         self._save_cache()
-
         return self.index
 
-    def get_index(self):
+    def get_index(
+        self,
+    ):
         if self.index is not None:
             return self.index
 
         cached = self._load_cache()
 
-        if cached:
+        if cached is not None:
             self.index = cached
             return self.index
 
         return self.build()
 
-    def rebuild(self):
+    def rebuild(
+        self,
+    ):
         self.index = None
         return self.build()
 
-    def find_class(self, name: str):
-        name = name.lower().strip()
-        results = []
+    def find_class(
+        self,
+        name: str,
+    ):
+        normalized = name.lower().strip()
 
-        for item in self.get_index()["classes"]:
-            if name in item["name"].lower():
-                results.append(item)
+        return [
+            item
+            for item in self.get_index()["classes"]
+            if normalized
+            in item["name"].lower()
+        ]
 
-        return results
+    def find_function(
+        self,
+        name: str,
+    ):
+        normalized = name.lower().strip()
 
-    def find_function(self, name: str):
-        name = name.lower().strip()
-        results = []
+        return [
+            item
+            for item in self.get_index()["functions"]
+            if normalized
+            in item["name"].lower()
+        ]
 
-        for item in self.get_index()["functions"]:
-            if name in item["name"].lower():
-                results.append(item)
-
-        return results
-
-    def summary(self):
+    def summary(
+        self,
+    ):
         index = self.get_index()
 
         return (
@@ -103,39 +169,43 @@ class SymbolIndex:
             f"Cache: {self.cache_file}"
         )
 
-    def _save_cache(self):
+    def _save_cache(
+        self,
+    ):
         if self.index is None:
             return
 
-        with open(self.cache_file, "w", encoding="utf-8") as file:
-            json.dump(
-                self.index,
-                file,
-                indent=4,
-                ensure_ascii=False
+        self._store.save(
+            self.index
+        )
+
+    def _load_cache(
+        self,
+    ):
+        if not self._store.exists():
+            return None
+
+        data = self._store.load()
+
+        if not isinstance(
+            data,
+            dict,
+        ):
+            return None
+
+        required = (
+            "classes",
+            "functions",
+            "imports",
+        )
+
+        if any(
+            not isinstance(
+                data.get(key),
+                list,
             )
-
-    def _load_cache(self):
-        if not self.cache_file.exists():
+            for key in required
+        ):
             return None
 
-        try:
-            with open(self.cache_file, "r", encoding="utf-8") as file:
-                data = json.load(file)
-
-            if not isinstance(data, dict):
-                return None
-
-            if "classes" not in data:
-                return None
-
-            if "functions" not in data:
-                return None
-
-            if "imports" not in data:
-                return None
-
-            return data
-
-        except Exception:
-            return None
+        return data

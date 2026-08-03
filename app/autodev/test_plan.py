@@ -3,6 +3,7 @@ from typing import Any
 
 @dataclass(slots=True)
 class TestPlan:
+    __test__ = False
     changed_files: list[str] = field(default_factory=list)
     commands: list[list[str]] = field(default_factory=list)
     timeout_seconds: int = 180

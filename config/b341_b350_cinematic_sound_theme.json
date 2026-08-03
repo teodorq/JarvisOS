@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "release": "B341-B350 CINEMATIC SOUND THEME",
+  "stages": {
+    "B341": "VOICE_AND_EFFECT_DIRECTION_REVIEWED",
+    "B342": "ORIGINAL_LOCAL_SOUND_GENERATOR_READY",
+    "B343": "CINEMATIC_STARTUP_TONE_READY",
+    "B344": "LISTENING_FEEDBACK_TONE_READY",
+    "B345": "THINKING_AND_ACTION_FEEDBACK_READY",
+    "B346": "SUCCESS_CONFIRMATION_CHIME_READY",
+    "B347": "WARNING_AND_ERROR_FEEDBACK_READY",
+    "B348": "SPEECH_INDEPENDENT_QT_AUDIO_CHANNEL_READY",
+    "B349": "SOUND_COOLDOWN_AND_VOLUME_GUARD_READY",
+    "B350": "CINEMATIC_SOUND_REGRESSION_GATE_READY"
+  },
+  "sound_theme": {
+    "enabled": true,
+    "volume": 0.24,
+    "cooldown_seconds": 0.32,
+    "levels": {
+      "startup": 0.82,
+      "listening": 0.72,
+      "thinking": 0.52,
+      "success": 0.68,
+      "warning": 0.64,
+      "error": 0.58
+    }
+  },
+  "assets": {
+    "directory": "assets/sound_theme",
+    "format": "PCM16_MONO_48000HZ",
+    "origin": "ORIGINAL_DETERMINISTIC_SYNTHESIS",
+    "downloaded_samples": false
+  },
+  "voice_direction": {
+    "language": "pl-PL",
+    "style": "calm_cinematic_british_inspired_assistant",
+    "exact_character_impersonation": false,
+    "cloud_voice_requires_documented_license": true
+  },
+  "safety": {
+    "celebrity_voice_clone": false,
+    "copyrighted_character_preset": false,
+    "sound_channel_independent_from_tts": true,
+    "owner_gate_unchanged": true
+  }
+}

@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from app.core.project_paths import (
+    default_project_path,
+    default_project_root,
+)
+
 from typing import Any
 
 from app.autodev.code_generation_engine import (
@@ -27,7 +32,7 @@ class CodeImprovementWorkflow:
 
     def __init__(
         self,
-        project_root: str = "C:/JarvisAI",
+        project_root: str = default_project_root(),
     ) -> None:
 
         self.improvement_selector = (

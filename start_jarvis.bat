@@ -1,5 +1,9 @@
 @echo off
-cd /d C:\JarvisAI
-call .venv\Scripts\activate.bat
-start "" pythonw.exe main.py
-exit
+setlocal
+cd /d "%~dp0"
+if exist ".venv\Scripts\pythonw.exe" (
+    start "" ".venv\Scripts\pythonw.exe" main.py
+) else (
+    start "" pythonw.exe main.py
+)
+exit /b 0

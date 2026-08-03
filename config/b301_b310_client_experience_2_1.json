@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "release": "B301-B310 CLIENT EXPERIENCE 2.1",
+  "stages": {
+    "B301": "NATURAL_ASSISTANT_STATUS_READY",
+    "B302": "NATURAL_CONVERSATION_STATUS_READY",
+    "B303": "NATURAL_DESKTOP_AND_DAILY_STATUS_READY",
+    "B304": "NATURAL_REMINDER_ROUTING_READY",
+    "B305": "READABLE_GMAIL_RESULTS_READY",
+    "B306": "CLIENT_CAPABILITY_BOUNDARY_READY",
+    "B307": "OWNER_PIN_DIRECTIONAL_GATE_READY",
+    "B308": "CLIENT_HUD_REFERENCE_STYLE_READY",
+    "B309": "POLISH_ONECORE_ADAM_VOICE_READY",
+    "B310": "CLIENT_EXPERIENCE_2_1_TEST_GATE_READY"
+  },
+  "client_shared_features": [
+    "conversation",
+    "voice",
+    "day_plan",
+    "mail",
+    "calendar",
+    "documents",
+    "reminders",
+    "natural_assistant_status"
+  ],
+  "owner_only_features": [
+    "autodev",
+    "source_code_changes",
+    "audit",
+    "licenses",
+    "roles",
+    "backups_and_recovery",
+    "updates",
+    "deployment",
+    "release",
+    "system_configuration"
+  ],
+  "access": {
+    "owner_to_client": "AVAILABLE",
+    "client_to_owner": "PIN_REQUIRED",
+    "client_pin_enrollment": false,
+    "max_failed_pin_attempts": 3,
+    "pin_lock_seconds": 60
+  },
+  "voice": {
+    "provider": "WINDOWS_ONECORE",
+    "language": "pl-PL",
+    "preferred_voice": "Microsoft Adam",
+    "profile": "CALM_CINEMATIC",
+    "speech_rate": 158,
+    "volume": 0.92,
+    "pitch": 0.88,
+    "style_reference": "assets/voice/references/jarvis_style_reference_vtubereels_147563_20260801.mp3",
+    "actor_voice_clone": false
+  },
+  "safety": {
+    "automatic_approval": false,
+    "automatic_deployment": false,
+    "remote_code_execution": false,
+    "software_installation_performed": false
+  }
+}

@@ -131,6 +131,9 @@ class AgentLoop:
         history.append("=" * 40)
         history.append(reflection["summary"])
 
+        return self._finish_run(history, task)
+
+    def _finish_run(self, history, task):
         history.append("")
         history.append("=" * 40)
         history.append("ZAKOŃCZONO")

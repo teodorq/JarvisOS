@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+import hashlib
 
 from app.autodev.problem_detector import (
     DetectedProblem,
@@ -119,6 +120,44 @@ class TaskPrioritizer:
             context,
         )
 
+        metadata = {
+            **dict(
+                problem.metadata
+            ),
+            "problem_score": problem.score,
+        }
+
+        fingerprint_source = "|".join(
+            [
+                str(problem.module),
+                str(problem.title),
+                str(
+                    metadata.get(
+                        "line",
+                        "",
+                    )
+                ),
+                str(
+                    metadata.get(
+                        "function_name",
+                        "",
+                    )
+                ),
+                str(
+                    metadata.get(
+                        "rule",
+                        "",
+                    )
+                ),
+            ]
+        )
+
+        metadata["fingerprint"] = hashlib.sha256(
+            fingerprint_source.encode(
+                "utf-8"
+            )
+        ).hexdigest()
+
         return {
             "title": problem.title,
             "description": problem.description,
@@ -127,10 +166,5 @@ class TaskPrioritizer:
             "severity": problem.severity,
             "priority_score": priority_score,
             "source": "TaskPrioritizer",
-            "metadata": {
-                **dict(
-                    problem.metadata
-                ),
-                "problem_score": problem.score,
-            },
+            "metadata": metadata,
         }

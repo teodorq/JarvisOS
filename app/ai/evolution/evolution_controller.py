@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from .evolution_command_router import EvolutionCommandRouter
+
+from app.core.project_paths import default_project_root
+
 from typing import Any
 
 from app.ai.evolution.evolution_engine import (
@@ -13,11 +17,14 @@ from app.ai.evolution.evolution_planner import (
 )
 
 
+_EVOLUTION_COMMAND_ROUTER = EvolutionCommandRouter()
+
+
 class EvolutionController:
 
     def __init__(
         self,
-        project_root: str = "C:/JarvisAI",
+        project_root: str | None = None,
         evolution_engine: EvolutionEngine | None = None,
         evolution_memory: EvolutionMemory | None = None,
         evolution_planner: EvolutionPlanner | None = None,
@@ -26,6 +33,7 @@ class EvolutionController:
 
         self.project_root = str(
             project_root
+            or default_project_root()
         ).strip()
 
         if not self.project_root:
@@ -312,266 +320,11 @@ class EvolutionController:
         command: str,
         context: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-
-        normalized_command = str(
-            command
-        ).strip()
-
-        if not normalized_command:
-            return {
-                "success": False,
-                "status": "EMPTY_COMMAND",
-                "error": (
-                    "Polecenie Evolution Engine jest puste."
-                ),
-            }
-
-        lowered = normalized_command.lower()
-
-        start_prefixes = (
-            "evolution start ",
-            "auto evolution start ",
-            "ewolucja start ",
-            "uruchom ewolucję ",
-            "uruchom ewolucje ",
+        return _EVOLUTION_COMMAND_ROUTER.handle(
+            self,
+            command,
+            context,
         )
-
-        for prefix in start_prefixes:
-            if lowered.startswith(
-                prefix
-            ):
-                objective = normalized_command[
-                    len(prefix):
-                ].strip()
-
-                return self.create_and_start(
-                    objective=objective,
-                    mode="SAFE_AUTONOMOUS",
-                    context=context,
-                )
-
-        autonomous_prefixes = (
-            "evolution autonomous ",
-            "auto evolution autonomous ",
-            "ewolucja autonomiczna ",
-        )
-
-        for prefix in autonomous_prefixes:
-            if lowered.startswith(
-                prefix
-            ):
-                objective = normalized_command[
-                    len(prefix):
-                ].strip()
-
-                return self.create_and_start(
-                    objective=objective,
-                    mode="AUTONOMOUS",
-                    context=context,
-                )
-
-        create_prefixes = (
-            "evolution create ",
-            "auto evolution create ",
-            "ewolucja utwórz ",
-            "ewolucja utworz ",
-        )
-
-        for prefix in create_prefixes:
-            if lowered.startswith(
-                prefix
-            ):
-                objective = normalized_command[
-                    len(prefix):
-                ].strip()
-
-                return self.create_run(
-                    objective=objective,
-                    context=context,
-                )
-
-        continue_prefixes = (
-            "evolution continue ",
-            "auto evolution continue ",
-            "ewolucja kontynuuj ",
-        )
-
-        for prefix in continue_prefixes:
-            if lowered.startswith(
-                prefix
-            ):
-                evolution_id = normalized_command[
-                    len(prefix):
-                ].strip()
-
-                return self.continue_run(
-                    evolution_id=evolution_id,
-                    context=context,
-                )
-
-        approve_prefixes = (
-            "evolution approve ",
-            "auto evolution approve ",
-            "ewolucja zaakceptuj ",
-        )
-
-        for prefix in approve_prefixes:
-            if lowered.startswith(
-                prefix
-            ):
-                evolution_id = normalized_command[
-                    len(prefix):
-                ].strip()
-
-                return self.approve_run(
-                    evolution_id=evolution_id,
-                    approved=True,
-                    context=context,
-                )
-
-        reject_prefixes = (
-            "evolution reject ",
-            "auto evolution reject ",
-            "ewolucja odrzuć ",
-            "ewolucja odrzuc ",
-        )
-
-        for prefix in reject_prefixes:
-            if lowered.startswith(
-                prefix
-            ):
-                evolution_id = normalized_command[
-                    len(prefix):
-                ].strip()
-
-                return self.approve_run(
-                    evolution_id=evolution_id,
-                    approved=False,
-                    note=(
-                        "Odrzucono zmianę z polecenia "
-                        "użytkownika."
-                    ),
-                    context=context,
-                )
-
-        pause_prefixes = (
-            "evolution pause ",
-            "auto evolution pause ",
-            "ewolucja pauza ",
-        )
-
-        for prefix in pause_prefixes:
-            if lowered.startswith(
-                prefix
-            ):
-                evolution_id = normalized_command[
-                    len(prefix):
-                ].strip()
-
-                return self.pause_run(
-                    evolution_id=evolution_id
-                )
-
-        resume_prefixes = (
-            "evolution resume ",
-            "auto evolution resume ",
-            "ewolucja wznow ",
-            "ewolucja wznów ",
-        )
-
-        for prefix in resume_prefixes:
-            if lowered.startswith(
-                prefix
-            ):
-                evolution_id = normalized_command[
-                    len(prefix):
-                ].strip()
-
-                return self.resume_run(
-                    evolution_id=evolution_id,
-                    context=context,
-                )
-
-        cancel_prefixes = (
-            "evolution cancel ",
-            "auto evolution cancel ",
-            "ewolucja anuluj ",
-        )
-
-        for prefix in cancel_prefixes:
-            if lowered.startswith(
-                prefix
-            ):
-                evolution_id = normalized_command[
-                    len(prefix):
-                ].strip()
-
-                return self.cancel_run(
-                    evolution_id=evolution_id
-                )
-
-        status_prefixes = (
-            "evolution status ",
-            "auto evolution status ",
-            "ewolucja status ",
-        )
-
-        for prefix in status_prefixes:
-            if lowered.startswith(
-                prefix
-            ):
-                evolution_id = normalized_command[
-                    len(prefix):
-                ].strip()
-
-                run = self.get_run(
-                    evolution_id
-                )
-
-                if run is None:
-                    return {
-                        "success": False,
-                        "status": "NOT_FOUND",
-                        "evolution_id": evolution_id,
-                    }
-
-                return {
-                    "success": True,
-                    "status": "FOUND",
-                    "evolution_id": evolution_id,
-                    "run": run,
-                }
-
-        if lowered in {
-            "evolution list",
-            "auto evolution list",
-            "ewolucja lista",
-        }:
-            return {
-                "success": True,
-                "status": "COMPLETED",
-                "runs": self.list_runs(),
-            }
-
-        if lowered in {
-            "evolution summary",
-            "auto evolution summary",
-            "ewolucja podsumowanie",
-        }:
-            return {
-                "success": True,
-                "status": "COMPLETED",
-                "summary": self.system_summary(),
-            }
-
-        return {
-            "success": False,
-            "status": "UNKNOWN_COMMAND",
-            "command": normalized_command,
-            "error": (
-                "Nie rozpoznano polecenia Evolution Engine."
-            ),
-        }
 
     def can_handle(
         self,

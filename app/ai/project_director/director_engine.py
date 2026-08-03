@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+from app.core.project_paths import default_project_root
+
 from typing import Any
+
+from .director_execution_service import DirectorExecutionService
 
 from app.ai.project_director.director_memory import (
     DirectorMemory,
@@ -13,11 +17,14 @@ from app.ai.project_director.director_state import (
 )
 
 
+_DIRECTOR_EXECUTION_SERVICE = DirectorExecutionService()
+
+
 class DirectorEngine:
 
     def __init__(
         self,
-        project_root: str = "C:/JarvisAI",
+        project_root: str | None = None,
         planner: DirectorPlanner | None = None,
         memory: DirectorMemory | None = None,
         research_service: Any | None = None,
@@ -29,6 +36,7 @@ class DirectorEngine:
 
         self.project_root = str(
             project_root
+            or default_project_root()
         ).strip()
 
         if not self.project_root:
@@ -248,132 +256,13 @@ class DirectorEngine:
             context=context,
         )
 
-    def run_iteration(
-        self,
-        director_id: str,
-        context: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
-
-        state = self._get_state(
-            director_id
+    def run_iteration(self, director_id: str, context: dict[str, Any] | None=None) -> dict[str, Any]:
+        return _DIRECTOR_EXECUTION_SERVICE.run_iteration(
+            self,
+            director_id,
+            context
         )
 
-        if state is None:
-            return {
-                "success": False,
-                "status": "NOT_FOUND",
-                "director_id": director_id,
-            }
-
-        if not state.can_continue():
-            return self._finish_session(
-                state=state,
-                status=(
-                    state.status
-                    if state.is_terminal()
-                    else "COMPLETED"
-                ),
-            )
-
-        try:
-            state.increment_iteration()
-
-            module_result = self._execute_selected_module(
-                state=state,
-                context=context,
-            )
-
-            success = bool(
-                module_result.get(
-                    "success",
-                    False,
-                )
-            )
-
-            status = str(
-                module_result.get(
-                    "status",
-                    "UNKNOWN",
-                )
-            ).upper()
-
-            state.add_result(
-                module=state.selected_module,
-                status=status,
-                result=module_result,
-                success=success,
-            )
-
-            if success:
-                state.add_lesson(
-                    (
-                        "Moduł "
-                        f"{state.selected_module} "
-                        "zakończył wykonanie bez błędu."
-                    )
-                )
-
-                if status in {
-                    "WAITING_FOR_APPROVAL",
-                    "WAITING",
-                    "PAUSED",
-                }:
-                    state.set_status(
-                        status,
-                        "MODULE_WAITING",
-                    )
-
-                    return self._build_result(
-                        state=state,
-                        success=True,
-                        status=status,
-                        module_result=module_result,
-                    )
-
-                return self._finish_session(
-                    state=state,
-                    status="COMPLETED",
-                    module_result=module_result,
-                )
-
-            error = str(
-                module_result.get(
-                    "error",
-                    (
-                        "Wybrany moduł zakończył "
-                        "operację błędem."
-                    ),
-                )
-            )
-
-            state.add_error(
-                error
-            )
-
-            return self._finish_session(
-                state=state,
-                status="FAILED",
-                module_result=module_result,
-            )
-
-        except Exception as exc:
-            state.add_error(
-                str(
-                    exc
-                )
-            )
-
-            return self._finish_session(
-                state=state,
-                status="FAILED",
-                module_result={
-                    "success": False,
-                    "status": "FAILED",
-                    "error": str(
-                        exc
-                    ),
-                },
-            )
 
     def approve(
         self,
@@ -480,128 +369,13 @@ class DirectorEngine:
             "memory": self.memory.summary(),
         }
 
-    def _execute_selected_module(
-        self,
-        state: DirectorState,
-        context: dict[str, Any] | None,
-    ) -> dict[str, Any]:
+    def _execute_selected_module(self, state: DirectorState, context: dict[str, Any] | None) -> dict[str, Any]:
+        return _DIRECTOR_EXECUTION_SERVICE._execute_selected_module(
+            self,
+            state,
+            context
+        )
 
-        command = state.objective
-
-        execution_context = {
-            "project_root": self.project_root,
-            "director_id": state.director_id,
-            "iteration": state.iteration,
-            "metadata": {
-                "source": "DirectorEngine",
-            },
-            **self._safe_dict(
-                context
-            ),
-        }
-
-        module = state.selected_module
-
-        if module == DirectorPlanner.MODULE_RESEARCH:
-            if self.research_service is None:
-                return self._missing_module(
-                    module
-                )
-
-            return self._normalize_result(
-                self.research_service.execute(
-                    command
-                )
-            )
-
-        if module == DirectorPlanner.MODULE_REASONER:
-            if self.reasoning_service is None:
-                return self._missing_module(
-                    module
-                )
-
-            return self._normalize_result(
-                self.reasoning_service.handle(
-                    command=command,
-                    context=execution_context,
-                )
-            )
-
-        if module == DirectorPlanner.MODULE_SELF_IMPROVEMENT:
-            if self.improvement_controller is None:
-                return self._missing_module(
-                    module
-                )
-
-            improvement_command = command
-
-            if not command.lower().startswith(
-                (
-                    "self improvement ",
-                    "improvement brain ",
-                    "samodoskonalenie ",
-                )
-            ):
-                improvement_command = (
-                    "self improvement analyze "
-                    + command
-                )
-
-            return self._normalize_result(
-                self.improvement_controller.handle(
-                    command=improvement_command,
-                    context=execution_context,
-                )
-            )
-
-        if module == DirectorPlanner.MODULE_EVOLUTION:
-            if self.evolution_controller is None:
-                return self._missing_module(
-                    module
-                )
-
-            evolution_command = command
-
-            if not command.lower().startswith(
-                (
-                    "evolution ",
-                    "auto evolution ",
-                    "ewolucja ",
-                )
-            ):
-                evolution_command = (
-                    "evolution start "
-                    + command
-                )
-
-            return self._normalize_result(
-                self.evolution_controller.handle(
-                    command=evolution_command,
-                    context=execution_context,
-                )
-            )
-
-        if module == DirectorPlanner.MODULE_CONTINUOUS_DEV:
-            if self.continuous_dev_controller is None:
-                return self._missing_module(
-                    module
-                )
-
-            return self._normalize_result(
-                self.continuous_dev_controller.handle(
-                    command=command,
-                    context=execution_context,
-                )
-            )
-
-        return {
-            "success": False,
-            "status": "NO_ACTION",
-            "error": (
-                "Project Director nie wybrał "
-                "obsługiwanego modułu."
-            ),
-        }
 
     def _finish_session(
         self,

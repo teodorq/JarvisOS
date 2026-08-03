@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "release": "B361-B370 CLIENT PRIVILEGE BOUNDARY",
+  "stages": {
+    "B361": "CLIENT_PLAN_ORIGIN_TOKEN_READY",
+    "B362": "OWNER_PENDING_CONFIRMATION_BLOCKED",
+    "B363": "PRE_EXECUTION_PRIVILEGE_RECHECK_READY",
+    "B364": "BACKGROUND_EXECUTION_PARITY_READY",
+    "B365": "STRUCTURAL_HANDLER_POLICY_READY",
+    "B366": "PRIVILEGED_ACTION_TYPE_POLICY_READY",
+    "B367": "SHARED_DAILY_CAPABILITIES_PRESERVED",
+    "B368": "NATURAL_ACCESS_EXPLANATION_READY",
+    "B369": "OWNER_PIN_RETURN_PATH_VERIFIED",
+    "B370": "CLIENT_BOUNDARY_REGRESSION_VERIFIED"
+  },
+  "client_shared": [
+    "conversation",
+    "voice",
+    "mail",
+    "calendar",
+    "documents",
+    "reminders",
+    "open_app",
+    "web_search"
+  ],
+  "owner_only": [
+    "autodev",
+    "software_engineer",
+    "project_architecture",
+    "research_agent",
+    "reasoner",
+    "executive_ai",
+    "audit",
+    "license_management",
+    "role_management",
+    "backup_and_recovery",
+    "system_updates",
+    "deployment"
+  ],
+  "access": {
+    "owner_to_client": "AVAILABLE",
+    "client_to_owner": "PIN_REQUIRED",
+    "shortcut": "Ctrl+Shift+F12",
+    "client_can_confirm_owner_plan": false,
+    "model_can_forge_client_scope": false
+  }
+}

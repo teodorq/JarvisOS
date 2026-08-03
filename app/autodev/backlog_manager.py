@@ -68,6 +68,13 @@ class BacklogManager:
         task_data: dict[str, Any],
     ) -> BacklogItem:
 
+        metadata = dict(
+            task_data.get(
+                "metadata"
+            )
+            or {}
+        )
+
         existing = self.find_duplicate(
             title=str(
                 task_data.get(
@@ -78,6 +85,12 @@ class BacklogManager:
             target=str(
                 task_data.get(
                     "target",
+                    "",
+                )
+            ),
+            fingerprint=str(
+                metadata.get(
+                    "fingerprint",
                     "",
                 )
             ),
@@ -143,12 +156,7 @@ class BacklogManager:
                     "BacklogManager",
                 )
             ),
-            metadata=dict(
-                task_data.get(
-                    "metadata"
-                )
-                or {}
-            ),
+            metadata=metadata,
         )
 
         self.items.append(
@@ -256,6 +264,7 @@ class BacklogManager:
         *,
         title: str,
         target: str,
+        fingerprint: str = "",
     ) -> BacklogItem | None:
 
         normalized_title = str(
@@ -266,18 +275,33 @@ class BacklogManager:
             target
         ).strip().casefold()
 
+        normalized_fingerprint = str(
+            fingerprint
+        ).strip().casefold()
+
         for item in self.items:
-            if (
+            item_fingerprint = str(
+                item.metadata.get(
+                    "fingerprint",
+                    "",
+                )
+            ).strip().casefold()
+
+            same_fingerprint = bool(
+                normalized_fingerprint
+                and item_fingerprint
+                and item_fingerprint
+                == normalized_fingerprint
+            )
+
+            same_identity = (
                 item.title.casefold()
                 == normalized_title
                 and item.target.casefold()
                 == normalized_target
-                and item.status
-                not in {
-                    "COMPLETED",
-                    "CANCELLED",
-                }
-            ):
+            )
+
+            if same_fingerprint or same_identity:
                 return item
 
         return None
@@ -327,10 +351,32 @@ class BacklogManager:
 
         next_item = self.next_item()
 
+        pending = by_status.get(
+            "PENDING",
+            0,
+        )
+        running = by_status.get(
+            "RUNNING",
+            0,
+        )
+        completed = by_status.get(
+            "COMPLETED",
+            0,
+        )
+        failed = by_status.get(
+            "FAILED",
+            0,
+        )
+
         return {
             "total": len(
                 self.items
             ),
+            "active": pending + running,
+            "pending": pending,
+            "running": running,
+            "completed": completed,
+            "failed": failed,
             "by_status": by_status,
             "next_task": (
                 next_item.to_dict()

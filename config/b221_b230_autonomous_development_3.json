@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "stage": "B221-B230",
+  "name": "Autonomous Development 3 - Durable Multi-Task Work",
+  "enabled": true,
+  "workflow": {
+    "B221": "unified_concept_intent_router",
+    "B222": "evidence_based_multi_task_backlog_seeding",
+    "B223": "durable_campaign_model_and_event_journal",
+    "B224": "sequential_multi_task_patch_preparation",
+    "B225": "static_test_and_risk_release_gate",
+    "B226": "source_immutability_and_duplicate_protection",
+    "B227": "lease_based_restart_recovery",
+    "B228": "background_worker_and_cancellation",
+    "B229": "legacy_single_cycle_compatibility_and_safe_fallback",
+    "B230": "full_regression_integrity_installer_and_rollback_package"
+  },
+  "limits": {
+    "max_tasks": 5,
+    "max_seed_candidates": 10,
+    "max_failures": 2,
+    "max_runtime_seconds": 3600,
+    "lease_seconds": 120,
+    "max_campaigns": 30,
+    "max_risk_score": 50.0,
+    "min_confidence": 0.75,
+    "max_changed_files_per_patch": 1,
+    "max_changed_lines_per_patch": 40
+  },
+  "safety": {
+    "live_source_immutable": true,
+    "isolated_workspace_only": true,
+    "checkpoint_after_every_transition": true,
+    "recover_interrupted_campaigns": true,
+    "discard_partial_session_before_retry": true,
+    "auto_approve": false,
+    "auto_deploy": false,
+    "stop_before_deployment": true,
+    "manual_installation_required": true
+  },
+  "runtime_store": "data/autodev/autonomous_development_3"
+}

@@ -1,0 +1,15 @@
+{
+  "stage": "B190.2",
+  "status": "GMAIL_SEND_CONFIRMATION_BRIDGE_READY",
+  "client_exact_send_priority": true,
+  "owner_exact_send_priority": true,
+  "shared_assistant_execution": true,
+  "send_requires_confirmation": true,
+  "automatic_sending": false,
+  "supported_followups": [
+    "Wyślij tę odpowiedź",
+    "Wyślij ten szkic",
+    "Wyślij przygotowaną odpowiedź",
+    "Nadaj tę odpowiedź"
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "release": "B371-B380 LANGUAGE AND UI STABILITY",
+  "stages": {
+    "B371": "SHARED_USER_TEXT_FILTER_READY",
+    "B372": "MILESTONE_CODES_HIDDEN_READY",
+    "B373": "MACHINE_STATUS_TEXT_NATURALIZED_READY",
+    "B374": "OWNER_CONSOLE_FILTER_READY",
+    "B375": "CLIENT_LABEL_FILTER_READY",
+    "B376": "POLISH_SPEECH_FILTER_READY",
+    "B377": "OWNER_BACKGROUND_COMMAND_LANE_READY",
+    "B378": "UI_REENTRANCY_REMOVED_READY",
+    "B379": "STATUS_REFRESH_THROTTLED_READY",
+    "B380": "LANGUAGE_STABILITY_REGRESSION_READY"
+  },
+  "rules": {
+    "internal_stage_ids_preserved": true,
+    "stage_ids_visible_to_user": false,
+    "owner_command_workers": 1,
+    "manual_event_pumping": false,
+    "voice_identity_changed": false
+  }
+}

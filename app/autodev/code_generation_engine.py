@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from app.core.project_paths import (
+    default_project_path,
+    default_project_root,
+)
+
 import ast
 import hashlib
 from dataclasses import asdict, dataclass, field
@@ -10,7 +15,7 @@ from typing import Any
 
 @dataclass(slots=True)
 class CodeGenerationPolicy:
-    project_root: str = "C:/JarvisAI"
+    project_root: str = default_project_root()
     max_file_size_bytes: int = 500_000
     max_changed_lines: int = 200
     require_python_file: bool = True

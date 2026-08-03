@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from app.core.project_paths import (
+    default_project_path,
+    default_project_root,
+)
+
 import threading
 import time
 import uuid
@@ -10,8 +15,16 @@ from pathlib import Path
 from typing import Any
 
 from app.autodev.autonomous_task_queue import AutonomousTask
+from app.autodev.developer_agent import DeveloperAgent
 from app.autodev.developer_controller import DeveloperController
 from app.autodev.developer_request import DeveloperRequest
+from app.autodev.error_reporting import AutoDevErrorReporter
+from app.autodev.autodev_worker_request_service import (
+    AutoDevWorkerRequestService,
+)
+
+
+_AUTODEV_WORKER_REQUEST_SERVICE = AutoDevWorkerRequestService()
 
 
 class WorkerState(StrEnum):
@@ -25,11 +38,18 @@ class WorkerState(StrEnum):
 
 @dataclass(slots=True)
 class AutoDevWorkerPolicy:
-    project_root: str = "C:/JarvisAI"
+    project_root: str = default_project_root()
     auto_approve: bool = False
     auto_execute: bool = True
     auto_rollback: bool = True
     require_safe_metadata: bool = True
+    max_changed_files: int = 5
+    protected_paths: tuple[str, ...] = (
+        ".git",
+        ".venv",
+        "data/backups",
+        "AI_PLIKI",
+    )
     allowed_modes: set[str] = field(
         default_factory=lambda: {
             "file",
@@ -44,6 +64,11 @@ class AutoDevWorkerPolicy:
 
         if not self.allowed_modes:
             raise ValueError("allowed_modes cannot be empty")
+
+        if self.max_changed_files < 1:
+            raise ValueError(
+                "max_changed_files must be at least 1"
+            )
 
 
 @dataclass(slots=True)
@@ -61,6 +86,9 @@ class AutoDevWorkerResult:
     changed_files: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     data: dict[str, Any] = field(default_factory=dict)
+    error_details: list[dict[str, Any]] = field(
+        default_factory=list
+    )
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -94,6 +122,7 @@ class AutoDevWorker:
         worker_id: str | None = None,
         policy: AutoDevWorkerPolicy | None = None,
         controller: DeveloperController | None = None,
+        developer_agent: DeveloperAgent | None = None,
     ) -> None:
         self.policy = policy or AutoDevWorkerPolicy()
         self.policy.validate()
@@ -106,6 +135,12 @@ class AutoDevWorker:
 
         self.controller = controller or DeveloperController(
             project_root=self.policy.project_root
+        )
+        self.developer_agent = (
+            developer_agent
+            or DeveloperAgent(
+                project_root=self.policy.project_root
+            )
         )
 
         self._state = WorkerState.IDLE
@@ -258,6 +293,14 @@ class AutoDevWorker:
                 )
             )
 
+            if not changed_files:
+                changed_files = list(
+                    execution_result.data.get(
+                        "transaction_files",
+                        [],
+                    )
+                )
+
             return self._finish(
                 task=task,
                 started_at=started_at,
@@ -273,6 +316,17 @@ class AutoDevWorker:
             )
 
         except Exception as exc:
+            report = AutoDevErrorReporter.capture(
+                exc,
+                stage="autodev_worker.execute",
+                context={
+                    "task_id": task.task_id,
+                    "worker_id": self.worker_id,
+                    "state": self._state.value,
+                },
+                project_root=self.policy.project_root,
+            )
+
             return self._finish(
                 task=task,
                 started_at=started_at,
@@ -282,8 +336,15 @@ class AutoDevWorker:
                     "AutoDevWorker przerwał wykonanie zadania."
                 ),
                 errors=[
-                    f"{type(exc).__name__}: {exc}"
+                    report.summary()
                 ],
+                error_details=[
+                    report.as_dict()
+                ],
+                data={
+                    "error_id": report.error_id,
+                    "retryable": report.retryable,
+                },
             )
 
     def approve_current(
@@ -406,71 +467,40 @@ class AutoDevWorker:
         self,
         task: AutonomousTask,
     ) -> DeveloperRequest:
-        payload = dict(task.payload)
-
-        goal = str(
-            payload.get("goal")
-            or task.description
-            or task.title
-        ).strip()
-
-        target = str(
-            payload.get("target")
-            or task.title
-        ).strip()
-
-        mode = str(
-            payload.get("mode", "file")
-        ).strip()
-
-        metadata = dict(
-            payload.get("metadata") or {}
-        )
-        metadata.setdefault(
-            "autodev_task_id",
-            task.task_id,
-        )
-        metadata.setdefault(
-            "autodev_source",
-            task.source,
-        )
-        metadata.setdefault(
-            "autodev_priority",
-            int(task.priority),
-        )
-        metadata.setdefault(
-            "autodev_worker_id",
-            self.worker_id,
+        return _AUTODEV_WORKER_REQUEST_SERVICE._build_request(
+            self,
+            task,
         )
 
-        return DeveloperRequest(
+
+    def _resolve_code_inputs(
+        self,
+        *,
+        task: AutonomousTask,
+        payload: dict[str, Any],
+        goal: str,
+        target: str,
+        mode: str,
+    ) -> dict[str, Any]:
+        return _AUTODEV_WORKER_REQUEST_SERVICE._resolve_code_inputs(
+            self,
+            task=task,
+            payload=payload,
             goal=goal,
             target=target,
             mode=mode,
-            path=str(payload.get("path", "")),
-            proposed_content=str(
-                payload.get(
-                    "proposed_content",
-                    "",
-                )
-            ),
-            function_name=str(
-                payload.get(
-                    "function_name",
-                    "",
-                )
-            ),
-            new_function_code=str(
-                payload.get(
-                    "new_function_code",
-                    "",
-                )
-            ),
-            replacements=dict(
-                payload.get("replacements") or {}
-            ),
-            metadata=metadata,
         )
+
+
+    @staticmethod
+    @staticmethod
+    def _find_code_proposal(
+        value: Any,
+    ) -> dict[str, Any]:
+        return _AUTODEV_WORKER_REQUEST_SERVICE._find_code_proposal(
+            value,
+        )
+
 
     def _validate_task_policy(
         self,
@@ -515,6 +545,13 @@ class AutoDevWorker:
                 for path in request.replacements.keys()
             )
 
+        if len(paths) > self.policy.max_changed_files:
+            raise PermissionError(
+                "AutoDev task changes too many files: "
+                f"{len(paths)} > "
+                f"{self.policy.max_changed_files}"
+            )
+
         for raw_path in paths:
             candidate = Path(raw_path)
 
@@ -524,12 +561,34 @@ class AutoDevWorker:
             resolved = candidate.resolve()
 
             try:
-                resolved.relative_to(project_root)
+                relative = resolved.relative_to(
+                    project_root
+                )
             except ValueError as exc:
                 raise PermissionError(
                     "AutoDev task targets a path outside "
                     f"the project root: {resolved}"
                 ) from exc
+
+            normalized_relative = str(
+                relative
+            ).replace(
+                "\\",
+                "/",
+            ).casefold()
+
+            if any(
+                normalized_relative == protected.casefold()
+                or normalized_relative.startswith(
+                    protected.casefold().rstrip("/")
+                    + "/"
+                )
+                for protected in self.policy.protected_paths
+            ):
+                raise PermissionError(
+                    "AutoDev task targets a protected path: "
+                    f"{relative}"
+                )
 
     def _workflow_result_data(
         self,
@@ -538,6 +597,27 @@ class AutoDevWorker:
         data = dict(
             getattr(result, "data", {}) or {}
         )
+        error_details = list(
+            getattr(
+                result,
+                "error_details",
+                [],
+            )
+            or []
+        )
+
+        if error_details:
+            data.setdefault(
+                "error_details",
+                [
+                    dict(item)
+                    for item in error_details
+                    if isinstance(
+                        item,
+                        dict,
+                    )
+                ],
+            )
 
         transaction = getattr(
             result,
@@ -582,6 +662,7 @@ class AutoDevWorker:
         changed_files: list[str] | None = None,
         errors: list[str] | None = None,
         data: dict[str, Any] | None = None,
+        error_details: list[dict[str, Any]] | None = None,
         final_state: WorkerState | None = None,
     ) -> AutoDevWorkerResult:
         finished_at = time.time()
@@ -600,6 +681,12 @@ class AutoDevWorker:
             changed_files=list(changed_files or []),
             errors=list(errors or []),
             data=dict(data or {}),
+            error_details=[
+                dict(item)
+                for item in list(
+                    error_details or []
+                )
+            ],
         )
 
         with self._lock:
@@ -632,6 +719,7 @@ class AutoDevWorker:
         changed_files: list[str] | None = None,
         errors: list[str] | None = None,
         data: dict[str, Any] | None = None,
+        error_details: list[dict[str, Any]] | None = None,
     ) -> AutoDevWorkerResult:
         finished_at = time.time()
 
@@ -647,6 +735,12 @@ class AutoDevWorker:
             changed_files=list(changed_files or []),
             errors=list(errors or []),
             data=dict(data or {}),
+            error_details=[
+                dict(item)
+                for item in list(
+                    error_details or []
+                )
+            ],
         )
 
         with self._lock:

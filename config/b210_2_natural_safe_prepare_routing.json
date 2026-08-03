@@ -1,0 +1,11 @@
+{
+  "stage": "B210.2",
+  "name": "Natural Safe Prepare Routing Fix",
+  "owner_mode": true,
+  "exact_practical_command_supported": true,
+  "workspace_only": true,
+  "requires_confirmation": false,
+  "project_write": false,
+  "auto_approve": false,
+  "auto_deploy": false
+}

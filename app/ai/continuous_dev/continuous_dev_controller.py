@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from .continuous_dev_command_router import ContinuousDevCommandRouter
+
+from app.core.project_paths import default_project_root
+
 from typing import Any
 
 from app.ai.continuous_dev.continuous_developer import (
@@ -7,11 +11,14 @@ from app.ai.continuous_dev.continuous_developer import (
 )
 
 
+_CONTINUOUS_DEV_COMMAND_ROUTER = ContinuousDevCommandRouter()
+
+
 class ContinuousDevController:
 
     def __init__(
         self,
-        project_root: str = "C:/JarvisAI",
+        project_root: str | None = None,
         continuous_developer: ContinuousDeveloper | None = None,
         research_service: Any | None = None,
         reasoning_service: Any | None = None,
@@ -22,6 +29,7 @@ class ContinuousDevController:
 
         self.project_root = str(
             project_root
+            or default_project_root()
         ).strip()
 
         if not self.project_root:
@@ -272,188 +280,11 @@ class ContinuousDevController:
         command: str,
         context: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-
-        normalized_command = str(
-            command
-        ).strip()
-
-        if not normalized_command:
-            return {
-                "success": False,
-                "status": "EMPTY_COMMAND",
-                "error": (
-                    "Polecenie Continuous Developer jest puste."
-                ),
-            }
-
-        lowered = normalized_command.lower()
-
-        if lowered.startswith(
-            "continuous dev autonomous "
-        ):
-            objective = normalized_command[
-                len("continuous dev autonomous "):
-            ].strip()
-
-            return self.create_and_start(
-                objective=objective,
-                auto_approve=True,
-                context=context,
-                metadata={
-                    "source": "ContinuousDevController",
-                    "autonomous": True,
-                },
-            )
-
-        if lowered.startswith(
-            "continuous dev autodev "
-        ):
-            objective = normalized_command[
-                len("continuous dev autodev "):
-            ].strip()
-
-            return self._delegate_to_autodev(
-                objective=objective,
-                context=context,
-            )
-
-        if lowered.startswith(
-            "continuous dev start "
-        ):
-            objective = normalized_command[
-                len("continuous dev start "):
-            ].strip()
-
-            return self.create_and_start(
-                objective=objective,
-                context=context,
-            )
-
-        if lowered.startswith(
-            "continuous dev create "
-        ):
-            objective = normalized_command[
-                len("continuous dev create "):
-            ].strip()
-
-            return self.create_cycle(
-                objective=objective
-            )
-
-        if lowered.startswith(
-            "continuous dev status "
-        ):
-            cycle_id = normalized_command[
-                len("continuous dev status "):
-            ].strip()
-
-            cycle = self.get_cycle(
-                cycle_id
-            )
-
-            if cycle is None:
-                return {
-                    "success": False,
-                    "status": "NOT_FOUND",
-                    "cycle_id": cycle_id,
-                }
-
-            return {
-                "success": True,
-                "status": "FOUND",
-                "cycle_id": cycle_id,
-                "cycle": cycle,
-            }
-
-        if lowered.startswith(
-            "continuous dev approve "
-        ):
-            cycle_id = normalized_command[
-                len("continuous dev approve "):
-            ].strip()
-
-            return self.approve_cycle(
-                cycle_id=cycle_id,
-                approved=True,
-                context=context,
-            )
-
-        if lowered.startswith(
-            "continuous dev reject "
-        ):
-            cycle_id = normalized_command[
-                len("continuous dev reject "):
-            ].strip()
-
-            return self.approve_cycle(
-                cycle_id=cycle_id,
-                approved=False,
-                note="Odrzucono z polecenia użytkownika.",
-                context=context,
-            )
-
-        if lowered.startswith(
-            "continuous dev pause "
-        ):
-            cycle_id = normalized_command[
-                len("continuous dev pause "):
-            ].strip()
-
-            return self.pause_cycle(
-                cycle_id=cycle_id
-            )
-
-        if lowered.startswith(
-            "continuous dev resume "
-        ):
-            cycle_id = normalized_command[
-                len("continuous dev resume "):
-            ].strip()
-
-            return self.resume_cycle(
-                cycle_id=cycle_id,
-                context=context,
-            )
-
-        if lowered.startswith(
-            "continuous dev cancel "
-        ):
-            cycle_id = normalized_command[
-                len("continuous dev cancel "):
-            ].strip()
-
-            return self.cancel_cycle(
-                cycle_id=cycle_id
-            )
-
-        if lowered in {
-            "continuous dev list",
-            "continuous dev cycles",
-        }:
-            return {
-                "success": True,
-                "status": "COMPLETED",
-                "cycles": self.list_cycles(),
-            }
-
-        if lowered in {
-            "continuous dev summary",
-            "continuous dev system",
-        }:
-            return {
-                "success": True,
-                "status": "COMPLETED",
-                "summary": self.system_summary(),
-            }
-
-        return {
-            "success": False,
-            "status": "UNKNOWN_COMMAND",
-            "command": normalized_command,
-            "error": (
-                "Nie rozpoznano polecenia Continuous Developer."
-            ),
-        }
+        return _CONTINUOUS_DEV_COMMAND_ROUTER.handle(
+            self,
+            command,
+            context,
+        )
 
     def can_handle(
         self,

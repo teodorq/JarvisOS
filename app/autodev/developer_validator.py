@@ -1,302 +1,165 @@
-import ast
-import subprocess
+from app.core.project_paths import (
+    default_project_root,
+)
+
 import sys
 from pathlib import Path
 
+from app.autodev.developer_validation_service import (
+    DeveloperValidationService,
+)
 from app.autodev.execution_result import ExecutionResult
+from app.core.safe_process import SafeProcessRunner
+
+
+_DEVELOPER_VALIDATION_SERVICE = DeveloperValidationService()
 
 
 class DeveloperValidator:
 
-    def __init__(self, project_root="C:/JarvisAI"):
-        self.project_root = Path(project_root).resolve()
-        self.python_executable = sys.executable
+    def __init__(
+        self,
+        project_root=default_project_root(),
+        test_timeout: int = 180,
+        process_runner: SafeProcessRunner | None = None,
+    ):
+        self.project_root = Path(
+            project_root
+        ).expanduser().resolve(
+            strict=False
+        )
+        self.python_executable = str(
+            Path(
+                sys.executable
+            ).resolve(
+                strict=False
+            )
+        )
+        self.test_timeout = min(
+            600,
+            max(
+                30,
+                int(test_timeout),
+            ),
+        )
+        self.process_runner = (
+            process_runner
+            or SafeProcessRunner(
+                project_root=self.project_root,
+                allowed_executables=[
+                    self.python_executable,
+                ],
+                max_timeout_seconds=(
+                    self.test_timeout
+                ),
+                max_output_chars=8000,
+            )
+        )
 
     def _resolve_path(self, path: str) -> Path:
-        file_path = Path(path)
+        file_path = Path(
+            path
+        ).expanduser()
 
         if not file_path.is_absolute():
-            file_path = self.project_root / file_path
-
-        return file_path.resolve()
-
-    def validate_file(self, path: str) -> ExecutionResult:
-        file_path = self._resolve_path(path)
-
-        if not file_path.exists():
-            return ExecutionResult(
-                success=False,
-                step_name="validate_file",
-                message="Plik nie istnieje.",
-                data={
-                    "path": str(file_path)
-                },
-                errors=[
-                    f"Plik nie istnieje: {file_path}"
-                ]
+            file_path = (
+                self.project_root
+                / file_path
             )
 
-        if not file_path.is_file():
-            return ExecutionResult(
-                success=False,
-                step_name="validate_file",
-                message="Wskazana ścieżka nie jest plikiem.",
-                data={
-                    "path": str(file_path)
-                },
-                errors=[
-                    f"Ścieżka nie jest plikiem: {file_path}"
-                ]
-            )
-
-        syntax_result = self.check_syntax(str(file_path))
-
-        if not syntax_result.success:
-            return syntax_result
-
-        compile_result = self.compile_file(str(file_path))
-
-        if not compile_result.success:
-            return compile_result
-
-        return ExecutionResult(
-            success=True,
-            step_name="validate_file",
-            message="Plik przeszedł walidację.",
-            data={
-                "path": str(file_path),
-                "syntax": "OK",
-                "compile": "OK"
-            }
+        unresolved = file_path
+        file_path = file_path.resolve(
+            strict=False
         )
 
-    def validate_files(self, files: list[str]) -> ExecutionResult:
-        checked_files = []
-        errors = []
-        seen_paths = set()
+        try:
+            file_path.relative_to(
+                self.project_root
+            )
+        except ValueError as error:
+            raise ValueError(
+                "Validation target is outside the project."
+            ) from error
 
-        for path in files:
-            resolved_path = str(self._resolve_path(path))
+        if (
+            unresolved.exists()
+            and unresolved.is_symlink()
+        ):
+            raise ValueError(
+                "Validation target cannot be a symlink."
+            )
 
-            if resolved_path in seen_paths:
-                continue
+        return file_path
 
-            seen_paths.add(resolved_path)
-            result = self.validate_file(resolved_path)
-
-            checked_files.append({
-                "path": resolved_path,
-                "success": result.success,
-                "message": result.message
-            })
-
-            if not result.success:
-                errors.extend(result.errors)
-
-        return ExecutionResult(
-            success=not errors,
-            step_name="validate_files",
-            message=(
-                "Wszystkie pliki są poprawne."
-                if not errors
-                else "Niektóre pliki zawierają błędy."
-            ),
-            data={
-                "checked_files": checked_files,
-                "files_count": len(checked_files)
-            },
-            errors=errors
+    def validate_file(
+        self,
+        path: str,
+    ) -> ExecutionResult:
+        return _DEVELOPER_VALIDATION_SERVICE.validate_file(
+            self,
+            path,
         )
 
-    def check_syntax(self, path: str) -> ExecutionResult:
-        file_path = self._resolve_path(path)
+    def validate_files(
+        self,
+        files: list[str],
+    ) -> ExecutionResult:
+        return _DEVELOPER_VALIDATION_SERVICE.validate_files(
+            self,
+            files,
+        )
 
-        try:
-            source = file_path.read_text(
-                encoding="utf-8"
-            )
+    def check_syntax(
+        self,
+        path: str,
+    ) -> ExecutionResult:
+        return _DEVELOPER_VALIDATION_SERVICE.check_syntax(
+            self,
+            path,
+        )
 
-            ast.parse(
-                source,
-                filename=str(file_path)
-            )
+    def compile_file(
+        self,
+        path: str,
+    ) -> ExecutionResult:
+        return _DEVELOPER_VALIDATION_SERVICE.compile_file(
+            self,
+            path,
+        )
 
-            return ExecutionResult(
-                success=True,
-                step_name="check_syntax",
-                message="Składnia jest poprawna.",
-                data={
-                    "path": str(file_path)
-                }
-            )
+    def run_import_test(
+        self,
+    ) -> ExecutionResult:
+        return _DEVELOPER_VALIDATION_SERVICE.run_import_test(
+            self
+        )
 
-        except SyntaxError as error:
-            return ExecutionResult(
-                success=False,
-                step_name="check_syntax",
-                message="Wykryto błąd składni.",
-                data={
-                    "path": str(file_path),
-                    "line": error.lineno or 0,
-                    "offset": error.offset or 0
-                },
-                errors=[
-                    str(error)
-                ]
-            )
+    def run_test_suite(
+        self,
+        *,
+        changed_files: list[str] | None = None,
+        full_suite: bool = True,
+    ) -> ExecutionResult:
+        return _DEVELOPER_VALIDATION_SERVICE.run_test_suite(
+            self,
+            changed_files=changed_files,
+            full_suite=full_suite,
+        )
 
-        except UnicodeDecodeError as error:
-            return ExecutionResult(
-                success=False,
-                step_name="check_syntax",
-                message="Plik nie jest zapisany w UTF-8.",
-                data={
-                    "path": str(file_path)
-                },
-                errors=[
-                    str(error)
-                ]
-            )
+    def analyze_failure(
+        self,
+        result: ExecutionResult,
+    ) -> dict:
+        return _DEVELOPER_VALIDATION_SERVICE.analyze_failure(
+            self,
+            result,
+        )
 
-        except Exception as error:
-            return ExecutionResult(
-                success=False,
-                step_name="check_syntax",
-                message="Nie udało się sprawdzić składni.",
-                data={
-                    "path": str(file_path)
-                },
-                errors=[
-                    str(error)
-                ]
-            )
-
-    def compile_file(self, path: str) -> ExecutionResult:
-        file_path = self._resolve_path(path)
-
-        try:
-            result = subprocess.run(
-                [
-                    self.python_executable,
-                    "-m",
-                    "py_compile",
-                    str(file_path)
-                ],
-                cwd=str(self.project_root),
-                capture_output=True,
-                text=True,
-                timeout=20
-            )
-
-            if result.returncode == 0:
-                return ExecutionResult(
-                    success=True,
-                    step_name="compile_file",
-                    message="Kompilacja pliku zakończona powodzeniem.",
-                    data={
-                        "path": str(file_path),
-                        "python": self.python_executable
-                    }
-                )
-
-            return ExecutionResult(
-                success=False,
-                step_name="compile_file",
-                message="Kompilacja pliku nie powiodła się.",
-                data={
-                    "path": str(file_path),
-                    "stdout": result.stdout,
-                    "python": self.python_executable
-                },
-                errors=[
-                    result.stderr or "Nieznany błąd kompilacji."
-                ]
-            )
-
-        except subprocess.TimeoutExpired:
-            return ExecutionResult(
-                success=False,
-                step_name="compile_file",
-                message="Przekroczono czas kompilacji.",
-                data={
-                    "path": str(file_path)
-                },
-                errors=[
-                    "Timeout po 20 sekundach."
-                ]
-            )
-
-        except Exception as error:
-            return ExecutionResult(
-                success=False,
-                step_name="compile_file",
-                message="Nie udało się uruchomić kompilacji.",
-                data={
-                    "path": str(file_path)
-                },
-                errors=[
-                    str(error)
-                ]
-            )
-
-    def run_import_test(self) -> ExecutionResult:
-        try:
-            result = subprocess.run(
-                [
-                    self.python_executable,
-                    "-c",
-                    (
-                        "from app.gui.main_window "
-                        "import MainWindow; "
-                        "print('IMPORT OK')"
-                    )
-                ],
-                cwd=str(self.project_root),
-                capture_output=True,
-                text=True,
-                timeout=25
-            )
-
-            if result.returncode == 0:
-                return ExecutionResult(
-                    success=True,
-                    step_name="run_import_test",
-                    message="Test importów zakończony powodzeniem.",
-                    data={
-                        "stdout": result.stdout.strip(),
-                        "python": self.python_executable
-                    }
-                )
-
-            return ExecutionResult(
-                success=False,
-                step_name="run_import_test",
-                message="Test importów nie powiódł się.",
-                data={
-                    "stdout": result.stdout,
-                    "python": self.python_executable
-                },
-                errors=[
-                    result.stderr or "Nieznany błąd importu."
-                ]
-            )
-
-        except subprocess.TimeoutExpired:
-            return ExecutionResult(
-                success=False,
-                step_name="run_import_test",
-                message="Test importów przekroczył limit czasu.",
-                errors=[
-                    "Timeout po 25 sekundach."
-                ]
-            )
-
-        except Exception as error:
-            return ExecutionResult(
-                success=False,
-                step_name="run_import_test",
-                message="Nie udało się uruchomić testu importów.",
-                errors=[
-                    str(error)
-                ]
-            )
+    def _matching_test_modules(
+        self,
+        changed_files: list[str],
+    ) -> list[str]:
+        return _DEVELOPER_VALIDATION_SERVICE._matching_test_modules(
+            self,
+            changed_files,
+        )

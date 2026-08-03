@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.ai.llm import LocalLLM
 
 from dataclasses import asdict, dataclass, field
 from typing import Any, Protocol
@@ -54,7 +55,7 @@ class LLMPatchGenerator:
         max_source_chars: int = 200_000,
     ) -> None:
 
-        self.model = model
+        self.model = model or LocalLLM()
         self.max_source_chars = max_source_chars
         self.last_result: LLMPatchResult | None = None
 

@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "release": "B321-B330 CLIENT DAILY TOOLS",
+  "stages": {
+    "B321": "SAFE_SHARED_CAPABILITY_CATALOG_READY",
+    "B322": "COMPACT_CLIENT_TOOL_DRAWER_READY",
+    "B323": "DAILY_PRIORITY_SHORTCUTS_READY",
+    "B324": "GMAIL_READ_SHORTCUTS_READY",
+    "B325": "CALENDAR_SHORTCUTS_READY",
+    "B326": "DOCUMENT_AND_REMINDER_SHORTCUTS_READY",
+    "B327": "GUIDED_COMMAND_ENTRY_READY",
+    "B328": "OWNER_CAPABILITY_BOUNDARY_READY",
+    "B329": "NATURAL_CLIENT_FEEDBACK_READY",
+    "B330": "CLIENT_DAILY_TOOLS_TEST_GATE_READY"
+  },
+  "client_categories": [
+    "day",
+    "gmail",
+    "calendar",
+    "documents",
+    "reminders"
+  ],
+  "guided_actions": [
+    "calendar_create",
+    "document_search",
+    "reminder_create"
+  ],
+  "owner_only": [
+    "autodev",
+    "source_code",
+    "audit",
+    "licenses",
+    "roles",
+    "backups",
+    "updates",
+    "deployment",
+    "system_configuration"
+  ],
+  "safety": {
+    "writes_require_confirmation": true,
+    "owner_gate_unchanged": true,
+    "client_pin_enrollment": false,
+    "automatic_execution": false
+  }
+}

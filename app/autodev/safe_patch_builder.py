@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from app.core.project_paths import (
+    default_project_path,
+    default_project_root,
+)
+
 import difflib
 import hashlib
 from dataclasses import asdict, dataclass, field
@@ -41,7 +46,7 @@ class SafePatchBuilder:
 
     def __init__(
         self,
-        project_root: str = "C:/JarvisAI",
+        project_root: str = default_project_root(),
         max_changed_lines: int = 500,
     ) -> None:
         self.project_root = Path(project_root).resolve()

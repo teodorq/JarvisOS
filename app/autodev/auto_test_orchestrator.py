@@ -1,3 +1,8 @@
+from app.core.project_paths import (
+    default_project_path,
+    default_project_root,
+)
+
 from typing import Any
 from app.autodev.merge_decision import MergeDecisionEngine
 from app.autodev.regression_analyzer import RegressionAnalyzer
@@ -7,7 +12,7 @@ from app.autodev.test_selector import TestSelector
 class AutoTestOrchestrator:
     def __init__(
         self,
-        project_root: str = "C:/JarvisAI",
+        project_root: str = default_project_root(),
         selector=None,
         runner=None,
         analyzer=None,

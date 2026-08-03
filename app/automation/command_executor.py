@@ -1,10 +1,16 @@
 from __future__ import annotations
 
 import os
-import subprocess
+from pathlib import Path
+import shutil
 
 from app.ai.actions import ActionTypes
 from app.browser.browser import BrowserAgent
+from app.core.project_paths import default_project_root
+from app.core.safe_process import (
+    ProcessPolicyError,
+    SafeProcessRunner,
+)
 from app.skills.skill_manager import SkillManager
 
 
@@ -12,10 +18,19 @@ class CommandExecutor:
 
     def __init__(
         self,
+        *,
+        process_runner: SafeProcessRunner | None = None,
     ) -> None:
 
         self.skill_manager = SkillManager()
         self.browser = BrowserAgent()
+        self.process_runner = (
+            process_runner
+            or SafeProcessRunner(
+                project_root=default_project_root(),
+                max_timeout_seconds=30,
+            )
+        )
 
     def execute_action(
         self,
@@ -211,53 +226,43 @@ class CommandExecutor:
             "operagx",
             "gx",
         }:
-            opera_path = (
-                r"C:\Users\Kacperek"
-                r"\AppData\Local\Programs"
-                r"\Opera GX\opera.exe"
+            opera_path = self._first_existing(
+                self._opera_candidates()
             )
 
-            if not os.path.exists(
-                opera_path
-            ):
+            if opera_path is None:
                 return (
                     "Nie znaleziono pliku "
                     "Opera GX."
                 )
 
-            try:
-                subprocess.Popen(
-                    [opera_path]
-                )
-
-                return (
+            return self._spawn_known_app(
+                [str(opera_path)],
+                success_message=(
                     "Otwieram Opera GX."
-                )
-
-            except OSError as error:
-                return (
-                    "Nie udało się otworzyć "
-                    f"Opera GX: {error}"
-                )
+                ),
+                failure_label="Opera GX",
+            )
 
         if normalized_target in {
             "notatnik",
             "notepad",
         }:
-            try:
-                subprocess.Popen(
-                    ["notepad.exe"]
+            notepad_path = self._notepad_path()
+
+            if notepad_path is None:
+                return (
+                    "Nie znaleziono pliku "
+                    "Notatnika."
                 )
 
-                return (
+            return self._spawn_known_app(
+                [str(notepad_path)],
+                success_message=(
                     "Otwieram Notatnik."
-                )
-
-            except OSError as error:
-                return (
-                    "Nie udało się otworzyć "
-                    f"Notatnika: {error}"
-                )
+                ),
+                failure_label="Notatnika",
+            )
 
         if normalized_target == "steam":
             try:
@@ -267,47 +272,150 @@ class CommandExecutor:
 
                 return "Otwieram Steam."
 
-            except OSError as error:
+            except (
+                AttributeError,
+                OSError,
+            ) as error:
                 return (
                     "Nie udało się otworzyć "
                     f"Steam: {error}"
                 )
 
         if normalized_target == "discord":
-            discord_path = (
-                r"C:\Users\Kacperek"
-                r"\AppData\Local\Discord"
-                r"\Update.exe"
+            discord_path = self._first_existing(
+                self._discord_candidates()
             )
 
-            if not os.path.exists(
-                discord_path
-            ):
+            if discord_path is None:
                 return (
                     "Nie znaleziono pliku "
                     "Discord Update.exe."
                 )
 
-            try:
-                subprocess.Popen(
-                    [
-                        discord_path,
-                        "--processStart",
-                        "Discord.exe",
-                    ]
-                )
-
-                return (
+            return self._spawn_known_app(
+                [
+                    str(discord_path),
+                    "--processStart",
+                    "Discord.exe",
+                ],
+                success_message=(
                     "Otwieram Discord."
-                )
-
-            except OSError as error:
-                return (
-                    "Nie udało się otworzyć "
-                    f"Discorda: {error}"
-                )
+                ),
+                failure_label="Discorda",
+            )
 
         return (
             "Nie znam aplikacji: "
             f"{normalized_target}"
         )
+
+    def _spawn_known_app(
+        self,
+        command: list[str],
+        *,
+        success_message: str,
+        failure_label: str,
+    ) -> str:
+        try:
+            self.process_runner.spawn(
+                command,
+                allowed_executables=[
+                    command[0],
+                ],
+            )
+
+            return success_message
+
+        except (
+            OSError,
+            ProcessPolicyError,
+        ) as error:
+            return (
+                "Nie udało się otworzyć "
+                f"{failure_label}: {error}"
+            )
+
+    def _opera_candidates(
+        self,
+    ) -> list[Path]:
+        local = Path(
+            os.getenv(
+                "LOCALAPPDATA",
+                "",
+            )
+        )
+
+        candidates = [
+            local
+            / "Programs/Opera GX/opera.exe",
+            local
+            / "Programs/Opera/opera.exe",
+        ]
+        discovered = shutil.which(
+            "opera.exe"
+        )
+
+        if discovered:
+            candidates.append(
+                Path(discovered)
+            )
+
+        return candidates
+
+    def _discord_candidates(
+        self,
+    ) -> list[Path]:
+        local = Path(
+            os.getenv(
+                "LOCALAPPDATA",
+                "",
+            )
+        )
+
+        return [
+            local
+            / "Discord/Update.exe",
+        ]
+
+    def _notepad_path(
+        self,
+    ) -> Path | None:
+        discovered = shutil.which(
+            "notepad.exe"
+        )
+
+        if discovered:
+            return Path(
+                discovered
+            )
+
+        windows_root = os.getenv(
+            "WINDIR",
+            "",
+        )
+
+        if windows_root:
+            candidate = (
+                Path(windows_root)
+                / "System32/notepad.exe"
+            )
+
+            if candidate.is_file():
+                return candidate
+
+        return None
+
+    @staticmethod
+    def _first_existing(
+        candidates: list[Path],
+    ) -> Path | None:
+        for candidate in candidates:
+            if (
+                str(candidate).strip()
+                and candidate.is_file()
+            ):
+                return candidate.resolve(
+                    strict=False
+                )
+
+        return None

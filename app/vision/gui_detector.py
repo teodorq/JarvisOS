@@ -1,3 +1,4 @@
+from __future__ import annotations
 import json
 from difflib import SequenceMatcher
 
@@ -170,7 +171,7 @@ Odpowiedz WYŁĄCZNIE JSON-em:
                 element["x"] = element["local_x"] + left
                 element["y"] = element["local_y"] + top
             except Exception:
-                pass
+                raise RuntimeError("AutoDev: przechwycony wyjątek")
 
         return elements
 
@@ -326,7 +327,7 @@ Odpowiedz WYŁĄCZNIE JSON-em:
         try:
             score += int(float(element.get("confidence", 0)) * 20)
         except Exception:
-            pass
+            raise RuntimeError("AutoDev: przechwycony wyjątek")
 
         return score
 

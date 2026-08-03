@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from app.core.project_paths import (
+    default_project_path,
+    default_project_root,
+)
+
 import ast
 from pathlib import Path
 from typing import Any
@@ -12,7 +17,7 @@ class AutoDevDependencyGraphV2:
 
     def __init__(
         self,
-        project_root: str = "C:/JarvisAI",
+        project_root: str = default_project_root(),
     ) -> None:
         self.project_root = Path(project_root).resolve()
         self.graph: dict[str, list[str]] = {}

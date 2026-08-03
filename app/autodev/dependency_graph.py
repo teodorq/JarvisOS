@@ -1,3 +1,8 @@
+from app.core.project_paths import (
+    default_project_path,
+    default_project_root,
+)
+
 from pathlib import Path
 
 from app.autodev.import_analyzer import ImportAnalyzer
@@ -7,7 +12,7 @@ from app.code.project_scanner import ProjectScanner
 
 class DependencyGraph:
 
-    def __init__(self, root_path="C:/JarvisAI"):
+    def __init__(self, root_path=default_project_root()):
         self.root_path = Path(root_path)
         self.scanner = ProjectScanner(root_path)
         self.import_analyzer = ImportAnalyzer()

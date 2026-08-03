@@ -1,0 +1,11 @@
+{
+  "stage": "B178.1",
+  "status": "LIVE_REFRESH_FALLBACK_SUPPRESSION_READY",
+  "periodic_brief_guard": true,
+  "same_conflict_suppressed": true,
+  "decision_suppressed_conflict_hidden": true,
+  "changed_conflict_allowed": true,
+  "reactivated_conflict_allowed": true,
+  "automatic_writes": false,
+  "voice_notification": false
+}

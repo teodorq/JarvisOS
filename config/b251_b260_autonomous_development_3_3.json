@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "stage": "B251-B260",
+  "name": "Autonomous Development 3.3 - Durable Receipt Ledger",
+  "workflow": {
+    "B251": "independent_receipt_archive",
+    "B252": "atomic_receipt_index",
+    "B253": "idempotent_receipt_deduplication",
+    "B254": "receipt_and_archive_tamper_detection",
+    "B255": "campaign_and_session_receipt_queries",
+    "B256": "deployment_receipt_archival",
+    "B257": "rollback_receipt_archival",
+    "B258": "legacy_receipt_archive_migration",
+    "B259": "deployed_session_retention_protection",
+    "B260": "regression_and_runtime_contract"
+  },
+  "safety": {
+    "automatic_approval": false,
+    "automatic_deployment": false,
+    "bulk_deployment_supported": false,
+    "append_only_receipt_archive": true,
+    "receipt_digest_required": true,
+    "archive_digest_required": true,
+    "protect_deployed_sessions_from_pruning": true,
+    "prune_rolled_back_only_after_receipt_archive": true
+  },
+  "runtime_store": "data/autodev/safe_development_2/receipt_ledger"
+}

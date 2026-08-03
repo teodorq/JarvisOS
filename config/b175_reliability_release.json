@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "release_id": "B171-B175",
+  "status": "RELIABILITY_RELEASE_GATE_READY",
+  "scope": "CALENDAR_RELIABILITY",
+  "gates": {
+    "stale_plan_guard": true,
+    "live_result_verification": true,
+    "duplicate_protection": true,
+    "safe_retry_limit": 1,
+    "safe_undo": true,
+    "confirmation_required": true,
+    "automatic_calendar_changes": false,
+    "automatic_mail_sending": false,
+    "owner_client_execution_parity": true,
+    "client_messages_nontechnical": true
+  }
+}

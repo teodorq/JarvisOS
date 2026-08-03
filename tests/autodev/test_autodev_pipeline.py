@@ -49,7 +49,7 @@ class TestAutoDevPipeline(unittest.TestCase):
         try:
             self.pipeline.stop(wait=False)
         except Exception:
-            pass
+            raise RuntimeError("AutoDev: przechwycony wyjątek")
 
         self.temp_dir.cleanup()
 

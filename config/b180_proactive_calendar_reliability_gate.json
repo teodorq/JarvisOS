@@ -1,0 +1,21 @@
+{
+  "stage": "B180",
+  "status": "PROACTIVE_CALENDAR_RELIABILITY_GATE_READY",
+  "release": "B176-B180",
+  "gates": {
+    "startup_days_checked": 2,
+    "startup_silent": true,
+    "new_or_changed_only": true,
+    "duplicate_startup_alert_suppressed": true,
+    "live_refresh_interval_seconds": 60,
+    "periodic_brief_fallback_suppressed": true,
+    "defer_when_busy": true,
+    "defer_during_confirmation": true,
+    "defer_while_user_typing": true,
+    "max_pending_alerts": 1,
+    "automatic_calendar_writes": false,
+    "voice_notifications": false,
+    "client_technical_details": false,
+    "confirmation_required_for_resolution": true
+  }
+}

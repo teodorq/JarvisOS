@@ -1,0 +1,11 @@
+{
+  "stage": "B186-B190",
+  "status": "GMAIL_LIVE_WORKFLOW_READY",
+  "search_max_results": 10,
+  "message_body_limit": 100000,
+  "thread_display_limit": 5,
+  "automatic_sending": false,
+  "sending_requires_confirmation": true,
+  "verify_sent_label": "SENT",
+  "client_technical_details": false
+}

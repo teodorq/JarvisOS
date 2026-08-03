@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "stage": "B220.2",
+  "name": "Empty Backlog Self-Seeding",
+  "enabled": true,
+  "trigger": "no_eligible_legacy_backlog_task",
+  "scan": {
+    "max_files": 500,
+    "max_opportunities": 100,
+    "max_seeded_tasks": 20
+  },
+  "safety": {
+    "legacy_backlog_read_only": true,
+    "self_seed_store_isolated": true,
+    "one_seed_per_cycle": true,
+    "exact_transform_required": true,
+    "source_hash_bound_fingerprint": true,
+    "auto_approve": false,
+    "auto_deploy": false,
+    "stop_before_deployment": true
+  },
+  "seed_store": "data/autodev/autonomous_development_2_1/self_seeded_tasks.json"
+}

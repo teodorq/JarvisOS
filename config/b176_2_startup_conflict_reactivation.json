@@ -1,0 +1,7 @@
+{
+  "stage": "B176.2",
+  "status": "STARTUP_CONFLICT_REACTIVATION_READY",
+  "verified_undo_reopens_conflict_alert": true,
+  "automatic_writes": false,
+  "confirmation_required_for_resolution": true
+}

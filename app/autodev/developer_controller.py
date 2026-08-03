@@ -1,3 +1,8 @@
+from app.core.project_paths import (
+    default_project_path,
+    default_project_root,
+)
+
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
@@ -9,8 +14,17 @@ from app.autodev.autonomous_task_queue import (
 from app.autodev.developer_executor import (
     DeveloperExecutor
 )
+from app.autodev.execution_guard import (
+    ExecutionGuard,
+)
+from app.autodev.execution_policy import (
+    ExecutionPolicy,
+)
 from app.autodev.developer_request import (
     DeveloperRequest
+)
+from app.autodev.developer_validator import (
+    DeveloperValidator
 )
 from app.autodev.developer_session import (
     DeveloperSession
@@ -27,17 +41,25 @@ from app.autodev.transaction_builder import (
 from app.autodev.workflow_result import (
     WorkflowResult
 )
+from app.autodev.developer_controller_workflow_service import (
+    DeveloperControllerWorkflowService,
+)
+
+
+_DEVELOPER_CONTROLLER_WORKFLOW = DeveloperControllerWorkflowService()
 
 
 class DeveloperController:
 
     def __init__(
         self,
-        project_root: str = "C:/JarvisAI",
-        task_queue: AutonomousTaskQueue | None = None
+        project_root: str | Path | None = None,
+        task_queue: AutonomousTaskQueue | None = None,
+        execution_guard: ExecutionGuard | None = None,
     ):
         self.project_root = Path(
             project_root
+            or default_project_root()
         ).expanduser().resolve(
             strict=False
         )
@@ -54,8 +76,34 @@ class DeveloperController:
             PatchPreview()
         )
 
+        tests_available = (
+            self.project_root
+            / "tests"
+        ).is_dir()
+
         self.executor = DeveloperExecutor(
-            project_root=project_root
+            project_root=str(
+                self.project_root
+            ),
+            run_tests=tests_available,
+            full_test_suite=tests_available,
+        )
+
+        self.validator = DeveloperValidator(
+            project_root=str(
+                self.project_root
+            )
+        )
+
+        self.execution_guard = (
+            execution_guard
+            or ExecutionGuard(
+                policy=ExecutionPolicy(
+                    project_root=self.project_root,
+                    allow_auto_approval=True,
+                    max_auto_approval_risk=20.0,
+                )
+            )
         )
 
         self.session = DeveloperSession()
@@ -138,142 +186,13 @@ class DeveloperController:
         plan: dict[str, Any],
         context: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        if self.task_queue is None:
-            return {
-                "success": False,
-                "status": "TASK_QUEUE_UNAVAILABLE",
-            }
-
-        normalized_objective = str(objective).strip()
-        if not normalized_objective:
-            return {
-                "success": False,
-                "status": "EMPTY_OBJECTIVE",
-            }
-
-        normalized_plan = (
-            dict(plan)
-            if isinstance(plan, dict)
-            else {}
-        )
-        normalized_context = (
-            dict(context)
-            if isinstance(context, dict)
-            else {}
+        return _DEVELOPER_CONTROLLER_WORKFLOW.enqueue_director_plan(
+            self,
+            objective,
+            plan,
+            context,
         )
 
-        priority = self._director_priority(
-            normalized_plan.get("priority")
-        )
-
-        goal = self.register_goal(
-            title=normalized_objective,
-            description=normalized_objective,
-            priority=priority,
-            tags=[
-                "project-director",
-                "autodev",
-            ],
-            metadata={
-                "director_plan_id": normalized_plan.get(
-                    "plan_id",
-                    "",
-                ),
-                "selected_module": normalized_plan.get(
-                    "selected_module",
-                    "",
-                ),
-                "mode": normalized_plan.get(
-                    "mode",
-                    "",
-                ),
-                "context": normalized_context,
-            },
-        )
-
-        items = self._director_plan_items(
-            normalized_plan
-        )
-
-        task_ids: list[str] = []
-        proposal_to_task: dict[str, str] = {}
-
-        for index, item in enumerate(items, start=1):
-            proposal_id = str(
-                item.get(
-                    "proposal_id",
-                    item.get("step_id", index),
-                )
-            )
-
-            dependency_ids = [
-                proposal_to_task[dependency]
-                for dependency in item.get(
-                    "dependencies",
-                    [],
-                )
-                if dependency in proposal_to_task
-            ]
-
-            task = self.add_goal_task(
-                goal.goal_id,
-                title=str(
-                    item.get(
-                        "title",
-                        f"Etap {index}: {normalized_objective}",
-                    )
-                ).strip(),
-                description=str(
-                    item.get(
-                        "description",
-                        item.get(
-                            "instruction",
-                            normalized_objective,
-                        ),
-                    )
-                ).strip(),
-                source="project_director",
-                priority=self._director_priority(
-                    item.get(
-                        "priority",
-                        priority,
-                    )
-                ),
-                payload={
-                    "director_plan_id": normalized_plan.get(
-                        "plan_id",
-                        "",
-                    ),
-                    "director_step": item,
-                    "objective": normalized_objective,
-                    "order": item.get("order", index),
-                },
-                tags=[
-                    "project-director",
-                    "autodev",
-                    str(
-                        item.get(
-                            "subgoal_type",
-                            "step",
-                        )
-                    ).lower(),
-                ],
-                dependencies=dependency_ids,
-            )
-
-            proposal_to_task[proposal_id] = task.task_id
-            task_ids.append(task.task_id)
-
-        return {
-            "success": True,
-            "status": "QUEUED",
-            "goal_id": goal.goal_id,
-            "task_ids": task_ids,
-            "tasks_count": len(task_ids),
-            "progress": self.goal_status(
-                goal.goal_id
-            ),
-        }
 
     def _director_plan_items(
         self,
@@ -368,186 +287,13 @@ class DeveloperController:
 
     def prepare(
         self,
-        request: DeveloperRequest
+        request: DeveloperRequest,
     ) -> WorkflowResult:
-
-        if not isinstance(
+        return _DEVELOPER_CONTROLLER_WORKFLOW.prepare(
+            self,
             request,
-            DeveloperRequest
-        ):
-            result = WorkflowResult(
-                success=False,
-                status="request_type_invalid",
-                message=(
-                    "Przekazano niepoprawny typ "
-                    "żądania developerskiego."
-                ),
-                errors=[
-                    "Wymagany obiekt DeveloperRequest."
-                ]
-            )
-
-            self.last_result = result
-            return result
-
-        if self.session.status == "executing":
-            result = WorkflowResult(
-                success=False,
-                status="controller_busy",
-                message=(
-                    "Kontroler wykonuje już inną "
-                    "transakcję."
-                ),
-                errors=[
-                    "Poczekaj na zakończenie aktywnej sesji."
-                ]
-            )
-
-            self.last_result = result
-            return result
-
-        self.last_request = request
-
-        request_valid, request_errors = (
-            request.validate()
         )
 
-        if not request_valid:
-            result = WorkflowResult(
-                success=False,
-                status="request_invalid",
-                message=(
-                    "Żądanie developerskie "
-                    "jest niepoprawne."
-                ),
-                errors=request_errors
-            )
-
-            self.last_result = result
-            return result
-
-        self.session.start(
-            goal=request.goal,
-            target=request.target
-        )
-
-        try:
-            transaction, errors = (
-                self._build_transaction(
-                    request
-                )
-            )
-
-        except Exception as error:
-            self.session.mark_failed(
-                str(error)
-            )
-
-            result = WorkflowResult(
-                success=False,
-                status="prepare_failed",
-                message=(
-                    "Nie udało się przygotować "
-                    "transakcji zmian."
-                ),
-                errors=[
-                    str(error)
-                ]
-            )
-
-            self.last_result = result
-            return result
-
-        if transaction is None:
-            self.session.mark_failed(
-                "Generator nie utworzył transakcji."
-            )
-
-            result = WorkflowResult(
-                success=False,
-                status="patch_generation_failed",
-                message=(
-                    "Nie udało się wygenerować "
-                    "patcha."
-                ),
-                errors=errors
-            )
-
-            self.last_result = result
-            return result
-
-        transaction_valid, transaction_errors = (
-            transaction.validate()
-        )
-
-        if not transaction_valid:
-            transaction.mark_failed()
-
-            for error in transaction_errors:
-                self.session.add_note(
-                    error
-                )
-
-            self.session.mark_failed(
-                "Transakcja nie przeszła walidacji."
-            )
-
-            result = WorkflowResult(
-                success=False,
-                status="transaction_invalid",
-                message=(
-                    "Wygenerowana transakcja "
-                    "jest niepoprawna."
-                ),
-                transaction=transaction,
-                errors=transaction_errors
-            )
-
-            self.last_result = result
-            return result
-
-        if request.metadata:
-            transaction.metadata.update(
-                request.metadata
-            )
-
-        transaction.metadata[
-            "request_mode"
-        ] = request.mode
-        transaction.metadata[
-            "project_root"
-        ] = str(self.project_root)
-
-        self.session.set_transaction(
-            transaction
-        )
-
-        preview = self.patch_preview.build(
-            transaction
-        )
-
-        result = WorkflowResult(
-            success=True,
-            status="waiting_for_approval",
-            message=(
-                "Patch został przygotowany. "
-                "Wymagana jest akceptacja."
-            ),
-            preview=preview,
-            transaction=transaction,
-            data={
-                "goal": request.goal,
-                "target": request.target,
-                "mode": request.mode,
-                "files": transaction.files(),
-                "files_count": len(
-                    transaction.changes
-                )
-            }
-        )
-
-        self.last_result = result
-        return result
 
 
     def run(
@@ -575,11 +321,14 @@ class DeveloperController:
             return prepared
 
         return self.approve_and_execute(
-            auto_rollback=auto_rollback
+            auto_rollback=auto_rollback,
+            automatic_approval=True,
         )
 
     def approve(
-        self
+        self,
+        *,
+        automatic: bool = False,
     ) -> WorkflowResult:
 
         if not self.session.has_transaction():
@@ -617,6 +366,36 @@ class DeveloperController:
                 ]
             )
 
+            self.last_result = result
+            return result
+
+        guard_decision = self._evaluate_execution_policy(
+            automatic=automatic
+        )
+
+        if not guard_decision.allowed:
+            result = WorkflowResult(
+                success=False,
+                status=(
+                    "automatic_approval_blocked"
+                    if automatic
+                    else "approval_blocked"
+                ),
+                message=(
+                    "Polityka bezpieczeństwa zablokowała "
+                    "zatwierdzenie transakcji."
+                ),
+                transaction=self.session.transaction,
+                errors=list(
+                    guard_decision.errors
+                    or guard_decision.reasons
+                ),
+                data={
+                    "execution_guard": (
+                        guard_decision.to_dict()
+                    )
+                },
+            )
             self.last_result = result
             return result
 
@@ -658,188 +437,25 @@ class DeveloperController:
 
     def execute(
         self,
-        auto_rollback: bool = True
+        *,
+        auto_rollback: bool = True,
     ) -> WorkflowResult:
-
-        if not self.session.can_execute():
-            result = WorkflowResult(
-                success=False,
-                status="execution_blocked",
-                message=(
-                    "Transakcja nie została "
-                    "zatwierdzona."
-                ),
-                transaction=self.session.transaction,
-                errors=[
-                    (
-                        "Wymagany status sesji: "
-                        "approved."
-                    ),
-                    (
-                        "Aktualny status sesji: "
-                        f"{self.session.status}"
-                    )
-                ]
-            )
-
-            self.last_result = result
-            return result
-
-        transaction = self.session.transaction
-
-        if transaction is None:
-            result = WorkflowResult(
-                success=False,
-                status="missing_transaction",
-                message=(
-                    "Brak transakcji "
-                    "do wykonania."
-                ),
-                errors=[
-                    "DeveloperSession nie posiada transakcji."
-                ]
-            )
-
-            self.last_result = result
-            return result
-
-        self.session.mark_executing()
-
-        try:
-            execution_result = (
-                self.executor.execute(
-                    transaction=transaction,
-                    auto_rollback=auto_rollback
-                )
-            )
-
-        except Exception as error:
-            self.session.mark_failed(
-                str(error)
-            )
-
-            result = WorkflowResult(
-                success=False,
-                status="execution_exception",
-                message=(
-                    "Wystąpił wyjątek podczas "
-                    "wykonywania zmian."
-                ),
-                transaction=transaction,
-                errors=[
-                    str(error)
-                ]
-            )
-
-            self.last_result = result
-            return result
-
-        if execution_result.success:
-            self.session.mark_completed()
-
-            result = WorkflowResult(
-                success=True,
-                status="completed",
-                message=(
-                    "Workflow AutoDev został "
-                    "zakończony powodzeniem."
-                ),
-                transaction=transaction,
-                execution_result=execution_result,
-                data={
-                    "changed_files": (
-                        transaction.files()
-                    ),
-                    "backup_bundle": (
-                        transaction.backup_bundle_path
-                    ),
-                    "rollback_used": False
-                }
-            )
-
-            self.last_result = result
-            return result
-
-        execution_data = (
-            execution_result.data
-            if isinstance(
-                execution_result.data,
-                dict
-            )
-            else {}
+        return _DEVELOPER_CONTROLLER_WORKFLOW.execute(
+            self,
+            auto_rollback=auto_rollback,
         )
 
-        rollback_data = execution_data.get(
-            "rollback",
-            {}
-        )
-
-        rollback_success = (
-            rollback_data.get(
-                "success",
-                False
-            )
-            if isinstance(
-                rollback_data,
-                dict
-            )
-            else False
-        )
-
-        if rollback_success:
-            self.session.mark_rolled_back()
-
-            status = (
-                "failed_and_rolled_back"
-            )
-
-            message = (
-                "Walidacja lub zapis zmian "
-                "nie powiodły się. "
-                "Pliki zostały przywrócone."
-            )
-
-        else:
-            self.session.mark_failed(
-                execution_result.message
-            )
-
-            status = "failed"
-
-            message = (
-                "Workflow AutoDev "
-                "nie powiódł się."
-            )
-
-        result = WorkflowResult(
-            success=False,
-            status=status,
-            message=message,
-            transaction=transaction,
-            execution_result=execution_result,
-            errors=execution_result.errors,
-            data={
-                "rollback_attempted": (
-                    bool(rollback_data)
-                ),
-                "rollback_success": (
-                    rollback_success
-                ),
-                "backup_bundle": (
-                    transaction.backup_bundle_path
-                )
-            }
-        )
-
-        self.last_result = result
-        return result
 
     def approve_and_execute(
         self,
-        auto_rollback: bool = True
+        auto_rollback: bool = True,
+        *,
+        automatic_approval: bool = False,
     ) -> WorkflowResult:
 
-        approval_result = self.approve()
+        approval_result = self.approve(
+            automatic=automatic_approval
+        )
 
         if not approval_result.success:
             return approval_result
@@ -942,6 +558,17 @@ class DeveloperController:
         self.last_result = result
         return result
 
+    def _evaluate_execution_policy(
+        self,
+        *,
+        automatic: bool,
+    ):
+        return self.execution_guard.evaluate_transaction(
+            self.session.transaction,
+            approved=True,
+            automatic=automatic,
+        )
+
     def current_preview(
         self
     ) -> str:
@@ -986,6 +613,9 @@ class DeveloperController:
             ),
             "project_root": str(
                 self.project_root
+            ),
+            "execution_guard": (
+                self.execution_guard.status()
             ),
             "files_count": (
                 len(transaction.changes)
@@ -1081,17 +711,17 @@ class DeveloperController:
     def reset(
         self
     ):
-        self.session = DeveloperSession()
+        current_task_queue = self.task_queue
 
-        self.task_queue = task_queue
+        self.session = DeveloperSession()
+        self.task_queue = current_task_queue
         self.last_request = None
         self.last_result = None
 
     def _build_transaction(
         self,
-        request: DeveloperRequest
+        request: DeveloperRequest,
     ):
-
         if request.mode == "file":
             return (
                 self.patch_generator
@@ -1122,6 +752,24 @@ class DeveloperController:
             )
 
         if request.mode == "multi_file":
+            raw_allow_create = (
+                request.metadata.get(
+                    "allow_create",
+                    False,
+                )
+            )
+            allow_create = (
+                raw_allow_create is True
+                or str(
+                    raw_allow_create
+                ).strip().casefold()
+                in {
+                    "1",
+                    "true",
+                    "yes",
+                    "tak",
+                }
+            )
             transaction = (
                 self.transaction_builder
                 .build_multi_file_replacement(
@@ -1129,7 +777,8 @@ class DeveloperController:
                     target=request.target,
                     replacements=(
                         request.replacements
-                    )
+                    ),
+                    allow_create=allow_create,
                 )
             )
 

@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "stage": "B211-B220",
+  "name": "Autonomous Development 2.1",
+  "enabled": true,
+  "mode": "one_backlog_task_to_approval_ready_patch",
+  "workflow": {
+    "B211": "read_and_normalize_legacy_backlog_sources",
+    "B212": "eligibility_and_exact_transform_gate",
+    "B213": "deterministic_value_risk_confidence_ranking",
+    "B214": "single_task_claim_with_bounded_lease",
+    "B215": "exact_task_to_safe_patch_preview",
+    "B216": "isolated_compile_import_and_focused_tests",
+    "B217": "persistent_cycle_and_session_binding",
+    "B218": "status_resume_and_cancel",
+    "B219": "duplicate_stale_and_completed_task_protection",
+    "B220": "natural_owner_routing_and_release_gate",
+    "B220.2": "scan_and_seed_one_safe_task_when_backlog_has_no_eligible_item"
+  },
+  "limits": {
+    "max_candidates": 50,
+    "max_attempts_per_cycle": 6,
+    "max_risk_score": 50.0,
+    "min_confidence": 0.75,
+    "min_final_score": 15.0,
+    "lease_seconds": 1800,
+    "max_cycles": 40,
+    "max_changed_files": 1,
+    "max_changed_lines": 40
+  },
+  "safety": {
+    "auto_approve": false,
+    "auto_deploy": false,
+    "legacy_backlog_read_only": true,
+    "single_active_cycle": true,
+    "exact_task_target_required": true,
+    "stop_before_deployment": true,
+    "manual_deployment_confirmation_required": true,
+    "stale_lease_recovery": true,
+    "duplicate_task_protection": true,
+    "empty_backlog_self_seeding": true,
+    "self_seed_store_isolated": true
+  },
+  "backlog_sources": [
+    "data/autodev/project_intelligence.json",
+    "data/autodev/autonomous_task_queue.json",
+    "data/autodev/autonomous_development_2_1/self_seeded_tasks.json"
+  ]
+}

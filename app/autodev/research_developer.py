@@ -1,3 +1,8 @@
+from app.core.project_paths import (
+    default_project_path,
+    default_project_root,
+)
+
 from pathlib import Path
 from typing import Optional
 
@@ -29,7 +34,7 @@ class ResearchDeveloper:
 
     def __init__(
         self,
-        project_root: str = "C:/JarvisAI"
+        project_root: str = default_project_root()
     ):
         self.project_root = Path(
             project_root

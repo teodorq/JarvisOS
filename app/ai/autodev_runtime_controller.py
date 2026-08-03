@@ -8,6 +8,7 @@ from app.autodev.autodev_runtime_commands import (
 from app.autodev.autodev_runtime_service import (
     AutoDevRuntimeService,
 )
+from app.core.project_paths import resolve_project_root
 
 
 class AutoDevRuntimeController:
@@ -19,15 +20,21 @@ class AutoDevRuntimeController:
 
     def __init__(
         self,
-        project_root: str = "C:/JarvisAI",
+        project_root: str | None = None,
         service: AutoDevRuntimeService | None = None,
         commands: AutoDevRuntimeCommands | None = None,
     ) -> None:
 
+        resolved_root = str(
+            resolve_project_root(
+                project_root
+            )
+        )
+
         self.service = (
             service
             or AutoDevRuntimeService(
-                project_root=project_root
+                project_root=resolved_root
             )
         )
 

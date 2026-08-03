@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from app.core.project_paths import (
+    default_project_path,
+    default_project_root,
+)
+
 import json
 import threading
 from dataclasses import asdict, dataclass, field
@@ -35,7 +40,7 @@ class ImprovementMemory:
     def __init__(
         self,
         storage_path: str = (
-            "C:/JarvisAI/data/autodev/"
+            default_project_path("data", "autodev") + "/"
             "improvement_memory.json"
         ),
         max_records: int = 500,

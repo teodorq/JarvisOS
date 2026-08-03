@@ -1,0 +1,10 @@
+{
+  "stage": "B176",
+  "name": "Startup Conflict Scan",
+  "status": "READY",
+  "days_checked": 2,
+  "startup_only": true,
+  "silent": true,
+  "automatic_writes": false,
+  "requires_confirmation_for_resolution": true
+}

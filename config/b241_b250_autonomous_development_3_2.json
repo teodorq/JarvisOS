@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "stage": "B241-B250",
+  "name": "Autonomous Development 3.2 - Deployment Evidence",
+  "workflow": {
+    "B241": "automatic_campaign_reconciliation_after_deploy",
+    "B242": "automatic_campaign_reconciliation_after_rollback",
+    "B243": "deterministic_deployment_receipt",
+    "B244": "receipt_integrity_verification",
+    "B245": "verified_rollback_receipt",
+    "B246": "idempotent_restart_reconciliation",
+    "B247": "campaign_outcome_summary",
+    "B248": "receipt_secret_and_workspace_exclusion",
+    "B249": "single_patch_confirmation_and_no_bulk_deploy",
+    "B250": "regression_and_runtime_contract"
+  },
+  "safety": {
+    "automatic_approval": false,
+    "automatic_deployment": false,
+    "bulk_deployment_supported": false,
+    "exact_session_fingerprint_required": true,
+    "verified_backup_required": true,
+    "automatic_rollback_on_failure": true,
+    "campaign_reconciliation_after_terminal_operation": true
+  },
+  "runtime_store": "data/autodev"
+}

@@ -1,3 +1,8 @@
+from app.core.project_paths import (
+    default_project_path,
+    default_project_root,
+)
+
 from app.autodev.ai_reasoner import AIReasoner
 from app.autodev.autodev_context import AutoDevContext
 from app.autodev.goal import Goal
@@ -12,7 +17,7 @@ class AutoDevBrain:
 
     def __init__(
         self,
-        project_root="C:/JarvisAI"
+        project_root=default_project_root()
     ):
 
         self.project_root = project_root

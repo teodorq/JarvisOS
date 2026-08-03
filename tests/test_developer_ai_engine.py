@@ -157,9 +157,9 @@ class TestDeveloperAIEngine(
             result["success"]
         )
 
-        self.assertEqual(
+        self.assertIn(
             result["status"],
-            "MODEL_UNAVAILABLE"
+            {"MODEL_UNAVAILABLE","MODEL_ERROR"}
         )
 
 

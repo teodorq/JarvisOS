@@ -1,3 +1,8 @@
+from app.core.project_paths import (
+    default_project_path,
+    default_project_root,
+)
+
 import time
 
 from app.autodev.code_reader import (
@@ -27,7 +32,7 @@ class ResearchAgent:
 
     def __init__(
         self,
-        project_root="C:/JarvisAI"
+        project_root=default_project_root()
     ):
 
         self.project_root = project_root

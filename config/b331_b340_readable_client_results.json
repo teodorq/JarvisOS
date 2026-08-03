@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "release": "B331-B340 READABLE CLIENT RESULTS",
+  "stages": {
+    "B331": "STRUCTURED_CLIENT_RESULT_MODEL_READY",
+    "B332": "SAFE_RESULT_CATEGORY_CHANNEL_READY",
+    "B333": "READABLE_MAIL_RESULT_CARDS_READY",
+    "B334": "READABLE_CALENDAR_RESULT_CARDS_READY",
+    "B335": "READABLE_DOCUMENT_RESULT_CARDS_READY",
+    "B336": "READABLE_REMINDER_RESULT_CARDS_READY",
+    "B337": "RESULT_LINE_BREAK_PRESERVATION_READY",
+    "B338": "CONCISE_SPOKEN_RESULT_SUMMARIES_READY",
+    "B339": "COMPACT_RESULT_CARD_VISUALS_READY",
+    "B340": "READABLE_RESULTS_REGRESSION_GATE_READY"
+  },
+  "client_result_types": [
+    "mail",
+    "calendar",
+    "documents",
+    "reminders",
+    "day",
+    "general",
+    "warning",
+    "error"
+  ],
+  "presentation": {
+    "center_message": "short_summary",
+    "conversation_panel": "structured_details",
+    "voice": "short_summary_only",
+    "maximum_detail_lines": 14
+  },
+  "safety": {
+    "technical_stage_codes_hidden": true,
+    "owner_data_hidden": true,
+    "result_type_allowlist": true,
+    "writes_require_confirmation": true,
+    "owner_gate_unchanged": true
+  }
+}

@@ -13,6 +13,7 @@ from app.autodev.autodev_response import (
 from app.autodev.autodev_service import (
     AutoDevService,
 )
+from app.core.project_paths import resolve_project_root
 
 
 class AutoDevRouter:
@@ -125,12 +126,17 @@ class AutoDevRouter:
 
     def __init__(
         self,
-        project_root: str = "C:/JarvisAI",
+        project_root: str | None = None,
         *,
         service: AutoDevService | None = None,
     ) -> None:
+        resolved_root = str(
+            resolve_project_root(
+                project_root
+            )
+        )
         self.service = service or AutoDevService(
-            project_root=project_root,
+            project_root=resolved_root,
         )
 
     def can_handle(

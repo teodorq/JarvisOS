@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from app.core.project_paths import (
+    default_project_path,
+    default_project_root,
+)
+
 import threading
 import time
 from dataclasses import asdict, dataclass
@@ -15,6 +20,9 @@ from app.autodev.autodev_worker import (
     AutoDevWorker,
     AutoDevWorkerPolicy,
 )
+from app.autodev.autodev_pipeline_task_service import (
+    AutoDevPipelineTaskService,
+)
 from app.autodev.autonomous_task_queue import (
     AutonomousTask,
     AutonomousTaskQueue,
@@ -24,9 +32,14 @@ from app.autodev.autonomous_task_queue import (
 )
 
 
+_AUTODEV_PIPELINE_TASKS = AutoDevPipelineTaskService()
+
+
+from app.autodev.error_reporting import AutoDevErrorReporter
+
 @dataclass(slots=True)
 class AutoDevPipelinePolicy:
-    project_root: str = "C:/JarvisAI"
+    project_root: str = default_project_root()
     queue_storage_path: str = (
         "data/autodev/autonomous_task_queue.json"
     )
@@ -145,6 +158,7 @@ class AutoDevPipeline:
         self._lock = threading.RLock()
         self._started_at: float | None = None
         self._last_error: str | None = None
+        self._last_error_info: dict[str, Any] | None = None
 
         self._register_default_workers()
 
@@ -152,6 +166,17 @@ class AutoDevPipeline:
     def last_error(self) -> str | None:
         with self._lock:
             return self._last_error
+
+    @property
+    def last_error_info(
+        self,
+    ) -> dict[str, Any] | None:
+        with self._lock:
+            return (
+                dict(self._last_error_info)
+                if self._last_error_info
+                else None
+            )
 
     def _register_default_workers(self) -> None:
         with self._lock:
@@ -193,12 +218,22 @@ class AutoDevPipeline:
                     self._started_at = time.time()
 
                 self._last_error = None
+                self._last_error_info = None
                 return started
 
             except Exception as exc:
-                self._last_error = (
-                    f"{type(exc).__name__}: {exc}"
+                report = AutoDevErrorReporter.capture(
+                    exc,
+                    stage="autodev_pipeline.start",
+                    context={
+                        "scheduler_state": (
+                            self.scheduler.state.value
+                        ),
+                    },
+                    project_root=self.policy.project_root,
                 )
+                self._last_error = report.summary()
+                self._last_error_info = report.as_dict()
                 raise
 
     def stop(
@@ -216,9 +251,20 @@ class AutoDevPipeline:
                 return stopped
 
             except Exception as exc:
-                self._last_error = (
-                    f"{type(exc).__name__}: {exc}"
+                report = AutoDevErrorReporter.capture(
+                    exc,
+                    stage="autodev_pipeline.stop",
+                    context={
+                        "wait": wait,
+                        "timeout": timeout,
+                        "scheduler_state": (
+                            self.scheduler.state.value
+                        ),
+                    },
+                    project_root=self.policy.project_root,
                 )
+                self._last_error = report.summary()
+                self._last_error_info = report.as_dict()
                 raise
 
     def pause(self) -> bool:
@@ -227,183 +273,25 @@ class AutoDevPipeline:
     def resume(self) -> bool:
         return self.scheduler.resume()
 
-    def submit(
-        self,
-        *,
-        title: str,
-        description: str,
-        source: str = "autodev_pipeline",
-        priority: TaskPriority = TaskPriority.NORMAL,
-        payload: dict[str, Any] | None = None,
-        tags: Iterable[str] | None = None,
-        dependencies: Iterable[str] | None = None,
-        retry_policy: RetryPolicy | None = None,
-        scheduled_for: float | None = None,
-        timeout_seconds: float | None = None,
-        reject_duplicates: bool = True,
-    ) -> AutonomousTask:
-        task = self.queue.create_task(
-            title=title,
-            description=description,
-            source=source,
-            priority=priority,
-            payload=payload,
-            tags=tags,
-            dependencies=dependencies,
-            retry_policy=retry_policy,
-            scheduled_for=scheduled_for,
-            timeout_seconds=timeout_seconds,
-            reject_duplicates=reject_duplicates,
-        )
+    def submit(self, *, title: str, description: str, source: str='autodev_pipeline', priority: TaskPriority=TaskPriority.NORMAL, payload: dict[str, Any] | None=None, tags: Iterable[str] | None=None, dependencies: Iterable[str] | None=None, retry_policy: RetryPolicy | None=None, scheduled_for: float | None=None, timeout_seconds: float | None=None, reject_duplicates: bool=True) -> AutonomousTask:
+        return _AUTODEV_PIPELINE_TASKS.submit(self, title=title, description=description, source=source, priority=priority, payload=payload, tags=tags, dependencies=dependencies, retry_policy=retry_policy, scheduled_for=scheduled_for, timeout_seconds=timeout_seconds, reject_duplicates=reject_duplicates)
 
-        self.scheduler.wake()
-        return task
 
-    def submit_file_change(
-        self,
-        *,
-        title: str,
-        goal: str,
-        path: str,
-        proposed_content: str,
-        target: str = "",
-        source: str = "autodev_pipeline",
-        priority: TaskPriority = TaskPriority.NORMAL,
-        auto_approve: bool | None = None,
-        auto_execute: bool | None = None,
-        auto_rollback: bool | None = None,
-        metadata: dict[str, Any] | None = None,
-        tags: Iterable[str] | None = None,
-        dependencies: Iterable[str] | None = None,
-    ) -> AutonomousTask:
-        payload = {
-            "goal": goal,
-            "target": target or title,
-            "mode": "file",
-            "path": path,
-            "proposed_content": proposed_content,
-            "metadata": dict(metadata or {}),
-        }
+    def submit_file_change(self, *, title: str, goal: str, path: str, proposed_content: str, target: str='', source: str='autodev_pipeline', priority: TaskPriority=TaskPriority.NORMAL, auto_approve: bool | None=None, auto_execute: bool | None=None, auto_rollback: bool | None=None, metadata: dict[str, Any] | None=None, tags: Iterable[str] | None=None, dependencies: Iterable[str] | None=None) -> AutonomousTask:
+        return _AUTODEV_PIPELINE_TASKS.submit_file_change(self, title=title, goal=goal, path=path, proposed_content=proposed_content, target=target, source=source, priority=priority, auto_approve=auto_approve, auto_execute=auto_execute, auto_rollback=auto_rollback, metadata=metadata, tags=tags, dependencies=dependencies)
 
-        self._apply_execution_flags(
-            payload,
-            auto_approve=auto_approve,
-            auto_execute=auto_execute,
-            auto_rollback=auto_rollback,
-        )
 
-        return self.submit(
-            title=title,
-            description=goal,
-            source=source,
-            priority=priority,
-            payload=payload,
-            tags=tags,
-            dependencies=dependencies,
-        )
+    def submit_function_change(self, *, title: str, goal: str, path: str, function_name: str, new_function_code: str, target: str='', source: str='autodev_pipeline', priority: TaskPriority=TaskPriority.NORMAL, auto_approve: bool | None=None, auto_execute: bool | None=None, auto_rollback: bool | None=None, metadata: dict[str, Any] | None=None, tags: Iterable[str] | None=None, dependencies: Iterable[str] | None=None) -> AutonomousTask:
+        return _AUTODEV_PIPELINE_TASKS.submit_function_change(self, title=title, goal=goal, path=path, function_name=function_name, new_function_code=new_function_code, target=target, source=source, priority=priority, auto_approve=auto_approve, auto_execute=auto_execute, auto_rollback=auto_rollback, metadata=metadata, tags=tags, dependencies=dependencies)
 
-    def submit_function_change(
-        self,
-        *,
-        title: str,
-        goal: str,
-        path: str,
-        function_name: str,
-        new_function_code: str,
-        target: str = "",
-        source: str = "autodev_pipeline",
-        priority: TaskPriority = TaskPriority.NORMAL,
-        auto_approve: bool | None = None,
-        auto_execute: bool | None = None,
-        auto_rollback: bool | None = None,
-        metadata: dict[str, Any] | None = None,
-        tags: Iterable[str] | None = None,
-        dependencies: Iterable[str] | None = None,
-    ) -> AutonomousTask:
-        payload = {
-            "goal": goal,
-            "target": target or title,
-            "mode": "function",
-            "path": path,
-            "function_name": function_name,
-            "new_function_code": new_function_code,
-            "metadata": dict(metadata or {}),
-        }
 
-        self._apply_execution_flags(
-            payload,
-            auto_approve=auto_approve,
-            auto_execute=auto_execute,
-            auto_rollback=auto_rollback,
-        )
+    def submit_multi_file_change(self, *, title: str, goal: str, replacements: dict[str, str], target: str='', source: str='autodev_pipeline', priority: TaskPriority=TaskPriority.NORMAL, auto_approve: bool | None=None, auto_execute: bool | None=None, auto_rollback: bool | None=None, metadata: dict[str, Any] | None=None, tags: Iterable[str] | None=None, dependencies: Iterable[str] | None=None) -> AutonomousTask:
+        return _AUTODEV_PIPELINE_TASKS.submit_multi_file_change(self, title=title, goal=goal, replacements=replacements, target=target, source=source, priority=priority, auto_approve=auto_approve, auto_execute=auto_execute, auto_rollback=auto_rollback, metadata=metadata, tags=tags, dependencies=dependencies)
 
-        return self.submit(
-            title=title,
-            description=goal,
-            source=source,
-            priority=priority,
-            payload=payload,
-            tags=tags,
-            dependencies=dependencies,
-        )
 
-    def submit_multi_file_change(
-        self,
-        *,
-        title: str,
-        goal: str,
-        replacements: dict[str, str],
-        target: str = "",
-        source: str = "autodev_pipeline",
-        priority: TaskPriority = TaskPriority.NORMAL,
-        auto_approve: bool | None = None,
-        auto_execute: bool | None = None,
-        auto_rollback: bool | None = None,
-        metadata: dict[str, Any] | None = None,
-        tags: Iterable[str] | None = None,
-        dependencies: Iterable[str] | None = None,
-    ) -> AutonomousTask:
-        payload = {
-            "goal": goal,
-            "target": target or title,
-            "mode": "multi_file",
-            "replacements": dict(replacements),
-            "metadata": dict(metadata or {}),
-        }
+    def _apply_execution_flags(self, payload: dict[str, Any], *, auto_approve: bool | None, auto_execute: bool | None, auto_rollback: bool | None) -> None:
+        return _AUTODEV_PIPELINE_TASKS._apply_execution_flags(self, payload, auto_approve=auto_approve, auto_execute=auto_execute, auto_rollback=auto_rollback)
 
-        self._apply_execution_flags(
-            payload,
-            auto_approve=auto_approve,
-            auto_execute=auto_execute,
-            auto_rollback=auto_rollback,
-        )
-
-        return self.submit(
-            title=title,
-            description=goal,
-            source=source,
-            priority=priority,
-            payload=payload,
-            tags=tags,
-            dependencies=dependencies,
-        )
-
-    def _apply_execution_flags(
-        self,
-        payload: dict[str, Any],
-        *,
-        auto_approve: bool | None,
-        auto_execute: bool | None,
-        auto_rollback: bool | None,
-    ) -> None:
-        if auto_approve is not None:
-            payload["auto_approve"] = auto_approve
-
-        if auto_execute is not None:
-            payload["auto_execute"] = auto_execute
-
-        if auto_rollback is not None:
-            payload["auto_rollback"] = auto_rollback
 
     def approve_worker(
         self,
@@ -499,88 +387,13 @@ class AutoDevPipeline:
             )
         ]
 
-    def wait_for_task(
-        self,
-        task_id: str,
-        *,
-        timeout: float | None = None,
-        poll_interval: float = 0.25,
-    ) -> AutonomousTask:
-        if poll_interval <= 0:
-            raise ValueError(
-                "poll_interval must be greater than 0"
-            )
+    def wait_for_task(self, task_id: str, *, timeout: float | None=None, poll_interval: float=0.25) -> AutonomousTask:
+        return _AUTODEV_PIPELINE_TASKS.wait_for_task(self, task_id, timeout=timeout, poll_interval=poll_interval)
 
-        deadline = (
-            None
-            if timeout is None
-            else time.time() + timeout
-        )
 
-        while True:
-            task = self.queue.require(task_id)
+    def run_until_idle(self, *, timeout: float | None=None, poll_interval: float=0.25) -> bool:
+        return _AUTODEV_PIPELINE_TASKS.run_until_idle(self, timeout=timeout, poll_interval=poll_interval)
 
-            if task.is_terminal():
-                return task
-
-            if (
-                task.status == TaskStatus.COMPLETED
-                or task.status == TaskStatus.FAILED
-                or task.status == TaskStatus.CANCELLED
-            ):
-                return task
-
-            if (
-                deadline is not None
-                and time.time() >= deadline
-            ):
-                raise TimeoutError(
-                    f"Timeout while waiting for task {task_id}"
-                )
-
-            time.sleep(poll_interval)
-
-    def run_until_idle(
-        self,
-        *,
-        timeout: float | None = None,
-        poll_interval: float = 0.25,
-    ) -> bool:
-        if poll_interval <= 0:
-            raise ValueError(
-                "poll_interval must be greater than 0"
-            )
-
-        if self.scheduler.state == SchedulerState.STOPPED:
-            self.start()
-
-        deadline = (
-            None
-            if timeout is None
-            else time.time() + timeout
-        )
-
-        while True:
-            metrics = self.queue.metrics()
-
-            unfinished = (
-                metrics.pending
-                + metrics.ready
-                + metrics.running
-                + metrics.retry_wait
-                + metrics.blocked
-            )
-
-            if unfinished == 0:
-                return True
-
-            if (
-                deadline is not None
-                and time.time() >= deadline
-            ):
-                return False
-
-            time.sleep(poll_interval)
 
     def workers(self) -> list[dict[str, Any]]:
         with self._lock:
@@ -595,6 +408,11 @@ class AutoDevPipeline:
                 "state": self.scheduler.state.value,
                 "started_at": self._started_at,
                 "last_error": self._last_error,
+                "last_error_info": (
+                    dict(self._last_error_info)
+                    if self._last_error_info
+                    else None
+                ),
                 "policy": asdict(self.policy),
                 "queue_metrics": (
                     self.queue.metrics().to_dict()

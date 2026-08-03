@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.core.project_paths import default_project_root
+
 from typing import Any
 
 from app.ai.executive_ai.executive_engine import (
@@ -17,7 +19,7 @@ class ExecutiveController:
 
     def __init__(
         self,
-        project_root: str = "C:/JarvisAI",
+        project_root: str | None = None,
         executive_engine: ExecutiveEngine | None = None,
         executive_memory: ExecutiveMemory | None = None,
         executive_planner: ExecutivePlanner | None = None,
@@ -32,6 +34,7 @@ class ExecutiveController:
 
         self.project_root = str(
             project_root
+            or default_project_root()
         ).strip()
 
         if not self.project_root:

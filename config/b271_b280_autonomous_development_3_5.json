@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "stage": "B271-B280",
+  "name": "Autonomous Development 3.5 - Live Deployment Attestation",
+  "workflow": {
+    "B271": "strict_receipt_semantic_validation",
+    "B272": "latest_receipt_selection_per_target",
+    "B273": "live_target_hash_attestation",
+    "B274": "live_target_drift_detection",
+    "B275": "backup_presence_and_hash_attestation",
+    "B276": "rollback_restored_state_attestation",
+    "B277": "campaign_deployment_attestation",
+    "B278": "project_wide_attestation_and_report_digest",
+    "B279": "fail_closed_service_integration",
+    "B280": "real_runtime_attestation_and_regression"
+  },
+  "safety": {
+    "automatic_approval": false,
+    "automatic_deployment": false,
+    "bulk_deployment_supported": false,
+    "strict_receipt_semantics": true,
+    "live_target_hash_attestation": true,
+    "backup_hash_attestation": true,
+    "latest_receipt_wins_per_target": true,
+    "historical_receipts_marked_superseded": true,
+    "ledger_failure_blocks_attestation": true,
+    "attestation_digest_required": true
+  },
+  "runtime_store": "data/autodev/safe_development_2/receipt_ledger"
+}

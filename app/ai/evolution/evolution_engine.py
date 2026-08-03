@@ -1,4 +1,10 @@
+"""Moduł JARVIS OS utrzymywany przez bezpieczny AutoDev."""
+
 from __future__ import annotations
+
+from .evolution_iteration_service import EvolutionIterationService
+
+from app.core.project_paths import default_project_root
 
 import json
 from dataclasses import asdict, dataclass, field
@@ -84,6 +90,9 @@ class EvolutionRun:
         return asdict(self)
 
 
+_EVOLUTION_ITERATION_SERVICE = EvolutionIterationService()
+
+
 class EvolutionEngine:
 
     TERMINAL_STATUSES = {
@@ -95,7 +104,7 @@ class EvolutionEngine:
 
     def __init__(
         self,
-        project_root: str = "C:/JarvisAI",
+        project_root: str | None = None,
         continuous_dev_controller: (
             ContinuousDevController | None
         ) = None,
@@ -110,6 +119,7 @@ class EvolutionEngine:
 
         self.project_root = str(
             project_root
+            or default_project_root()
         ).strip()
 
         if not self.project_root:
@@ -284,419 +294,13 @@ class EvolutionEngine:
             context=context,
         )
 
-    def run_iteration(
-        self,
-        evolution_id: str,
-        context: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
+    def run_iteration(self, evolution_id: str, context: dict[str, Any] | None=None) -> dict[str, Any]:
+        return _EVOLUTION_ITERATION_SERVICE.run_iteration(self, evolution_id, context)
 
-        run = self._get_run(
-            evolution_id
-        )
 
-        if run is None:
-            return self._not_found(
-                evolution_id
-            )
+    def approve(self, evolution_id: str, approved: bool, note: str | None=None, context: dict[str, Any] | None=None) -> dict[str, Any]:
+        return _EVOLUTION_ITERATION_SERVICE.approve(self, evolution_id, approved, note, context)
 
-        if run.status in self.TERMINAL_STATUSES:
-            return {
-                "success": False,
-                "status": run.status,
-                "evolution_id": evolution_id,
-                "error": (
-                    "Proces ewolucji jest już zakończony."
-                ),
-            }
-
-        if run.iteration >= run.max_iterations:
-            return self._complete_run(
-                run=run,
-                status=EvolutionStatus.COMPLETED.value,
-                decision=EvolutionDecision.STOP.value,
-                result={
-                    "success": True,
-                    "status": "COMPLETED",
-                    "message": (
-                        "Osiągnięto maksymalną "
-                        "liczbę iteracji."
-                    ),
-                },
-            )
-
-        normalized_context = self._safe_dict(
-            context
-        )
-
-        run.iteration += 1
-        run.status = EvolutionStatus.ANALYZING.value
-        run.decision = (
-            EvolutionDecision.START_CYCLE.value
-        )
-        run.updated_at = self._utc_now()
-
-        self._add_event(
-            run=run,
-            event_type="ITERATION_STARTED",
-            message=(
-                f"Rozpoczęto iterację "
-                f"{run.iteration}."
-            ),
-            metadata={
-                "iteration": run.iteration,
-                "max_iterations": run.max_iterations,
-            },
-        )
-
-        auto_approve = self._should_auto_approve(
-            run
-        )
-
-        objective = self._build_iteration_objective(
-            run
-        )
-
-        try:
-            cycle_result = (
-                self.continuous_dev_controller
-                .create_and_start(
-                    objective=objective,
-                    max_iterations=1,
-                    auto_approve=auto_approve,
-                    context=normalized_context,
-                    metadata={
-                        "evolution_id": run.evolution_id,
-                        "evolution_iteration": (
-                            run.iteration
-                        ),
-                        "evolution_mode": run.mode,
-                    },
-                )
-            )
-
-        except Exception as error:
-            return self._fail_run(
-                run=run,
-                error=(
-                    "ContinuousDevController error: "
-                    f"{type(error).__name__}: {error}"
-                ),
-            )
-
-        run.last_result = self._safe_dict(
-            cycle_result
-        )
-
-        cycle_id = self._optional_string(
-            cycle_result.get(
-                "cycle_id"
-            )
-        )
-
-        if cycle_id:
-            run.continuous_cycle_id = cycle_id
-
-        run.history.append(
-            {
-                "iteration": run.iteration,
-                "timestamp": self._utc_now(),
-                "cycle_id": cycle_id,
-                "result": dict(
-                    cycle_result
-                ),
-            }
-        )
-
-        status = str(
-            cycle_result.get(
-                "status",
-                "UNKNOWN",
-            )
-        ).upper()
-
-        if status == "WAITING_FOR_APPROVAL":
-            run.status = (
-                EvolutionStatus
-                .WAITING_FOR_APPROVAL
-                .value
-            )
-            run.decision = (
-                EvolutionDecision
-                .WAIT_FOR_APPROVAL
-                .value
-            )
-            run.updated_at = self._utc_now()
-
-            self._add_event(
-                run=run,
-                event_type="WAITING_FOR_APPROVAL",
-                message=(
-                    "Proces ewolucji czeka "
-                    "na akceptację zmian."
-                ),
-                metadata={
-                    "continuous_cycle_id": cycle_id,
-                },
-            )
-
-            self.save()
-
-            return self._response(
-                run=run,
-                success=True,
-                result=cycle_result,
-            )
-
-        if status == "NO_CHANGES":
-            return self._complete_run(
-                run=run,
-                status=EvolutionStatus.NO_CHANGES.value,
-                decision=EvolutionDecision.NO_ACTION.value,
-                result=cycle_result,
-            )
-
-        if status == "COMPLETED":
-            self._collect_lessons(
-                run=run,
-                result=cycle_result,
-            )
-
-            if run.iteration >= run.max_iterations:
-                return self._complete_run(
-                    run=run,
-                    status=EvolutionStatus.COMPLETED.value,
-                    decision=EvolutionDecision.STOP.value,
-                    result=cycle_result,
-                )
-
-            run.status = EvolutionStatus.LEARNING.value
-            run.decision = (
-                EvolutionDecision.CONTINUE.value
-            )
-            run.updated_at = self._utc_now()
-
-            self._add_event(
-                run=run,
-                event_type="ITERATION_COMPLETED",
-                message=(
-                    f"Iteracja {run.iteration} "
-                    "zakończyła się sukcesem."
-                ),
-            )
-
-            self.save()
-
-            return self._response(
-                run=run,
-                success=True,
-                result=cycle_result,
-            )
-
-        if status == "ROLLED_BACK":
-            self._collect_errors(
-                run=run,
-                result=cycle_result,
-            )
-
-            run.status = EvolutionStatus.VALIDATING.value
-            run.decision = (
-                EvolutionDecision.RETRY.value
-                if run.iteration < run.max_iterations
-                else EvolutionDecision.STOP.value
-            )
-            run.updated_at = self._utc_now()
-
-            self._add_event(
-                run=run,
-                event_type="ROLLED_BACK",
-                message=(
-                    "Zmiana została wycofana. "
-                    "Proces może przygotować nową strategię."
-                ),
-            )
-
-            self.save()
-
-            return self._response(
-                run=run,
-                success=False,
-                result=cycle_result,
-            )
-
-        if cycle_result.get(
-            "success"
-        ) is False:
-            return self._fail_run(
-                run=run,
-                error=self._extract_error(
-                    cycle_result
-                ),
-                result=cycle_result,
-            )
-
-        run.status = EvolutionStatus.PLANNING.value
-        run.decision = (
-            EvolutionDecision.CONTINUE.value
-        )
-        run.updated_at = self._utc_now()
-
-        self.save()
-
-        return self._response(
-            run=run,
-            success=True,
-            result=cycle_result,
-        )
-
-    def approve(
-        self,
-        evolution_id: str,
-        approved: bool,
-        note: str | None = None,
-        context: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
-
-        run = self._get_run(
-            evolution_id
-        )
-
-        if run is None:
-            return self._not_found(
-                evolution_id
-            )
-
-        if not run.continuous_cycle_id:
-            return {
-                "success": False,
-                "status": "NO_CONTINUOUS_CYCLE",
-                "evolution_id": evolution_id,
-                "error": (
-                    "Brak aktywnego cyklu "
-                    "Continuous Developer."
-                ),
-            }
-
-        result = (
-            self.continuous_dev_controller
-            .approve_cycle(
-                cycle_id=run.continuous_cycle_id,
-                approved=approved,
-                note=note,
-                context=self._safe_dict(
-                    context
-                ),
-            )
-        )
-
-        run.last_result = self._safe_dict(
-            result
-        )
-        run.history.append(
-            {
-                "iteration": run.iteration,
-                "timestamp": self._utc_now(),
-                "cycle_id": run.continuous_cycle_id,
-                "approval": {
-                    "approved": bool(
-                        approved
-                    ),
-                    "note": note,
-                },
-                "result": dict(
-                    result
-                ),
-            }
-        )
-
-        if not approved:
-            run.status = EvolutionStatus.CANCELLED.value
-            run.decision = EvolutionDecision.STOP.value
-            run.completed_at = self._utc_now()
-            run.updated_at = run.completed_at
-
-            self._add_event(
-                run=run,
-                event_type="REJECTED",
-                message=(
-                    "Użytkownik odrzucił "
-                    "proponowaną zmianę."
-                ),
-            )
-
-            self.save()
-
-            return self._response(
-                run=run,
-                success=False,
-                result=result,
-            )
-
-        status = str(
-            result.get(
-                "status",
-                "UNKNOWN",
-            )
-        ).upper()
-
-        if status == "COMPLETED":
-            self._collect_lessons(
-                run=run,
-                result=result,
-            )
-
-            if run.iteration >= run.max_iterations:
-                return self._complete_run(
-                    run=run,
-                    status=EvolutionStatus.COMPLETED.value,
-                    decision=EvolutionDecision.STOP.value,
-                    result=result,
-                )
-
-            run.status = EvolutionStatus.LEARNING.value
-            run.decision = (
-                EvolutionDecision.CONTINUE.value
-            )
-
-        elif status == "ROLLED_BACK":
-            run.status = EvolutionStatus.VALIDATING.value
-            run.decision = (
-                EvolutionDecision.RETRY.value
-            )
-            self._collect_errors(
-                run=run,
-                result=result,
-            )
-
-        elif result.get(
-            "success"
-        ) is False:
-            return self._fail_run(
-                run=run,
-                error=self._extract_error(
-                    result
-                ),
-                result=result,
-            )
-
-        else:
-            run.status = EvolutionStatus.EXECUTING.value
-            run.decision = (
-                EvolutionDecision.CONTINUE.value
-            )
-
-        run.updated_at = self._utc_now()
-        self.save()
-
-        return self._response(
-            run=run,
-            success=bool(
-                result.get(
-                    "success",
-                    True,
-                )
-            ),
-            result=result,
-        )
 
     def continue_run(
         self,

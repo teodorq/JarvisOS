@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "stage": "B201-B210",
+  "name": "Safe Autonomous Development 2.0",
+  "enabled": true,
+  "mode": "approval_gated",
+  "workflow": {
+    "B201": "select_one_low_risk_improvement",
+    "B202": "create_isolated_workspace",
+    "B203": "generate_deterministic_single_file_patch",
+    "B204": "show_exact_diff_and_manifest",
+    "B205": "validate_scope_syntax_api_and_dangerous_operations",
+    "B206": "run_compile_import_and_focused_tests_on_copy",
+    "B207": "bind_exact_patch_to_manual_confirmation",
+    "B208": "atomic_single_file_deployment_with_backup",
+    "B209": "live_verification_and_automatic_rollback",
+    "B210": "persistent_status_duplicate_protection_and_manual_rollback"
+  },
+  "limits": {
+    "max_changed_files": 1,
+    "max_changed_lines": 40,
+    "max_source_bytes": 900000,
+    "max_sessions": 20,
+    "focused_test_limit": 12,
+    "focused_test_timeout_seconds": 180,
+    "live_test_timeout_seconds": 180
+  },
+  "safety": {
+    "auto_approve": false,
+    "auto_deploy": false,
+    "auto_rollback": true,
+    "stale_source_guard": true,
+    "exact_hash_guard": true,
+    "workspace_boundary_guard": true,
+    "public_api_guard": true,
+    "dangerous_operation_guard": true,
+    "duplicate_deployment_guard": true,
+    "newer_live_change_protection": true
+  },
+  "supported_transforms": [
+    "ADD_MODULE_DOCSTRING",
+    "ENSURE_FINAL_NEWLINE",
+    "ADD_FUNCTION_DOCSTRING",
+    "EXTRACT_FUNCTION_TAIL"
+  ],
+  "production_write_policy": "only_after_exact_manual_confirmation"
+}

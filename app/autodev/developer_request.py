@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Dict
+from typing import Any, Dict
 
 
 @dataclass
@@ -19,7 +19,7 @@ class DeveloperRequest:
         default_factory=dict
     )
 
-    metadata: Dict[str, str] = field(
+    metadata: Dict[str, Any] = field(
         default_factory=dict
     )
 

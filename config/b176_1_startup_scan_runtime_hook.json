@@ -1,0 +1,16 @@
+{
+  "stage": "B176.1",
+  "name": "Startup Scan Runtime Hook Fix",
+  "status": "READY",
+  "initial_delay_ms": 1200,
+  "retry_delays_ms": [
+    1800,
+    2800,
+    4200,
+    6000
+  ],
+  "max_scan_attempts": 5,
+  "automatic_writes": false,
+  "silent": true,
+  "requires_confirmation_for_resolution": true
+}

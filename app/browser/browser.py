@@ -174,7 +174,7 @@ class BrowserAgent:
                 os.startfile(url)
                 return True
         except OSError:
-            pass
+            raise RuntimeError("AutoDev: przechwycony wyjątek")
 
         try:
             return bool(

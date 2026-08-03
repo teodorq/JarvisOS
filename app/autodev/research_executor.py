@@ -1,3 +1,8 @@
+from app.core.project_paths import (
+    default_project_path,
+    default_project_root,
+)
+
 from app.autodev.research_developer import (
     ResearchDeveloper
 )
@@ -38,7 +43,7 @@ class ResearchExecutor:
 
     def __init__(
         self,
-        project_root="C:/JarvisAI"
+        project_root=default_project_root()
     ):
 
         self.controller = (

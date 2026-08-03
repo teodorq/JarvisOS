@@ -1,0 +1,10 @@
+{
+  "stage": "B177",
+  "status": "NEW_CHANGED_CONFLICT_NOTIFICATION_READY",
+  "show_only_new_or_changed": true,
+  "same_conflict_suppressed": true,
+  "quiet_scan_rearms_same_conflict": true,
+  "verified_undo_can_reactivate": true,
+  "automatic_writes": false,
+  "confirmation_required_for_resolution": true
+}

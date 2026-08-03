@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "release": "B191-B200",
+  "name": "JARVIS Foundation 2.0",
+  "status": "READY_FOR_INSTALLATION",
+  "stages": {
+    "B191": "Live Gmail draft recovery after restart or stale local state",
+    "B192": "Exact Gmail send confirmation and verified send continuity",
+    "B193": "Natural Gmail command variants and readable full-thread output",
+    "B194": "Single-worker background command lane for responsive client UI",
+    "B195": "Compact conversation timeline and client layout polish",
+    "B196": "Safe client errors without paths, tracebacks or generic false success",
+    "B197": "Bounded AutoDev runtime repair and orphan temporary cleanup",
+    "B198": "Project Intelligence reactivation with one active preview job",
+    "B199": "Preview generation without automatic approval or unsafe writes",
+    "B200": "Regression, integrity, backup and automatic rollback gate"
+  },
+  "safety": {
+    "gmail_automatic_send": false,
+    "gmail_send_requires_confirmation": true,
+    "autodev_auto_approve": false,
+    "autodev_max_active_jobs": 1,
+    "autodev_mode": "GENERATE_PREVIEW_THEN_WAIT_FOR_OWNER_APPROVAL",
+    "client_technical_details": false
+  }
+}

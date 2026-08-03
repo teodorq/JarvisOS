@@ -1,0 +1,12 @@
+{
+  "stage": "B179",
+  "status": "SAFE_PROACTIVITY_POLICY_READY",
+  "defer_when_busy": true,
+  "defer_during_confirmation": true,
+  "defer_while_user_typing": true,
+  "max_pending_alerts": 1,
+  "calendar_writes": false,
+  "voice_notifications": false,
+  "client_technical_details": false,
+  "check_interval_ms": 500
+}

@@ -1,3 +1,5 @@
+"""Moduł JARVIS OS utrzymywany przez bezpieczny AutoDev."""
+
 from __future__ import annotations
 
 import hashlib
@@ -553,6 +555,52 @@ class AutonomousTaskQueue:
 
             return existing
         return None
+
+    def create_unique_task(
+        self,
+        title: str,
+        description: str,
+        *,
+        source: str = "autonomous_planner",
+        priority: TaskPriority = TaskPriority.NORMAL,
+        payload: dict[str, Any] | None = None,
+        tags: Iterable[str] | None = None,
+        dependencies: Iterable[str] | None = None,
+    ) -> tuple[AutonomousTask, bool]:
+
+        candidate = AutonomousTask(
+            title=title,
+            description=description,
+            source=source,
+            priority=priority,
+            payload=dict(payload or {}),
+            tags=list(tags or []),
+            dependencies=list(dependencies or []),
+        )
+
+        with self._lock:
+            duplicate = self.find_duplicate(
+                candidate
+            )
+
+            if duplicate is not None:
+                return duplicate, False
+
+            self._validate_dependencies(
+                candidate
+            )
+            self._tasks[
+                candidate.task_id
+            ] = candidate
+            self._refresh_task_state(
+                candidate
+            )
+            self._save_if_enabled()
+            self._emit(
+                "task_enqueued",
+                candidate,
+            )
+            return candidate, True
 
     def get(self, task_id: str) -> AutonomousTask | None:
         with self._lock:

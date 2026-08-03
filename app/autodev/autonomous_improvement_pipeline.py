@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from app.core.project_paths import (
+    default_project_path,
+    default_project_root,
+)
+
 from dataclasses import asdict, dataclass
 from typing import Any
 
@@ -23,7 +28,7 @@ from app.autodev.safe_patch_validator import (
 
 @dataclass(slots=True)
 class AutonomousImprovementPolicy:
-    project_root: str = "C:/JarvisAI"
+    project_root: str = default_project_root()
     dry_run: bool = True
     require_approval: bool = True
     run_py_compile: bool = True
@@ -31,7 +36,7 @@ class AutonomousImprovementPolicy:
     auto_rollback: bool = True
     max_changed_lines: int = 500
     memory_path: str = (
-        "C:/JarvisAI/data/autodev/"
+        default_project_path("data", "autodev") + "/"
         "improvement_memory.json"
     )
 

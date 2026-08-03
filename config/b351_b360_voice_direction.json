@@ -1,0 +1,46 @@
+{
+  "release": "B351-B360",
+  "title": "Natural Polish Voice Direction and Identity-Safe Mastering",
+  "stages": {
+    "B351": "POLISH_SPEECH_DIRECTOR_READY",
+    "B352": "TECHNICAL_SPEECH_CLEANUP_READY",
+    "B353": "BOUNDED_SPOKEN_RESPONSE_READY",
+    "B354": "DELIVERY_PROFILE_SELECTION_READY",
+    "B355": "PROFILE_AWARE_NEURAL_PROSODY_READY",
+    "B356": "NATURAL_INTER_CHUNK_PAUSES_READY",
+    "B357": "IDENTITY_SAFE_MASTERING_READY",
+    "B358": "PROFILE_CACHE_VERSIONING_READY",
+    "B359": "NATIVE_FALLBACK_PARITY_VERIFIED",
+    "B360": "VOICE_PREVIEW_AND_REGRESSION_VERIFIED"
+  },
+  "speech_direction": {
+    "language": "pl-PL",
+    "maximum_characters": 520,
+    "profiles": ["calm", "brief", "result", "confirmation", "warning"]
+  },
+  "mastering": {
+    "enabled": true,
+    "version": "b360",
+    "warmth_db": 0.8,
+    "presence_db": 0.6,
+    "room_mix": 0.018,
+    "target_rms": 0.13,
+    "fade_ms": 10
+  },
+  "preview": {
+    "path": "assets/voice/previews/jarvis_neural_polish_b360.wav",
+    "transcript": "System jest gotowy. Wszystkie najważniejsze funkcje działają lokalnie. Jeśli chcesz, mogę rozpocząć przegląd dnia.",
+    "sample_rate": 24000,
+    "channels": 1,
+    "sample_width_bytes": 2,
+    "duration_seconds": 8.24,
+    "sha256": "F8E3F3F38C8FE93EC0657A5F7DD67460470CBCC8C5FCA4129D6C01F4C4F91B2E"
+  },
+  "safety": {
+    "no_pitch_shift": true,
+    "exact_character_impersonation": false,
+    "reference_stays_local": true,
+    "cloud_voice_api": false,
+    "native_fallback_unchanged": true
+  }
+}

@@ -1,3 +1,6 @@
+"""Moduł JARVIS OS utrzymywany przez bezpieczny AutoDev."""
+
+from __future__ import annotations
 import pygetwindow as gw
 
 
@@ -35,7 +38,7 @@ class WindowScanner:
                 })
 
             except Exception:
-                pass
+                raise RuntimeError("AutoDev: przechwycony wyjątek")
 
         return windows
 

@@ -1,0 +1,10 @@
+{
+  "stage": "B195",
+  "name": "Safe AutoDev Preview Lane",
+  "enabled": true,
+  "scan_interval_seconds": 900,
+  "auto_dispatch": true,
+  "auto_approve": false,
+  "max_active_jobs": 1,
+  "mode": "GENERATE_PREVIEW_THEN_WAIT_FOR_OWNER_APPROVAL"
+}

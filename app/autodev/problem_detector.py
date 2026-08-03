@@ -1,27 +1,26 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
+from typing import Any
 
 from app.autodev.module_analysis import ModuleAnalysis
+from app.autodev.project_intelligence_rules import (
+    ProjectIntelligenceRuleEngine,
+)
 
 
 @dataclass(slots=True)
 class DetectedProblem:
-
     module: str
     severity: str
     title: str
     description: str
     recommendation: str
     score: float = 0.0
-    metadata: dict = field(
-        default_factory=dict
-    )
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> dict:
-        return asdict(
-            self
-        )
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
 
     def summary(self) -> str:
         return "\n".join(
@@ -31,17 +30,13 @@ class DetectedProblem:
                 f"Severity: {self.severity}",
                 f"Title: {self.title}",
                 f"Description: {self.description}",
-                (
-                    "Recommendation: "
-                    f"{self.recommendation}"
-                ),
+                f"Recommendation: {self.recommendation}",
                 f"Score: {self.score:.2f}",
             ]
         )
 
 
 class ProblemDetector:
-
     SEVERITY_ORDER = {
         "CRITICAL": 4,
         "HIGH": 3,
@@ -49,14 +44,20 @@ class ProblemDetector:
         "LOW": 1,
     }
 
+    def __init__(
+        self,
+        rule_engine: ProjectIntelligenceRuleEngine | None = None,
+    ) -> None:
+        self.rule_engine = (
+            rule_engine or ProjectIntelligenceRuleEngine()
+        )
+
     def detect(
         self,
         analysis: ModuleAnalysis,
     ) -> list[DetectedProblem]:
 
-        problems: list[
-            DetectedProblem
-        ] = []
+        problems = []
 
         rules = (
             (
@@ -127,6 +128,7 @@ class ProblemDetector:
                         recommendation=recommendation,
                         score=score,
                         metadata={
+                            "source": "module_analysis",
                             "category": analysis.category,
                             "quality": analysis.quality,
                             "risk": analysis.risk,
@@ -135,44 +137,48 @@ class ProblemDetector:
                     )
                 )
 
+        for finding in self.rule_engine.detect(analysis):
+            problems.append(
+                DetectedProblem(
+                    module=finding.module,
+                    severity=finding.severity,
+                    title=finding.title,
+                    description=finding.description,
+                    recommendation=finding.recommendation,
+                    score=finding.score,
+                    metadata={
+                        "source": "project_intelligence",
+                        "category": analysis.category,
+                        "quality": analysis.quality,
+                        "risk": analysis.risk,
+                        "analysis_score": analysis.score,
+                        **dict(finding.metadata),
+                    },
+                )
+            )
+
         return problems
 
     def detect_many(
         self,
-        analyses: list[
-            ModuleAnalysis
-        ],
-    ) -> list[
-        DetectedProblem
-    ]:
+        analyses: list[ModuleAnalysis],
+    ) -> list[DetectedProblem]:
 
-        detected: list[
-            DetectedProblem
-        ] = []
-
-        seen: set[
-            tuple[str, str]
-        ] = set()
+        detected = []
+        seen = set()
 
         for analysis in analyses:
-            for problem in self.detect(
-                analysis
-            ):
+            for problem in self.detect(analysis):
                 key = (
                     problem.module,
                     problem.title,
+                    str(problem.metadata.get("line", "")),
                 )
-
                 if key in seen:
                     continue
 
-                seen.add(
-                    key
-                )
-
-                detected.append(
-                    problem
-                )
+                seen.add(key)
+                detected.append(problem)
 
         detected.sort(
             key=lambda item: (
@@ -189,14 +195,10 @@ class ProblemDetector:
 
     def report(
         self,
-        analyses: list[
-            ModuleAnalysis
-        ],
+        analyses: list[ModuleAnalysis],
     ) -> str:
 
-        problems = self.detect_many(
-            analyses
-        )
+        problems = self.detect_many(analyses)
 
         lines = [
             "PROBLEM DETECTOR",
@@ -206,26 +208,14 @@ class ProblemDetector:
         ]
 
         if not problems:
-            lines.append(
-                "Nie wykryto problemów."
-            )
-
-            return "\n".join(
-                lines
-            )
+            lines.append("Nie wykryto problemów.")
+            return "\n".join(lines)
 
         for problem in problems:
             lines.append(
-                f"[{problem.severity}] "
-                f"{problem.module}"
+                f"[{problem.severity}] {problem.module}"
             )
-            lines.append(
-                f"  {problem.title}"
-            )
-            lines.append(
-                f"  Score: {problem.score:.2f}"
-            )
+            lines.append(f"  {problem.title}")
+            lines.append(f"  Score: {problem.score:.2f}")
 
-        return "\n".join(
-            lines
-        )
+        return "\n".join(lines)

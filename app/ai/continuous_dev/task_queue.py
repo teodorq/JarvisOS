@@ -1,3 +1,5 @@
+"""Moduł JARVIS OS utrzymywany przez bezpieczny AutoDev."""
+
 from __future__ import annotations
 
 import heapq

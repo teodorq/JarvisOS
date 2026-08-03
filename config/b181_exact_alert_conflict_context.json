@@ -1,0 +1,13 @@
+{
+  "stage": "B181",
+  "status": "EXACT_ALERT_CONFLICT_CONTEXT_READY",
+  "contract": {
+    "alert_preserves_exact_event_ids": true,
+    "alert_preserves_exact_start_and_end": true,
+    "follow_up_uses_alert_context": true,
+    "context_persists_locally": true,
+    "automatic_calendar_writes": false,
+    "confirmation_required_for_writes": true,
+    "client_technical_details": false
+  }
+}

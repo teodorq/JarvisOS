@@ -1,0 +1,16 @@
+{
+  "stage": "B190.1",
+  "name": "Gmail Workflow Quality Closure",
+  "status": "GMAIL_WORKFLOW_QUALITY_CLOSURE_READY",
+  "combined_full_message_and_thread_read": true,
+  "natural_reply_phrases": true,
+  "reply_body_after_colon": true,
+  "latest_search_selects_result": true,
+  "new_search_replaces_stale_selection": true,
+  "large_text_body_attachment_read": true,
+  "send_this_reply_phrase": true,
+  "duplicate_send_blocked": true,
+  "client_safe_gmail_errors": true,
+  "automatic_sending": false,
+  "send_requires_confirmation": true
+}

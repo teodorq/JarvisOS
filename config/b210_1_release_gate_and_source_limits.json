@@ -1,0 +1,12 @@
+{
+  "stage": "B210.1",
+  "name": "Release Gate and Source Limits Fix",
+  "status": "READY",
+  "full_suite_requires_pass_status": true,
+  "runner_result_file_required": true,
+  "business_command_runtime_max_lines_exclusive": 180,
+  "smart_task_loop_max_lines_exclusive": 130,
+  "automatic_rollback": true,
+  "auto_approve": false,
+  "auto_deploy": false
+}

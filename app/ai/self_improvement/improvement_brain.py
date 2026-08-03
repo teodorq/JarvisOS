@@ -1,4 +1,10 @@
+"""Moduł JARVIS OS utrzymywany przez bezpieczny AutoDev."""
+
 from __future__ import annotations
+
+from .improvement_execution_service import ImprovementExecutionService
+
+from app.core.project_paths import default_project_root
 
 from dataclasses import asdict, dataclass, field
 from enum import Enum
@@ -68,11 +74,14 @@ class ImprovementBrainResult:
         return asdict(self)
 
 
+_IMPROVEMENT_EXECUTION_SERVICE = ImprovementExecutionService()
+
+
 class ImprovementBrain:
 
     def __init__(
         self,
-        project_root: str = "C:/JarvisAI",
+        project_root: str | None = None,
         research_service: Any | None = None,
         reasoning_service: Any | None = None,
         evolution_controller: Any | None = None,
@@ -81,6 +90,7 @@ class ImprovementBrain:
 
         self.project_root = str(
             project_root
+            or default_project_root()
         ).strip()
 
         if not self.project_root:
@@ -100,381 +110,13 @@ class ImprovementBrain:
             dict[str, Any],
         ] = {}
 
-    def analyze(
-        self,
-        objective: str,
-        project_context: dict[str, Any] | None = None,
-        auto_execute: bool = False,
-        approved: bool | None = None,
-        mode: str = "SAFE_AUTONOMOUS",
-    ) -> dict[str, Any]:
+    def analyze(self, objective: str, project_context: dict[str, Any] | None=None, auto_execute: bool=False, approved: bool | None=None, mode: str='SAFE_AUTONOMOUS') -> dict[str, Any]:
+        return _IMPROVEMENT_EXECUTION_SERVICE.analyze(self, objective, project_context, auto_execute, approved, mode)
 
-        normalized_objective = str(
-            objective
-        ).strip()
 
-        if not normalized_objective:
-            return {
-                "success": False,
-                "status": ImprovementBrainStatus.FAILED.value,
-                "error": (
-                    "ImprovementBrain wymaga celu analizy."
-                ),
-            }
+    def execute(self, session_id: str, approved: bool | None=None, context: dict[str, Any] | None=None) -> dict[str, Any]:
+        return _IMPROVEMENT_EXECUTION_SERVICE.execute(self, session_id, approved, context)
 
-        session_id = (
-            f"improvement_brain_{uuid4().hex}"
-        )
-
-        context = self._safe_dict(
-            project_context
-        )
-
-        state = {
-            "session_id": session_id,
-            "objective": normalized_objective,
-            "status": ImprovementBrainStatus.ANALYZING.value,
-            "decision": ImprovementBrainDecision.NO_ACTION.value,
-            "proposals": [],
-            "selected_proposal": {},
-            "research": {},
-            "reasoning": {},
-            "execution": {},
-            "lessons": [],
-            "errors": [],
-            "warnings": [],
-            "mode": str(mode).upper(),
-        }
-
-        self._sessions[
-            session_id
-        ] = state
-
-        try:
-            proposals = self._generate_proposals(
-                objective=normalized_objective,
-                context=context,
-            )
-
-            state["proposals"] = proposals
-
-            if not proposals:
-                state["status"] = (
-                    ImprovementBrainStatus.NO_ACTION.value
-                )
-                state["decision"] = (
-                    ImprovementBrainDecision.NO_ACTION.value
-                )
-
-                return self._result(
-                    state=state,
-                    success=True,
-                )
-
-            selected = self._select_best(
-                proposals
-            )
-
-            state["selected_proposal"] = selected
-            state["status"] = (
-                ImprovementBrainStatus.DECIDING.value
-            )
-
-            research = self._run_research(
-                objective=normalized_objective,
-                proposal=selected,
-                context=context,
-            )
-
-            state["research"] = research
-
-            reasoning = self._run_reasoning(
-                objective=normalized_objective,
-                proposal=selected,
-                research=research,
-                context=context,
-            )
-
-            state["reasoning"] = reasoning
-
-            decision = self._choose_decision(
-                proposal=selected,
-                reasoning=reasoning,
-                auto_execute=auto_execute,
-            )
-
-            state["decision"] = decision
-
-            if decision == (
-                ImprovementBrainDecision
-                .WAIT_FOR_APPROVAL
-                .value
-            ):
-                state["status"] = (
-                    ImprovementBrainStatus
-                    .WAITING_FOR_APPROVAL
-                    .value
-                )
-
-                if approved is True:
-                    return self.execute(
-                        session_id=session_id,
-                        approved=True,
-                        context=context,
-                    )
-
-                return self._result(
-                    state=state,
-                    success=True,
-                )
-
-            if decision == (
-                ImprovementBrainDecision.NO_ACTION.value
-            ):
-                state["status"] = (
-                    ImprovementBrainStatus.NO_ACTION.value
-                )
-
-                return self._result(
-                    state=state,
-                    success=True,
-                )
-
-            if auto_execute:
-                return self.execute(
-                    session_id=session_id,
-                    approved=approved,
-                    context=context,
-                )
-
-            state["status"] = (
-                ImprovementBrainStatus.PLANNING.value
-            )
-
-            return self._result(
-                state=state,
-                success=True,
-            )
-
-        except Exception as error:
-            message = (
-                f"ImprovementBrain error: "
-                f"{type(error).__name__}: {error}"
-            )
-
-            state["status"] = (
-                ImprovementBrainStatus.FAILED.value
-            )
-
-            state["errors"] = self._unique_strings(
-                state["errors"] + [message]
-            )
-
-            return self._result(
-                state=state,
-                success=False,
-            )
-
-    def execute(
-        self,
-        session_id: str,
-        approved: bool | None = None,
-        context: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
-
-        state = self._sessions.get(
-            str(session_id).strip()
-        )
-
-        if state is None:
-            return {
-                "success": False,
-                "status": "NOT_FOUND",
-                "session_id": session_id,
-                "error": (
-                    "Nie znaleziono sesji "
-                    "ImprovementBrain."
-                ),
-            }
-
-        decision = str(
-            state.get(
-                "decision",
-                ImprovementBrainDecision.NO_ACTION.value,
-            )
-        ).upper()
-
-        selected = self._safe_dict(
-            state.get(
-                "selected_proposal",
-                {},
-            )
-        )
-
-        normalized_context = self._safe_dict(
-            context
-        )
-
-        if (
-            decision
-            == ImprovementBrainDecision.WAIT_FOR_APPROVAL.value
-            and approved is not True
-        ):
-            state["status"] = (
-                ImprovementBrainStatus
-                .WAITING_FOR_APPROVAL
-                .value
-            )
-
-            return self._result(
-                state=state,
-                success=True,
-            )
-
-        state["status"] = (
-            ImprovementBrainStatus.EXECUTING.value
-        )
-
-        try:
-            if decision == (
-                ImprovementBrainDecision
-                .START_EVOLUTION
-                .value
-            ):
-                execution = self._start_evolution(
-                    proposal=selected,
-                    context=normalized_context,
-                    approved=approved,
-                    mode=str(
-                        state.get(
-                            "mode",
-                            "SAFE_AUTONOMOUS",
-                        )
-                    ),
-                )
-
-            elif decision == (
-                ImprovementBrainDecision
-                .START_CONTINUOUS_DEV
-                .value
-            ):
-                execution = (
-                    self._start_continuous_dev(
-                        proposal=selected,
-                        context=normalized_context,
-                        approved=approved,
-                    )
-                )
-
-            elif decision == (
-                ImprovementBrainDecision
-                .RUN_RESEARCH
-                .value
-            ):
-                execution = self._run_research(
-                    objective=str(
-                        state.get(
-                            "objective",
-                            "",
-                        )
-                    ),
-                    proposal=selected,
-                    context=normalized_context,
-                )
-
-            elif decision == (
-                ImprovementBrainDecision
-                .RUN_REASONER
-                .value
-            ):
-                execution = self._run_reasoning(
-                    objective=str(
-                        state.get(
-                            "objective",
-                            "",
-                        )
-                    ),
-                    proposal=selected,
-                    research=self._safe_dict(
-                        state.get(
-                            "research",
-                            {},
-                        )
-                    ),
-                    context=normalized_context,
-                )
-
-            else:
-                execution = {
-                    "success": True,
-                    "status": "NO_ACTION",
-                }
-
-            state["execution"] = (
-                self._normalize_result(
-                    execution
-                )
-            )
-
-            if self._detect_success(
-                state["execution"]
-            ):
-                state["status"] = (
-                    ImprovementBrainStatus
-                    .LEARNING
-                    .value
-                )
-
-                self._learn_from_result(
-                    state
-                )
-
-                state["status"] = (
-                    ImprovementBrainStatus
-                    .COMPLETED
-                    .value
-                )
-
-                return self._result(
-                    state=state,
-                    success=True,
-                )
-
-            error = self._extract_error(
-                state["execution"]
-            )
-
-            state["errors"] = self._unique_strings(
-                state["errors"] + [error]
-            )
-
-            state["status"] = (
-                ImprovementBrainStatus.FAILED.value
-            )
-
-            return self._result(
-                state=state,
-                success=False,
-            )
-
-        except Exception as error:
-            message = (
-                f"ImprovementBrain execute error: "
-                f"{type(error).__name__}: {error}"
-            )
-
-            state["errors"] = self._unique_strings(
-                state["errors"] + [message]
-            )
-
-            state["status"] = (
-                ImprovementBrainStatus.FAILED.value
-            )
-
-            return self._result(
-                state=state,
-                success=False,
-            )
 
     def get_session(
         self,

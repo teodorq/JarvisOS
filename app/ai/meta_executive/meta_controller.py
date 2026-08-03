@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.core.project_paths import default_project_root
+
 from typing import Any
 
 from app.ai.meta_executive.meta_engine import (
@@ -17,7 +19,7 @@ class MetaController:
 
     def __init__(
         self,
-        project_root: str = "C:/JarvisAI",
+        project_root: str | None = None,
         meta_engine: MetaEngine | None = None,
         meta_memory: MetaMemory | None = None,
         meta_planner: MetaPlanner | None = None,
@@ -33,6 +35,7 @@ class MetaController:
 
         self.project_root = str(
             project_root
+            or default_project_root()
         ).strip()
 
         if not self.project_root:

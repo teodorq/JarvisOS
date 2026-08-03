@@ -8,6 +8,34 @@ from app.ai.commands.registry import CommandRegistry
 
 class PlannerLLM:
 
+    SOFTWARE_ENGINEER_PHRASES = (
+        "autonomous software engineer",
+        "autonomiczny software engineer",
+        "autonomiczny programista",
+        "zaimplementuj autonomicznie",
+        "zbuduj funkcję autonomicznie",
+        "zbuduj funkcje autonomicznie",
+        "napisz funkcję autonomicznie",
+        "napisz funkcje autonomicznie",
+        "stwórz funkcjonalność autonomicznie",
+        "stworz funkcjonalnosc autonomicznie",
+    )
+
+    ARCHITECT_PHRASES = (
+        "autonomous architect",
+        "architect ai",
+        "analizuj architekturę",
+        "analizuj architekture",
+        "przeanalizuj architekturę",
+        "przeanalizuj architekture",
+        "przeanalizuj architekturę projektu",
+        "przeanalizuj architekture projektu",
+        "zaplanuj refaktoryzację",
+        "zaplanuj refaktoryzacje",
+        "zaplanuj przebudowę architektury",
+        "zaplanuj przebudowe architektury",
+    )
+
     REASONER_PHRASES = (
         "rozumuj",
         "przeanalizuj cel",
@@ -80,6 +108,42 @@ class PlannerLLM:
         handler_hint = self.detect_handler(
             command
         )
+
+        if handler_hint == "software_engineer":
+            return self._special_plan(
+                command=command,
+                goal=(
+                    "Zaplanować i wykonać funkcjonalność "
+                    "przez Autonomous Software Engineer"
+                ),
+                steps=[
+                    "Rozbić cel na zadania implementacyjne",
+                    "Zbudować zależności i kolejność wykonania",
+                    "Wybrać najlepsze gotowe zadanie",
+                    "Przygotować kod przez Developer Agent",
+                    "Uruchomić walidację i testy",
+                    "Ponowić próbę albo wykonać rollback",
+                    "Wygenerować raport końcowy",
+                ],
+                handler_hint="software_engineer",
+            )
+
+        if handler_hint == "architect":
+            return self._special_plan(
+                command=command,
+                goal=(
+                    "Przeanalizować architekturę projektu "
+                    "przez Autonomous Architect"
+                ),
+                steps=[
+                    "Zbudować mapę modułów i zależności",
+                    "Ocenić coupling oraz cohesion",
+                    "Wykryć naruszenia architektury",
+                    "Przygotować blueprinty refaktoryzacji",
+                    "Uszeregować zmiany według ROI i ryzyka",
+                ],
+                handler_hint="architect",
+            )
 
         if handler_hint == "reasoner":
             return self._special_plan(
@@ -182,6 +246,14 @@ class PlannerLLM:
             return "standard"
 
         scores = {
+            "software_engineer": self._phrase_score(
+                command,
+                self.SOFTWARE_ENGINEER_PHRASES,
+            ),
+            "architect": self._phrase_score(
+                command,
+                self.ARCHITECT_PHRASES,
+            ),
             "reasoner": self._phrase_score(
                 command,
                 self.REASONER_PHRASES,
@@ -205,6 +277,8 @@ class PlannerLLM:
         # komendy developerskie mogą zawierać słowa takie jak
         # "przeanalizuj" albo "projekt".
         for handler in (
+            "software_engineer",
+            "architect",
             "autodev",
             "research",
             "reasoner",
@@ -270,7 +344,7 @@ class PlannerLLM:
             ),
             "actions": cleaned_actions,
             "handler_hint": handler_hint,
-            "planner_version": "2.1.0",
+            "planner_version": "2.3.0",
         }
 
     def _special_plan(
@@ -293,7 +367,7 @@ class PlannerLLM:
             "query": "",
             "actions": [],
             "handler_hint": handler_hint,
-            "planner_version": "2.1.0",
+            "planner_version": "2.3.0",
         }
 
     def _normalize_command(

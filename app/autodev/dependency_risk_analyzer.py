@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from app.core.project_paths import (
+    default_project_path,
+    default_project_root,
+)
+
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
@@ -38,7 +43,7 @@ class DependencyRiskAnalyzer:
 
     def __init__(
         self,
-        project_root: str = "C:/JarvisAI",
+        project_root: str = default_project_root(),
     ) -> None:
 
         self.project_root = Path(

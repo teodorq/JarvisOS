@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "release": "B311-B320 LOCAL NEURAL VOICE",
+  "stages": {
+    "B311": "REFERENCE_AUDIO_VERIFIED",
+    "B312": "ISOLATED_VOICE_RUNTIME_READY",
+    "B313": "POLISH_NEURAL_ENGINE_READY",
+    "B314": "LOCAL_REFERENCE_CONDITIONING_READY",
+    "B315": "BOUNDED_TEXT_CHUNKING_READY",
+    "B316": "SPEECH_CACHE_READY",
+    "B317": "ONECORE_FALLBACK_READY",
+    "B318": "INTERRUPT_AND_FAILURE_CIRCUIT_READY",
+    "B319": "LOCAL_PRIVACY_AND_WATERMARK_GATE_READY",
+    "B320": "NEURAL_VOICE_TEST_GATE_READY"
+  },
+  "voice": {
+    "enabled": true,
+    "provider": "CHATTERBOX_MULTILINGUAL_V3",
+    "language": "pl",
+    "device": "auto",
+    "model_version": "v3",
+    "reference_audio": "assets/voice/references/jarvis_style_reference_vtubereels_147563_20260801.mp3",
+    "reference_sha256": "DA37A5E79A606ED102856B9BADAEDBA9A64C569D9456CE2F92B6FA84202AB841",
+    "exaggeration": 0.58,
+    "cfg_weight": 0.0,
+    "temperature": 0.72,
+    "repetition_penalty": 1.35,
+    "timeout_seconds": 420,
+    "fallback": "WINDOWS_ONECORE_MICROSOFT_ADAM"
+  },
+  "privacy": {
+    "reference_stays_local": true,
+    "cloud_voice_api": false,
+    "telemetry_disabled": true,
+    "generated_audio_watermarked": true
+  },
+  "runtime": {
+    "isolated_environment": "runtime/voice_env",
+    "model_cache": "runtime/voice_cache",
+    "speech_cache": "runtime/voice_output/cache"
+  }
+}

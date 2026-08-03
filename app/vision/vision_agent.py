@@ -1,3 +1,6 @@
+"""Moduł JARVIS OS utrzymywany przez bezpieczny AutoDev."""
+
+from __future__ import annotations
 import json
 
 from app.vision.screen import ScreenVision
@@ -99,7 +102,7 @@ Jeśli nie widzisz filmu:
                 data["found"] = False
                 data["description"] = "Vision wskazał element za wysoko, prawdopodobnie pasek YouTube zamiast filmu."
         except Exception:
-            pass
+            raise RuntimeError("AutoDev: przechwycony wyjątek")
 
         return data
 

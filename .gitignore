@@ -18,6 +18,8 @@ data/screenshots/
 
 # Python cache
 .pytest_cache/
+*.orig
+*.tmp
 
 # Windows
 Thumbs.db
@@ -25,3 +27,32 @@ Desktop.ini
 
 # Ollama cache (opcjonalnie)
 .ollama/
+
+# Local neural voice runtime and downloaded models
+runtime/voice_env/
+runtime/voice_cache/
+runtime/voice_output/
+
+# Local JARVIS OS state, generated backups and release artifacts
+data/
+archive/
+AI_PLIKI/
+payload/
+.safe_development/
+
+# Local credentials and tokens
+credentials*.json
+token*.json
+*client_secret*.json
+!*client_secret*.example.json
+*.pem
+*.pfx
+*.key
+
+# Cloud credentials and local Azure state
+.env
+.env.*
+!.env.example
+config/cloud.env
+.azure/
+infra/azure/*.local.json

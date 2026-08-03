@@ -1,3 +1,8 @@
+from app.core.project_paths import (
+    default_project_path,
+    default_project_root,
+)
+
 from app.autodev.code_index import (
     CodeIndex
 )
@@ -13,7 +18,7 @@ class CodeSearchEngine:
 
     def __init__(
         self,
-        project_root="C:/JarvisAI"
+        project_root=default_project_root()
     ):
 
         self.scanner = ProjectScanner(

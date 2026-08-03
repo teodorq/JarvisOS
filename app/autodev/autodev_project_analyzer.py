@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from app.core.project_paths import (
+    default_project_path,
+    default_project_root,
+)
+
 from pathlib import Path
 from typing import Any
 
@@ -15,7 +20,7 @@ class AutoDevProjectAnalyzer:
 
     def __init__(
         self,
-        project_root: str = "C:/JarvisAI",
+        project_root: str = default_project_root(),
     ) -> None:
         self.project_root = Path(project_root).resolve()
         self.last_result: dict[str, Any] | None = None

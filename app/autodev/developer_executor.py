@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from app.core.project_paths import (
+    default_project_path,
+    default_project_root,
+)
+
 import os
 import stat
 import tempfile
@@ -15,14 +20,28 @@ from app.autodev.rollback_manager import RollbackManager
 
 class DeveloperExecutor:
 
-    def __init__(self, project_root="C:/JarvisAI"):
+    def __init__(
+        self,
+        project_root=default_project_root(),
+        run_tests: bool = True,
+        full_test_suite: bool = True,
+        test_timeout: int = 180,
+    ):
         self.project_root = Path(project_root).expanduser().resolve()
+        self.run_tests = bool(run_tests)
+        self.full_test_suite = bool(full_test_suite)
 
-        self.backups = BackupBundleManager()
-        self.validator = DeveloperValidator(
-            project_root=str(self.project_root)
+        self.backups = BackupBundleManager(
+            project_root=self.project_root
         )
-        self.rollback_manager = RollbackManager()
+        self.validator = DeveloperValidator(
+            project_root=str(self.project_root),
+            test_timeout=test_timeout,
+        )
+        self.rollback_manager = RollbackManager(
+            project_root=self.project_root,
+            backups=self.backups,
+        )
 
         self.last_transaction = None
         self.last_result = None
@@ -108,7 +127,9 @@ class DeveloperExecutor:
                     "changed_files": transaction.files(),
                     "rollback_available": bool(
                         transaction.backup_bundle_path
-                    )
+                    ),
+                    "tests_enabled": self.run_tests,
+                    "full_test_suite": self.full_test_suite,
                 }
             ),
             started_at
@@ -130,11 +151,46 @@ class DeveloperExecutor:
             self.last_result = result
             return result
 
-        result = self.rollback_manager.rollback(
-            self.last_transaction
+        transaction = self.last_transaction
+        primary_errors: list[str] = []
+
+        try:
+            primary_result = (
+                self.rollback_manager.rollback(
+                    transaction
+                )
+            )
+
+            if primary_result.success:
+                self.last_result = primary_result
+                return primary_result
+
+            primary_errors.extend(
+                primary_result.errors
+            )
+
+        except Exception as error:
+            primary_errors.append(
+                "Rollback manager error: "
+                f"{type(error).__name__}: {error}"
+            )
+
+        fallback_result = (
+            self._restore_transaction_snapshot(
+                transaction
+            )
         )
-        self.last_result = result
-        return result
+
+        if primary_errors:
+            fallback_result.data.setdefault(
+                "primary_rollback_errors",
+                list(
+                    primary_errors
+                ),
+            )
+
+        self.last_result = fallback_result
+        return fallback_result
 
     def preview(
         self,
@@ -163,61 +219,225 @@ class DeveloperExecutor:
 
     def _prepare_transaction_paths(
         self,
-        transaction: ChangeTransaction
+        transaction: ChangeTransaction,
     ) -> list[str]:
-        errors = []
-        seen_paths = set()
+        errors: list[str] = []
+        seen_paths: set[str] = set()
 
         for change in transaction.changes:
-            raw_path = str(change.path).strip()
+            raw_path = str(
+                change.path
+            ).strip()
 
             if not raw_path:
-                errors.append("Zmiana zawiera pustą ścieżkę pliku.")
+                errors.append(
+                    "Zmiana zawiera pustą ścieżkę pliku."
+                )
                 continue
 
-            candidate = Path(raw_path).expanduser()
-
-            if not candidate.is_absolute():
-                candidate = self.project_root / candidate
-
-            resolved = candidate.resolve()
+            creates_file = self._is_creation(
+                change
+            )
 
             try:
-                resolved.relative_to(self.project_root)
-            except ValueError:
+                resolved = (
+                    self._resolve_transaction_file(
+                        raw_path,
+                        allow_missing=creates_file,
+                    )
+                )
+
+                if (
+                    creates_file
+                    and resolved.exists()
+                ):
+                    raise FileExistsError(
+                        "Plik przeznaczony do utworzenia "
+                        f"już istnieje: {resolved}"
+                    )
+
+            except Exception as error:
                 errors.append(
-                    "Plik znajduje się poza katalogiem projektu: "
+                    f"{raw_path}: "
+                    f"{type(error).__name__}: {error}"
+                )
+                continue
+
+            normalized = os.path.normcase(
+                str(resolved)
+            )
+
+            if normalized in seen_paths:
+                errors.append(
+                    "Plik występuje kilka razy: "
                     f"{raw_path}"
                 )
                 continue
 
-            normalized = os.path.normcase(str(resolved))
-
-            if normalized in seen_paths:
-                errors.append(
-                    f"Plik występuje kilka razy: {raw_path}"
-                )
-                continue
-
-            seen_paths.add(normalized)
-            change.path = str(resolved)
+            seen_paths.add(
+                normalized
+            )
+            change.path = str(
+                resolved
+            )
 
         return errors
 
-    def _create_backup(
+    def _resolve_active_file(
         self,
-        transaction: ChangeTransaction
-    ) -> ExecutionResult:
-        manifest = self.backups.create_bundle(
-            files=transaction.files(),
-            goal=transaction.goal
+        raw_path: str | Path,
+    ) -> Path:
+        return self._resolve_transaction_file(
+            raw_path,
+            allow_missing=False,
         )
 
-        bundle_path = manifest.get("bundle_path", "")
-        files = manifest.get("files", [])
-        errors = manifest.get("errors", [])
+    def _resolve_transaction_file(
+        self,
+        raw_path: str | Path,
+        *,
+        allow_missing: bool,
+    ) -> Path:
+        candidate = Path(
+            raw_path
+        ).expanduser()
 
-        if errors or len(files) != len(transaction.changes):
+        if not candidate.is_absolute():
+            candidate = (
+                self.project_root
+                / candidate
+            )
+
+        if candidate.is_symlink():
+            raise OSError(
+                "Dowiązania symboliczne nie są "
+                f"dozwolone: {candidate}"
+            )
+
+        resolved = candidate.resolve(
+            strict=not allow_missing
+        )
+
+        try:
+            resolved.relative_to(
+                self.project_root
+            )
+        except ValueError as error:
+            raise ValueError(
+                "Plik znajduje się poza "
+                "katalogiem projektu."
+            ) from error
+
+        current = candidate
+
+        while current != self.project_root:
+            if (
+                current.exists()
+                and current.is_symlink()
+            ):
+                raise OSError(
+                    "Ścieżka zawiera dowiązanie: "
+                    f"{current}"
+                )
+
+            parent = current.parent
+
+            if parent == current:
+                break
+
+            current = parent
+
+        if resolved.exists():
+            if not resolved.is_file():
+                raise FileNotFoundError(
+                    f"To nie jest plik: {resolved}"
+                )
+        elif not allow_missing:
+            raise FileNotFoundError(
+                f"Plik nie istnieje: {resolved}"
+            )
+        else:
+            existing_parent = resolved.parent
+
+            while (
+                existing_parent != self.project_root
+                and not existing_parent.exists()
+            ):
+                existing_parent = (
+                    existing_parent.parent
+                )
+
+            if (
+                not existing_parent.exists()
+                or not existing_parent.is_dir()
+            ):
+                raise FileNotFoundError(
+                    "Nie znaleziono bezpiecznego "
+                    f"katalogu nadrzędnego: {resolved}"
+                )
+
+            try:
+                existing_parent.relative_to(
+                    self.project_root
+                )
+            except ValueError as error:
+                raise ValueError(
+                    "Katalog nadrzędny znajduje się "
+                    "poza projektem."
+                ) from error
+
+        return resolved
+
+
+    @staticmethod
+    def _is_creation(
+        change: object,
+    ) -> bool:
+        return (
+            str(
+                getattr(
+                    change,
+                    "operation",
+                    "update",
+                )
+            )
+            .strip()
+            .casefold()
+            == "create"
+        )
+
+    def _create_backup(
+        self,
+        transaction: ChangeTransaction,
+    ) -> ExecutionResult:
+        existing_files = (
+            transaction.existing_files()
+        )
+        manifest = self.backups.create_bundle(
+            files=existing_files,
+            goal=transaction.goal,
+        )
+        bundle_path = manifest.get(
+            "bundle_path",
+            "",
+        )
+        files = manifest.get(
+            "files",
+            [],
+        )
+        errors = manifest.get(
+            "errors",
+            [],
+        )
+        expected_files = len(
+            existing_files
+        )
+
+        if (
+            errors
+            or len(files)
+            != expected_files
+        ):
             return ExecutionResult(
                 success=False,
                 step_name="create_backup",
@@ -228,72 +448,87 @@ class DeveloperExecutor:
                 data={
                     "bundle_path": bundle_path,
                     "backed_up_files": len(files),
-                    "expected_files": len(transaction.changes)
+                    "expected_files": expected_files,
+                    "new_files": len(
+                        transaction.created_files()
+                    ),
                 },
                 errors=errors or [
-                    "Nie wszystkie pliki zostały zapisane."
-                ]
+                    "Nie wszystkie istniejące pliki "
+                    "zostały zapisane."
+                ],
             )
 
-        transaction.mark_backed_up(bundle_path)
+        transaction.mark_backed_up(
+            bundle_path
+        )
 
         return ExecutionResult(
             success=True,
             step_name="create_backup",
-            message="Utworzono backup transakcji.",
+            message=(
+                "Utworzono backup istniejących "
+                "plików transakcji."
+            ),
             data={
                 "bundle_path": bundle_path,
-                "files_count": len(files)
-            }
+                "files_count": len(files),
+                "new_files_count": len(
+                    transaction.created_files()
+                ),
+            },
         )
 
     def _apply_changes(
         self,
-        transaction: ChangeTransaction
+        transaction: ChangeTransaction,
     ) -> ExecutionResult:
-        transaction.mark_applying()
-        changed_files = []
+        prepared: list[
+            tuple[object, Path, bool]
+        ] = []
 
         for change in transaction.changes:
-            file_path = Path(change.path)
+            creates_file = self._is_creation(
+                change
+            )
 
             try:
-                if not file_path.is_file():
-                    raise FileNotFoundError(
-                        f"Plik nie istnieje: {file_path}"
+                file_path = (
+                    self._resolve_transaction_file(
+                        change.path,
+                        allow_missing=creates_file,
                     )
-
-                current_content = file_path.read_text(
-                    encoding="utf-8"
                 )
 
-                if current_content != change.old_content:
-                    change.status = "failed"
-                    change.error = (
-                        "Zawartość pliku zmieniła się "
-                        "od momentu utworzenia planu."
-                    )
-                    transaction.mark_failed()
-
-                    return ExecutionResult(
-                        success=False,
-                        step_name="apply_changes",
-                        message="Przerwano zapis zmian.",
-                        data={
-                            "changed_files": changed_files,
-                            "failed_file": change.path
-                        },
-                        errors=[change.error]
+                if creates_file:
+                    if file_path.exists():
+                        raise FileExistsError(
+                            "Plik został utworzony "
+                            "po przygotowaniu transakcji."
+                        )
+                else:
+                    current_content = (
+                        file_path.read_text(
+                            encoding="utf-8"
+                        )
                     )
 
-                self._atomic_write_text(
-                    file_path,
-                    change.new_content
+                    if (
+                        current_content
+                        != change.old_content
+                    ):
+                        raise RuntimeError(
+                            "Zawartość pliku zmieniła się "
+                            "od momentu utworzenia planu."
+                        )
+
+                prepared.append(
+                    (
+                        change,
+                        file_path,
+                        creates_file,
+                    )
                 )
-
-                change.status = "applied"
-                change.error = ""
-                changed_files.append(change.path)
 
             except Exception as error:
                 change.status = "failed"
@@ -303,12 +538,109 @@ class DeveloperExecutor:
                 return ExecutionResult(
                     success=False,
                     step_name="apply_changes",
-                    message="Nie udało się zapisać zmian.",
+                    message=(
+                        "Walidacja przed zapisem "
+                        "nie powiodła się."
+                    ),
+                    data={
+                        "changed_files": [],
+                        "failed_file": change.path,
+                    },
+                    errors=[
+                        f"{type(error).__name__}: {error}",
+                    ],
+                )
+
+        transaction.mark_applying()
+        changed_files: list[str] = []
+
+        for (
+            change,
+            prepared_path,
+            creates_file,
+        ) in prepared:
+            try:
+                file_path = (
+                    self._resolve_transaction_file(
+                        prepared_path,
+                        allow_missing=creates_file,
+                    )
+                )
+
+                if file_path != prepared_path:
+                    raise RuntimeError(
+                        "Ścieżka pliku zmieniła się "
+                        "przed zapisem."
+                    )
+
+                if creates_file:
+                    if file_path.exists():
+                        raise FileExistsError(
+                            "Plik pojawił się "
+                            "bezpośrednio przed zapisem."
+                        )
+
+                    file_path.parent.mkdir(
+                        parents=True,
+                        exist_ok=True,
+                    )
+                    verified_path = (
+                        self._resolve_transaction_file(
+                            file_path,
+                            allow_missing=True,
+                        )
+                    )
+
+                    if verified_path != file_path:
+                        raise RuntimeError(
+                            "Katalog docelowy zmienił się "
+                            "przed zapisem."
+                        )
+                else:
+                    current_content = (
+                        file_path.read_text(
+                            encoding="utf-8"
+                        )
+                    )
+
+                    if (
+                        current_content
+                        != change.old_content
+                    ):
+                        raise RuntimeError(
+                            "Zawartość pliku zmieniła się "
+                            "bezpośrednio przed zapisem."
+                        )
+
+                self._atomic_write_text(
+                    file_path,
+                    change.new_content,
+                )
+                change.status = "applied"
+                change.error = ""
+                changed_files.append(
+                    change.path
+                )
+
+            except Exception as error:
+                change.status = "failed"
+                change.error = str(error)
+                transaction.mark_failed()
+
+                return ExecutionResult(
+                    success=False,
+                    step_name="apply_changes",
+                    message=(
+                        "Nie udało się atomowo "
+                        "zapisać wszystkich zmian."
+                    ),
                     data={
                         "changed_files": changed_files,
-                        "failed_file": change.path
+                        "failed_file": change.path,
                     },
-                    errors=[str(error)]
+                    errors=[
+                        f"{type(error).__name__}: {error}",
+                    ],
                 )
 
         transaction.mark_applied()
@@ -316,19 +648,35 @@ class DeveloperExecutor:
         return ExecutionResult(
             success=True,
             step_name="apply_changes",
-            message="Zapisano wszystkie zmiany.",
+            message=(
+                "Zapisano wszystkie zmiany "
+                "atomowo na poziomie plików."
+            ),
             data={
-                "changed_files": changed_files
-            }
+                "changed_files": changed_files,
+                "created_files": (
+                    transaction.created_files()
+                ),
+            },
         )
 
     def _atomic_write_text(
         self,
         file_path: Path,
-        content: str
+        content: str,
     ) -> None:
-        file_mode = stat.S_IMODE(file_path.stat().st_mode)
+        file_mode = (
+            stat.S_IMODE(
+                file_path.stat().st_mode
+            )
+            if file_path.exists()
+            else 0o644
+        )
         temporary_path = None
+        file_path.parent.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
 
         try:
             with tempfile.NamedTemporaryFile(
@@ -338,20 +686,34 @@ class DeveloperExecutor:
                 dir=file_path.parent,
                 prefix=f".{file_path.name}.",
                 suffix=".autodev.tmp",
-                delete=False
+                delete=False,
             ) as temporary_file:
-                temporary_file.write(content)
+                temporary_file.write(
+                    content
+                )
                 temporary_file.flush()
-                os.fsync(temporary_file.fileno())
-                temporary_path = Path(temporary_file.name)
+                os.fsync(
+                    temporary_file.fileno()
+                )
+                temporary_path = Path(
+                    temporary_file.name
+                )
 
-            os.chmod(temporary_path, file_mode)
-            os.replace(temporary_path, file_path)
+            os.chmod(
+                temporary_path,
+                file_mode,
+            )
+            self._replace_with_retry(
+                temporary_path,
+                file_path,
+            )
             temporary_path = None
 
         finally:
             if temporary_path is not None:
-                temporary_path.unlink(missing_ok=True)
+                temporary_path.unlink(
+                    missing_ok=True
+                )
 
     def _validate_transaction(
         self,
@@ -371,6 +733,18 @@ class DeveloperExecutor:
             transaction.mark_failed()
             return import_result
 
+        tests_result = None
+
+        if self.run_tests:
+            tests_result = self.validator.run_test_suite(
+                changed_files=transaction.files(),
+                full_suite=self.full_test_suite,
+            )
+
+            if not tests_result.success:
+                transaction.mark_failed()
+                return tests_result
+
         return ExecutionResult(
             success=True,
             step_name="validate_transaction",
@@ -380,7 +754,15 @@ class DeveloperExecutor:
             ),
             data={
                 "files": files_result.as_dict(),
-                "imports": import_result.as_dict()
+                "imports": import_result.as_dict(),
+                "tests": (
+                    tests_result.as_dict()
+                    if tests_result is not None
+                    else {
+                        "success": True,
+                        "status": "SKIPPED",
+                    }
+                ),
             }
         )
 
@@ -389,35 +771,235 @@ class DeveloperExecutor:
         result: ExecutionResult,
         transaction: ChangeTransaction
     ) -> None:
+        primary_errors: list[str] = []
+
         try:
             rollback_result = self.rollback_manager.rollback(
                 transaction
             )
-            result.data.setdefault(
-                "rollback",
-                rollback_result.as_dict()
-            )
 
-            if not rollback_result.success:
-                result.errors.extend(
-                    error
-                    for error in rollback_result.errors
-                    if error not in result.errors
+            if rollback_result.success:
+                result.data["rollback"] = (
+                    rollback_result.as_dict()
                 )
+                return
+
+            primary_errors.extend(
+                rollback_result.errors
+            )
 
         except Exception as error:
-            result.data.setdefault(
-                "rollback",
-                {
-                    "success": False,
-                    "step_name": "rollback",
-                    "message": "Rollback zgłosił wyjątek.",
-                    "errors": [str(error)]
-                }
+            primary_errors.append(
+                "Rollback manager error: "
+                f"{type(error).__name__}: {error}"
             )
-            result.errors.append(
-                f"Rollback error: {type(error).__name__}: {error}"
+
+        fallback_result = (
+            self._restore_transaction_snapshot(
+                transaction
             )
+        )
+        fallback_data = fallback_result.as_dict()
+
+        if primary_errors:
+            fallback_data.setdefault(
+                "data",
+                {},
+            )["primary_rollback_errors"] = list(
+                primary_errors
+            )
+
+        result.data["rollback"] = fallback_data
+
+        if not fallback_result.success:
+            for error in (
+                primary_errors
+                + fallback_result.errors
+            ):
+                if error not in result.errors:
+                    result.errors.append(
+                        error
+                    )
+
+    def _restore_transaction_snapshot(
+        self,
+        transaction: ChangeTransaction,
+    ) -> ExecutionResult:
+        prepared: list[
+            tuple[object, Path, bool]
+        ] = []
+
+        try:
+            for change in transaction.changes:
+                creates_file = self._is_creation(
+                    change
+                )
+                file_path = (
+                    self._resolve_transaction_file(
+                        change.path,
+                        allow_missing=creates_file,
+                    )
+                )
+                prepared.append(
+                    (
+                        change,
+                        file_path,
+                        creates_file,
+                    )
+                )
+        except Exception as error:
+            return ExecutionResult(
+                success=False,
+                step_name="rollback_fallback",
+                message=(
+                    "Awaryjny rollback nie przeszedł "
+                    "walidacji ścieżek."
+                ),
+                errors=[
+                    f"{type(error).__name__}: {error}",
+                ],
+            )
+
+        restored: list[str] = []
+        removed: list[str] = []
+
+        try:
+            for (
+                change,
+                file_path,
+                creates_file,
+            ) in reversed(prepared):
+                if creates_file:
+                    if file_path.exists():
+                        if not file_path.is_file():
+                            raise ValueError(
+                                "Nowy target nie jest plikiem: "
+                                f"{file_path}"
+                            )
+
+                        file_path.unlink()
+
+                    removed.append(
+                        str(file_path)
+                    )
+                    self._remove_empty_parents(
+                        file_path.parent
+                    )
+                else:
+                    DeveloperExecutor._atomic_write_text(
+                        self,
+                        file_path,
+                        change.old_content,
+                    )
+                    restored.append(
+                        str(file_path)
+                    )
+
+        except Exception as error:
+            return ExecutionResult(
+                success=False,
+                step_name="rollback_fallback",
+                message=(
+                    "Awaryjne przywracanie plików "
+                    "nie powiodło się."
+                ),
+                data={
+                    "restored": restored,
+                    "removed_created_files": removed,
+                },
+                errors=[
+                    f"{type(error).__name__}: {error}",
+                ],
+            )
+
+        transaction.mark_rolled_back()
+
+        for change in transaction.changes:
+            change.status = "rolled_back"
+            change.error = ""
+
+        return ExecutionResult(
+            success=True,
+            step_name="rollback_fallback",
+            message=(
+                "Przywrócono istniejące pliki "
+                "i usunięto nowe pliki z lokalnego "
+                "snapshotu transakcji."
+            ),
+            data={
+                "restored": restored,
+                "removed_created_files": removed,
+                "fallback": True,
+            },
+        )
+
+    def _remove_empty_parents(
+        self,
+        directory: Path,
+    ) -> None:
+        current = directory
+
+        while (
+            current != self.project_root
+            and current.is_relative_to(
+                self.project_root
+            )
+        ):
+            try:
+                current.rmdir()
+            except OSError:
+                break
+
+            current = current.parent
+
+    @staticmethod
+    def _replace_with_retry(
+        source: Path,
+        destination: Path,
+        *,
+        attempts: int = 6,
+    ) -> None:
+        last_error: OSError | None = None
+
+        for attempt in range(
+            max(
+                1,
+                attempts,
+            )
+        ):
+            try:
+                if destination.exists():
+                    try:
+                        current_mode = stat.S_IMODE(
+                            destination.stat().st_mode
+                        )
+                        os.chmod(
+                            destination,
+                            current_mode
+                            | stat.S_IWRITE,
+                        )
+                    except OSError:
+                        raise RuntimeError("AutoDev: przechwycony wyjątek")
+
+                os.replace(
+                    source,
+                    destination,
+                )
+                return
+
+            except OSError as error:
+                last_error = error
+
+                if attempt + 1 >= attempts:
+                    break
+
+                time.sleep(
+                    0.02
+                    * (attempt + 1)
+                )
+
+        if last_error is not None:
+            raise last_error
 
     def _finish_result(
         self,

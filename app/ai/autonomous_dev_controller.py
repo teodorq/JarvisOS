@@ -1,6 +1,11 @@
+"""Moduł JARVIS OS utrzymywany przez bezpieczny AutoDev."""
+
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
+import re
+import threading
+import time
 from typing import Any
 
 from app.autodev.autodev_pipeline import (
@@ -12,15 +17,23 @@ from app.autodev.autonomous_task_queue import (
     TaskPriority,
     TaskStatus,
 )
+from app.autodev.code_generator import CodeGenerator
 from app.autodev.developer_agent import DeveloperAgent
 from app.autodev.developer_controller import DeveloperController
 from app.autodev.developer_request import DeveloperRequest
 from app.autodev.reasoning_memory import ReasoningMemory
+from app.autodev.error_reporting import AutoDevErrorReporter
+from app.ai.autonomous_dev_orchestration_service import AutonomousDevOrchestrationService
+from app.core.project_paths import resolve_project_root
 
 
 @dataclass(slots=True)
 class AutonomousDevControllerPolicy:
-    project_root: str = "C:/JarvisAI"
+    project_root: str = field(
+        default_factory=lambda: str(
+            resolve_project_root()
+        )
+    )
     queue_storage_path: str = (
         "data/autodev/autonomous_task_queue.json"
     )
@@ -63,6 +76,9 @@ class AutonomousDevControllerPolicy:
             )
 
 
+_AUTONOMOUS_DEV_ORCHESTRATION = AutonomousDevOrchestrationService()
+
+
 class AutonomousDevController:
 
     COMMAND_PREFIXES = (
@@ -72,9 +88,17 @@ class AutonomousDevController:
         "autonomiczny autodev",
         "autonomiczny rozwój",
         "kolejka autodev",
-        "status autodev",
+        "background autodev",
+        "autodev background",
         "developer 2.0",
         "developer backlog",
+        "rozwijaj projekt",
+        "rozwój projektu",
+        "rozwoj projektu",
+        "pracuj nad projektem",
+        "pracuj autonomicznie",
+        "autonomiczna pętla",
+        "autonomiczna petla",
     )
 
     PRIORITY_KEYWORDS = {
@@ -124,10 +148,12 @@ class AutonomousDevController:
         planner: AutonomousPlanner | None = None,
         developer_agent: DeveloperAgent | None = None,
         developer_controller: DeveloperController | None = None,
+        code_generator: CodeGenerator | None = None,
     ) -> None:
 
         self.policy = policy or AutonomousDevControllerPolicy()
         self.policy.validate()
+        self.project_root = self.policy.project_root
 
         pipeline_policy = AutoDevPipelinePolicy(
             project_root=self.policy.project_root,
@@ -148,6 +174,9 @@ class AutonomousDevController:
         )
 
         self.developer_agent = developer_agent or DeveloperAgent()
+        self.code_generator = code_generator or CodeGenerator(
+            project_root=self.policy.project_root
+        )
 
         self.developer_controller = (
             developer_controller
@@ -161,6 +190,18 @@ class AutonomousDevController:
         self.last_generation_cycle: dict[str, Any] | None = None
         self.last_autonomous_loop: dict[str, Any] | None = None
         self.learning_memory = ReasoningMemory()
+        self.last_timed_loop: dict[str, Any] | None = None
+        self._timed_stop_event = threading.Event()
+        self._timed_thread: threading.Thread | None = None
+
+        self.last_background_loop: dict[str, Any] | None = None
+        self._background_stop_event = threading.Event()
+        self._background_thread: threading.Thread | None = None
+
+        self.last_goal_generation: dict[str, Any] | None = None
+        self._last_goal_generation_at = 0.0
+        self._goal_generation_interval = 60.0
+        self._minimum_backlog_before_generation = 5
 
     def can_handle(
         self,
@@ -179,218 +220,598 @@ class AutonomousDevController:
         command: str,
         context: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-
-        normalized_command = str(command).strip()
-        normalized = normalized_command.casefold()
-        context = dict(context or {})
-
-        if not normalized_command:
-            return {
-                "success": False,
-                "status": "EMPTY_COMMAND",
-                "error": (
-                    "AutonomousDevController "
-                    "otrzymał puste polecenie."
-                ),
-            }
-
-        if (
-            "decision ranking" in normalized
-            or "ranking zadań" in normalized
-            or "ranking zadan" in normalized
-            or "wybierz najlepsze zadanie" in normalized
-            or "najlepsze zadanie autodev" in normalized
-        ):
-            return self.decision_report(
-                limit=self._safe_positive_int(
-                    context.get("limit"),
-                    10,
-                )
-            )
-
-        if (
-            "autonomous loop" in normalized
-            or "autonomiczna pętla" in normalized
-            or "autonomiczna petla" in normalized
-            or "rozwijaj projekt autonomicznie" in normalized
-            or "pracuj autonomicznie" in normalized
-        ):
-            return self.run_autonomous_loop(
-                max_cycles=self._safe_positive_int(
-                    context.get("max_cycles"),
-                    5,
-                ),
-                context=context,
-                auto_approve=context.get("auto_approve"),
-                auto_execute=context.get("auto_execute"),
-                stop_on_failure=bool(
-                    context.get("stop_on_failure", True)
-                ),
-            )
-
-        if (
-            "generation cycle" in normalized
-            or "cykl generowania" in normalized
-            or "generuj zmianę" in normalized
-            or "generuj zmiane" in normalized
-        ):
-            return self.run_generation_cycle(
-                context=context
-            )
-
-        if (
-            "planning cycle" in normalized
-            or "cykl planowania" in normalized
-            or "zaplanuj następne" in normalized
-            or "zaplanuj nastepne" in normalized
-        ):
-            return self.run_planning_cycle(
-                context_by_module=context.get(
-                    "context_by_module"
-                )
-            )
-
-        if (
-            "scan" in normalized
-            or "skanuj" in normalized
-            or "analizuj projekt" in normalized
-        ):
-            return self.scan_project(
-                context_by_module=context.get(
-                    "context_by_module"
-                )
-            )
-
-        if (
-            "health" in normalized
-            or "diagnostyka" in normalized
-            or "stan systemu autodev" in normalized
-        ):
-            return self.health_report()
-
-        if (
-            "planner status" in normalized
-            or "plan status" in normalized
-        ):
-            return {
-                "success": True,
-                "status": "PLANNER_STATUS",
-                "last_scan": self.last_scan,
-                "last_planning_cycle": self.last_planning_cycle,
-                "last_generation_cycle": self.last_generation_cycle,
-                "planner": self.planner.status(),
-            }
-
-        if (
-            "next planned" in normalized
-            or "następny plan" in normalized
-            or "nastepny plan" in normalized
-        ):
-            return self.planner.next_task()
-
-        if "status" in normalized:
-            return {
-                "success": True,
-                "status": "STATUS",
-                "pipeline": self.pipeline.status(),
-                "backlog": self.backlog_summary(),
-                "planner": self.planner.status(),
-                "last_planning_cycle": self.last_planning_cycle,
-                "last_generation_cycle": self.last_generation_cycle,
-            }
-
-        if (
-            "list" in normalized
-            or "lista" in normalized
-            or "backlog" in normalized
-        ):
-            return {
-                "success": True,
-                "status": "BACKLOG",
-                "tasks": self.list_tasks(),
-                "summary": self.backlog_summary(),
-                "planned_tasks": (
-                    self.planner.backlog.list_items()
-                ),
-            }
-
-        if (
-            "next" in normalized
-            or "następne zadanie" in normalized
-            or "nastepne zadanie" in normalized
-        ):
-            return self.next_task()
-
-        if (
-            "start" in normalized
-            or "uruchom" in normalized
-        ):
-            started = self.pipeline.start()
-
-            return {
-                "success": True,
-                "status": (
-                    "STARTED"
-                    if started
-                    else "ALREADY_RUNNING"
-                ),
-                "pipeline": self.pipeline.status(),
-            }
-
-        if (
-            "stop" in normalized
-            or "zatrzymaj" in normalized
-        ):
-            stopped = self.pipeline.stop(wait=False)
-
-            return {
-                "success": True,
-                "status": (
-                    "STOPPED"
-                    if stopped
-                    else "ALREADY_STOPPED"
-                ),
-                "pipeline": self.pipeline.status(),
-            }
-
-        if (
-            "pause" in normalized
-            or "wstrzymaj" in normalized
-        ):
-            paused = self.pipeline.pause()
-
-            return {
-                "success": paused,
-                "status": (
-                    "PAUSED"
-                    if paused
-                    else "NOT_RUNNING"
-                ),
-                "pipeline": self.pipeline.status(),
-            }
-
-        if (
-            "resume" in normalized
-            or "wznów" in normalized
-            or "wznow" in normalized
-        ):
-            resumed = self.pipeline.resume()
-
-            return {
-                "success": resumed,
-                "status": (
-                    "RUNNING"
-                    if resumed
-                    else "NOT_PAUSED"
-                ),
-                "pipeline": self.pipeline.status(),
-            }
-
-        return self.queue_goal(
-            goal=normalized_command,
-            source=str(context.get("source", "Brain")),
-            context=context,
+        return _AUTONOMOUS_DEV_ORCHESTRATION.handle(
+            self,
+            command,
+            context,
         )
+
+
+    @staticmethod
+    def _is_timed_development_command(
+        normalized_command: str,
+    ) -> bool:
+
+        development_phrases = (
+            "rozwijaj projekt",
+            "rozwój projektu",
+            "rozwoj projektu",
+            "pracuj nad projektem",
+            "pracuj autonomicznie",
+        )
+
+        return any(
+            phrase in normalized_command
+            for phrase in development_phrases
+        )
+
+    @staticmethod
+    def _extract_duration_seconds(
+        normalized_command: str,
+    ) -> int:
+
+        patterns = (
+            (
+                r"(\d+)\s*(?:godzin|godziny|godzinę|godzine|h)\b",
+                3600,
+            ),
+            (
+                r"(\d+)\s*(?:minut|minuty|minutę|minute|min)\b",
+                60,
+            ),
+            (
+                r"(\d+)\s*(?:sekund|sekundy|sekundę|sekunde|s)\b",
+                1,
+            ),
+        )
+
+        for pattern, multiplier in patterns:
+            match = re.search(
+                pattern,
+                normalized_command,
+            )
+
+            if match:
+                return max(
+                    1,
+                    int(match.group(1)) * multiplier,
+                )
+
+        return 30 * 60
+
+    def start_timed_autonomous_loop(
+        self,
+        *,
+        duration_seconds: int,
+        context: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+
+        if (
+            self._timed_thread is not None
+            and self._timed_thread.is_alive()
+        ):
+            return {
+                "success": True,
+                "status": "ALREADY_RUNNING",
+                "duration_seconds": duration_seconds,
+                "last_timed_loop": self.last_timed_loop,
+            }
+
+        normalized_context = dict(context or {})
+        normalized_context.setdefault(
+            "auto_approve",
+            True,
+        )
+        normalized_context.setdefault(
+            "auto_execute",
+            True,
+        )
+        normalized_context.setdefault(
+            "stop_on_failure",
+            True,
+        )
+
+        self._timed_stop_event.clear()
+
+        self.last_timed_loop = {
+            "success": True,
+            "status": "STARTING",
+            "duration_seconds": duration_seconds,
+            "started_at": time.time(),
+            "completed_cycles": 0,
+            "attempted_cycles": 0,
+            "last_result": None,
+        }
+
+        self._timed_thread = threading.Thread(
+            target=self._timed_loop_worker,
+            kwargs={
+                "duration_seconds": max(
+                    1,
+                    int(duration_seconds),
+                ),
+                "context": normalized_context,
+            },
+            name="jarvis-autonomous-dev-loop",
+            daemon=True,
+        )
+        self._timed_thread.start()
+
+        return {
+            "success": True,
+            "status": "TIMED_LOOP_STARTED",
+            "duration_seconds": duration_seconds,
+            "auto_approve": bool(
+                normalized_context.get(
+                    "auto_approve",
+                    True,
+                )
+            ),
+            "auto_execute": bool(
+                normalized_context.get(
+                    "auto_execute",
+                    True,
+                )
+            ),
+            "message": (
+                "Autonomiczny rozwój projektu "
+                "został uruchomiony w tle."
+            ),
+        }
+
+    def stop_timed_autonomous_loop(
+        self,
+    ) -> dict[str, Any]:
+
+        running = bool(
+            self._timed_thread is not None
+            and self._timed_thread.is_alive()
+        )
+
+        self._timed_stop_event.set()
+
+        return {
+            "success": True,
+            "status": (
+                "STOP_REQUESTED"
+                if running
+                else "NOT_RUNNING"
+            ),
+            "last_timed_loop": self.last_timed_loop,
+        }
+
+    def _timed_loop_worker(
+        self,
+        *,
+        duration_seconds: int,
+        context: dict[str, Any],
+    ) -> None:
+
+        started_at = time.monotonic()
+        deadline = started_at + duration_seconds
+        attempted_cycles = 0
+        completed_cycles = 0
+        final_status = "TIME_LIMIT_REACHED"
+        last_result: dict[str, Any] | None = None
+
+        try:
+            while (
+                time.monotonic() < deadline
+                and not self._timed_stop_event.is_set()
+            ):
+                attempted_cycles += 1
+
+                self._maybe_generate_autonomous_goals(
+                    context
+                )
+
+                last_result = self.run_autonomous_loop(
+                    max_cycles=1,
+                    context=context,
+                    auto_approve=bool(
+                        context.get(
+                            "auto_approve",
+                            True,
+                        )
+                    ),
+                    auto_execute=bool(
+                        context.get(
+                            "auto_execute",
+                            True,
+                        )
+                    ),
+                    stop_on_failure=bool(
+                        context.get(
+                            "stop_on_failure",
+                            True,
+                        )
+                    ),
+                )
+
+                completed_cycles += int(
+                    last_result.get(
+                        "completed_cycles",
+                        0,
+                    )
+                    or 0
+                )
+
+                status = str(
+                    last_result.get(
+                        "status",
+                        "UNKNOWN",
+                    )
+                ).upper()
+
+                if status in {
+                    "GENERATION_FAILED",
+                    "EXECUTION_FAILED",
+                    "WAITING_FOR_CODE_INPUT",
+                    "WAITING_FOR_APPROVAL",
+                    "APPROVED_NOT_EXECUTED",
+                    "ROLLED_BACK",
+                }:
+                    final_status = status
+                    break
+
+                if status == "NO_TASKS":
+                    time.sleep(1.0)
+                else:
+                    time.sleep(0.2)
+
+            if self._timed_stop_event.is_set():
+                final_status = "STOPPED_BY_USER"
+
+        except Exception as error:
+            report = AutoDevErrorReporter.capture(
+                error,
+                stage="autonomous_dev.timed_loop",
+                context={
+                    "duration_seconds": duration_seconds,
+                    "cycles_completed": cycles_completed,
+                },
+                project_root=self.project_root,
+            )
+            final_status = "FAILED"
+            last_result = {
+                "success": False,
+                "status": "FAILED",
+                "error": report.summary(),
+                "error_details": report.as_dict(),
+            }
+
+        self.last_timed_loop = {
+            "success": final_status not in {
+                "FAILED",
+                "GENERATION_FAILED",
+                "EXECUTION_FAILED",
+            },
+            "status": final_status,
+            "duration_seconds": duration_seconds,
+            "elapsed_seconds": round(
+                time.monotonic() - started_at,
+                3,
+            ),
+            "attempted_cycles": attempted_cycles,
+            "completed_cycles": completed_cycles,
+            "last_result": last_result,
+            "finished_at": time.time(),
+        }
+
+        self._remember_learning(
+            success=bool(
+                self.last_timed_loop["success"]
+            ),
+            status=final_status,
+            lessons=[
+                (
+                    "Czasowa pętla autonomiczna "
+                    f"wykonała {completed_cycles} cykli."
+                )
+            ],
+            metadata={
+                "stage": "timed_autonomous_loop",
+                "duration_seconds": duration_seconds,
+                "attempted_cycles": attempted_cycles,
+            },
+        )
+
+    def start_background(
+        self,
+        *,
+        context: dict[str, Any] | None = None,
+        interval_seconds: float = 2.0,
+    ) -> dict[str, Any]:
+
+        if (
+            self._background_thread is not None
+            and self._background_thread.is_alive()
+        ):
+            return {
+                "success": True,
+                "status": "ALREADY_RUNNING",
+                "running": True,
+                "last_background_loop": (
+                    self.last_background_loop
+                ),
+            }
+
+        normalized_context = dict(
+            context
+            or {}
+        )
+        normalized_context.setdefault(
+            "auto_approve",
+            True,
+        )
+        normalized_context.setdefault(
+            "auto_execute",
+            True,
+        )
+        normalized_context.setdefault(
+            "stop_on_failure",
+            False,
+        )
+        normalized_context.setdefault(
+            "source",
+            "BrainAutostart",
+        )
+
+        safe_interval = max(
+            0.5,
+            float(interval_seconds),
+        )
+
+        self._background_stop_event.clear()
+
+        self.last_background_loop = {
+            "success": True,
+            "status": "STARTING",
+            "running": True,
+            "started_at": time.time(),
+            "completed_cycles": 0,
+            "attempted_cycles": 0,
+            "last_result": None,
+            "interval_seconds": safe_interval,
+        }
+
+        self._background_thread = threading.Thread(
+            target=self._background_loop_worker,
+            kwargs={
+                "context": normalized_context,
+                "interval_seconds": safe_interval,
+            },
+            name="jarvis-background-autodev",
+            daemon=True,
+        )
+        self._background_thread.start()
+
+        return {
+            "success": True,
+            "status": "BACKGROUND_STARTED",
+            "running": True,
+            "interval_seconds": safe_interval,
+        }
+
+    def stop_background(
+        self,
+        *,
+        wait: bool = False,
+        timeout: float = 5.0,
+    ) -> dict[str, Any]:
+
+        running = bool(
+            self._background_thread is not None
+            and self._background_thread.is_alive()
+        )
+
+        self._background_stop_event.set()
+
+        if (
+            wait
+            and self._background_thread is not None
+            and self._background_thread.is_alive()
+        ):
+            self._background_thread.join(
+                timeout=max(
+                    0.1,
+                    float(timeout),
+                )
+            )
+
+        still_running = bool(
+            self._background_thread is not None
+            and self._background_thread.is_alive()
+        )
+
+        return {
+            "success": not still_running,
+            "status": (
+                "STOPPED"
+                if not still_running
+                else "STOP_REQUESTED"
+            ),
+            "running": still_running,
+            "was_running": running,
+        }
+
+    def _background_loop_worker(
+        self,
+        *,
+        context: dict[str, Any],
+        interval_seconds: float,
+    ) -> None:
+
+        """Coordinates background loop worker for the JARVIS OS runtime."""
+        attempted_cycles = 0
+        completed_cycles = 0
+        final_status = "STOPPED"
+        last_result: dict[str, Any] | None = None
+
+        self.pipeline.start()
+
+        if self._background_stop_event.wait(8.0):
+            return
+
+        try:
+            while not self._background_stop_event.is_set():
+                if (
+                    self._timed_thread is not None
+                    and self._timed_thread.is_alive()
+                ):
+                    time.sleep(
+                        interval_seconds
+                    )
+                    continue
+
+                attempted_cycles += 1
+
+                last_result = self.run_autonomous_loop(
+                    max_cycles=1,
+                    context=context,
+                    auto_approve=bool(
+                        context.get(
+                            "auto_approve",
+                            True,
+                        )
+                    ),
+                    auto_execute=bool(
+                        context.get(
+                            "auto_execute",
+                            True,
+                        )
+                    ),
+                    stop_on_failure=bool(
+                        context.get(
+                            "stop_on_failure",
+                            False,
+                        )
+                    ),
+                )
+
+                completed_cycles += int(
+                    last_result.get(
+                        "completed_cycles",
+                        0,
+                    )
+                    or 0
+                )
+
+                final_status = str(
+                    last_result.get(
+                        "status",
+                        "UNKNOWN",
+                    )
+                ).upper()
+
+                self.last_background_loop = {
+                    "success": bool(
+                        last_result.get(
+                            "success",
+                            False,
+                        )
+                    ),
+                    "status": final_status,
+                    "running": True,
+                    "started_at": (
+                        self.last_background_loop
+                        or {}
+                    ).get(
+                        "started_at",
+                        time.time(),
+                    ),
+                    "updated_at": time.time(),
+                    "completed_cycles": completed_cycles,
+                    "attempted_cycles": attempted_cycles,
+                    "last_result": last_result,
+                    "interval_seconds": interval_seconds,
+                }
+
+                if final_status in {
+                    "NO_TASKS",
+                    "WAITING_FOR_CODE_INPUT",
+                    "WAITING_FOR_APPROVAL",
+                    "GENERATION_FAILED",
+                    "EXECUTION_FAILED",
+                    "FAILED_AND_ROLLED_BACK",
+                    "ROLLED_BACK",
+                }:
+                    time.sleep(
+                        interval_seconds
+                    )
+                else:
+                    time.sleep(
+                        min(
+                            interval_seconds,
+                            1.0,
+                        )
+                    )
+
+        except Exception as error:
+            report = AutoDevErrorReporter.capture(
+                error,
+                stage="autonomous_dev.background_loop",
+                context={
+                    "cycles_completed": cycles_completed,
+                },
+                project_root=self.project_root,
+            )
+            final_status = "FAILED"
+            last_result = {
+                "success": False,
+                "status": "FAILED",
+                "error": report.summary(),
+                "error_details": report.as_dict(),
+            }
+
+        self.last_background_loop = {
+            "success": final_status != "FAILED",
+            "status": (
+                "STOPPED"
+                if self._background_stop_event.is_set()
+                else final_status
+            ),
+            "running": False,
+            "completed_cycles": completed_cycles,
+            "attempted_cycles": attempted_cycles,
+            "last_result": last_result,
+            "finished_at": time.time(),
+            "interval_seconds": interval_seconds,
+        }
+
+    def background_status(
+        self,
+    ) -> dict[str, Any]:
+
+        running = bool(
+            self._background_thread is not None
+            and self._background_thread.is_alive()
+        )
+
+        result = dict(
+            self.last_background_loop
+            or {}
+        )
+
+        result.setdefault(
+            "success",
+            True,
+        )
+        result["running"] = running
+        result["status"] = (
+            "RUNNING"
+            if running
+            else str(
+                result.get(
+                    "status",
+                    "STOPPED",
+                )
+            )
+        )
+        result["pipeline"] = self.pipeline.status()
+        result["backlog"] = self.backlog_summary()
+
+        return result
 
     def decision_report(
         self,
@@ -446,162 +867,25 @@ class AutonomousDevController:
         auto_execute: bool | None = None,
         stop_on_failure: bool = True,
     ) -> dict[str, Any]:
-
-        normalized_context = dict(context or {})
-        cycles_limit = self._safe_positive_int(
-            max_cycles,
-            5,
+        return _AUTONOMOUS_DEV_ORCHESTRATION.run_autonomous_loop(
+            self,
+            max_cycles=max_cycles,
+            context=context,
+            auto_approve=auto_approve,
+            auto_execute=auto_execute,
+            stop_on_failure=stop_on_failure,
         )
 
-        approve_changes = (
-            self.policy.auto_approve
-            if auto_approve is None
-            else bool(auto_approve)
+
+    def _collect_execution_errors(
+        self,
+        execution: dict[str, Any],
+    ) -> list[str]:
+        return _AUTONOMOUS_DEV_ORCHESTRATION._collect_execution_errors(
+            self,
+            execution,
         )
-        execute_changes = (
-            self.policy.auto_execute
-            if auto_execute is None
-            else bool(auto_execute)
-        )
 
-        started_pipeline = False
-        if self.policy.auto_start_pipeline:
-            started_pipeline = self.pipeline.start()
-
-        cycle_results: list[dict[str, Any]] = []
-        completed_cycles = 0
-        loop_status = "COMPLETED"
-        success = True
-        blocking_reason = ""
-
-        for cycle_number in range(1, cycles_limit + 1):
-            self.last_planning_cycle = None
-            self.last_generation_cycle = None
-
-            generation = self.run_generation_cycle(
-                context=normalized_context
-            )
-
-            cycle_result: dict[str, Any] = {
-                "cycle": cycle_number,
-                "generation": generation,
-            }
-            generation_status = str(
-                generation.get("status", "UNKNOWN")
-            ).upper()
-
-            if generation_status == "NO_TASKS":
-                loop_status = "NO_TASKS"
-                cycle_results.append(cycle_result)
-                break
-
-            if generation_status == "CODE_INPUT_REQUIRED":
-                loop_status = "WAITING_FOR_CODE_INPUT"
-                blocking_reason = (
-                    "Planner nie dostarczył kompletnego kodu "
-                    "potrzebnego do utworzenia patcha."
-                )
-                cycle_results.append(cycle_result)
-                break
-
-            if not generation.get("success", False):
-                success = False
-                loop_status = "GENERATION_FAILED"
-                blocking_reason = str(
-                    generation.get(
-                        "message",
-                        generation.get("error", ""),
-                    )
-                )
-                cycle_results.append(cycle_result)
-
-                if stop_on_failure:
-                    break
-
-                continue
-
-            if not approve_changes:
-                loop_status = "WAITING_FOR_APPROVAL"
-                blocking_reason = (
-                    "Automatyczna akceptacja jest wyłączona."
-                )
-                cycle_results.append(cycle_result)
-                break
-
-            execution = self.approve_generated_change(
-                auto_execute=execute_changes
-            )
-            cycle_result["execution"] = execution
-            cycle_results.append(cycle_result)
-
-            execution_status = str(
-                execution.get("status", "UNKNOWN")
-            ).upper()
-
-            if not execute_changes:
-                loop_status = "APPROVED_NOT_EXECUTED"
-                blocking_reason = (
-                    "Zmiana została zatwierdzona, ale "
-                    "automatyczne wykonanie jest wyłączone."
-                )
-                break
-
-            if execution.get("success", False):
-                completed_cycles += 1
-                continue
-
-            success = False
-            loop_status = (
-                execution_status
-                if execution_status
-                else "EXECUTION_FAILED"
-            )
-            blocking_reason = str(
-                execution.get(
-                    "message",
-                    execution.get("error", ""),
-                )
-            )
-
-            if stop_on_failure:
-                break
-
-        else:
-            loop_status = "MAX_CYCLES_REACHED"
-
-        result = {
-            "success": success,
-            "status": loop_status,
-            "max_cycles": cycles_limit,
-            "completed_cycles": completed_cycles,
-            "cycles_attempted": len(cycle_results),
-            "auto_approve": approve_changes,
-            "auto_execute": execute_changes,
-            "stop_on_failure": bool(stop_on_failure),
-            "pipeline_started": started_pipeline,
-            "blocking_reason": blocking_reason,
-            "cycles": cycle_results,
-            "pipeline": self.pipeline.status(),
-            "backlog": self.backlog_summary(),
-        }
-
-        self.last_autonomous_loop = dict(result)
-        self._remember_learning(
-            success=success,
-            status=loop_status,
-            lessons=[
-                (
-                    f"Autonomiczna pętla wykonała "
-                    f"{completed_cycles} pełnych cykli."
-                )
-            ],
-            metadata={
-                "stage": "autonomous_loop",
-                "cycles_attempted": len(cycle_results),
-                "max_cycles": cycles_limit,
-            },
-        )
-        return result
 
     @staticmethod
     def _safe_positive_int(
@@ -614,6 +898,167 @@ class AutonomousDevController:
             return default
 
         return normalized if normalized > 0 else default
+
+    def generate_autonomous_goals(
+        self,
+        *,
+        context: dict[str, Any] | None = None,
+        limit: int = 10,
+    ) -> dict[str, Any]:
+
+        normalized_context = dict(context or {})
+        safe_limit = max(1, min(25, int(limit)))
+
+        scan = self.planner.scan_and_plan(
+            context_by_module=normalized_context.get(
+                "context_by_module"
+            )
+        )
+
+        planned_items = list(
+            scan.get("tasks", []) or []
+        )
+
+        created: list[dict[str, Any]] = []
+        duplicates: list[dict[str, Any]] = []
+        errors: list[str] = []
+
+        for item in planned_items[:safe_limit]:
+            task = dict(item or {})
+            title = str(
+                task.get(
+                    "title",
+                    task.get(
+                        "description",
+                        "Autonomiczne ulepszenie projektu",
+                    ),
+                )
+            ).strip()
+            description = str(
+                task.get(
+                    "description",
+                    title,
+                )
+            ).strip()
+            target = str(
+                task.get(
+                    "target",
+                    task.get(
+                        "module",
+                        "",
+                    ),
+                )
+            ).strip()
+
+            try:
+                queued = self.submit_goal(
+                    goal=description,
+                    source="AutonomousProjectPlanner",
+                    priority=self.calculate_priority(
+                        goal=f"{title} {description}",
+                        context={
+                            "priority": task.get("priority")
+                        },
+                    ),
+                    context={
+                        "target": target,
+                        "path": target,
+                        "mode": "file",
+                        "auto_approve": True,
+                        "auto_execute": True,
+                        "auto_rollback": True,
+                        "tags": [
+                            "autonomous-planner",
+                            "self-development",
+                        ],
+                        "metadata": {
+                            "planner_task_id": str(
+                                task.get("task_id", "")
+                            ),
+                            "planner_title": title,
+                            "planner_generated": True,
+                            "severity": str(
+                                task.get("severity", "")
+                            ),
+                        },
+                    },
+                )
+                created.append(queued)
+            except ValueError as error:
+                duplicates.append({
+                    "title": title,
+                    "target": target,
+                    "reason": str(error),
+                })
+            except Exception as error:
+                report = AutoDevErrorReporter.capture(
+                    error,
+                    stage=(
+                        "autonomous_dev."
+                        "generate_autonomous_goals"
+                    ),
+                    context={
+                        "title": title,
+                        "target": target,
+                    },
+                    project_root=self.project_root,
+                )
+                errors.append(
+                    report.summary()
+                )
+                error_details.append(
+                    report.as_dict()
+                )
+
+        result = {
+            "success": not errors,
+            "status": (
+                "GOALS_GENERATED"
+                if created
+                else "NO_NEW_GOALS"
+            ),
+            "created_count": len(created),
+            "duplicate_count": len(duplicates),
+            "errors_count": len(errors),
+            "created": created,
+            "duplicates": duplicates,
+            "errors": errors,
+            "scan": scan,
+            "backlog": self.backlog_summary(),
+            "generated_at": time.time(),
+        }
+
+        self.last_goal_generation = dict(result)
+        self._last_goal_generation_at = time.monotonic()
+        return result
+
+    def _maybe_generate_autonomous_goals(
+        self,
+        context: dict[str, Any],
+    ) -> dict[str, Any] | None:
+
+        total = int(
+            self.backlog_summary().get(
+                "total",
+                0,
+            )
+            or 0
+        )
+
+        if total >= self._minimum_backlog_before_generation:
+            return None
+
+        if (
+            time.monotonic()
+            - self._last_goal_generation_at
+            < self._goal_generation_interval
+        ):
+            return None
+
+        return self.generate_autonomous_goals(
+            context=context,
+            limit=10,
+        )
 
     def scan_project(
         self,
@@ -662,6 +1107,18 @@ class AutonomousDevController:
             )
         except Exception as error:
             task_id = str(task.get("task_id", ""))
+            report = AutoDevErrorReporter.capture(
+                error,
+                stage="autonomous_dev.planning_cycle",
+                context={
+                    "task_id": task_id,
+                    "task_title": task.get(
+                        "title",
+                        "",
+                    ),
+                },
+                project_root=self.project_root,
+            )
 
             if task_id:
                 self.planner.fail_task(
@@ -673,20 +1130,28 @@ class AutonomousDevController:
                 "success": False,
                 "status": "PLANNING_FAILED",
                 "task": task,
-                "error": (
-                    f"{type(error).__name__}: {error}"
-                ),
+                "error": report.summary(),
+                "error_details": report.as_dict(),
                 "scan": scan_result,
             }
 
             self.last_planning_cycle = dict(result)
             return result
 
+        proposed = {}
+        if isinstance(plan, dict):
+            proposed = dict(plan.get("code_proposal") or {})
+        status = "READY_FOR_CODE_GENERATION"
+        if proposed.get("success"):
+            status = "GENERATING_PATCH"
+
         result = {
             "success": True,
-            "status": "READY_FOR_CODE_GENERATION",
+            "status": status,
             "task": task,
             "plan": plan,
+            "code_proposal": proposed,
+            "proposed_content": proposed.get("proposed_content",""),
             "scan": scan_result,
         }
 
@@ -697,106 +1162,26 @@ class AutonomousDevController:
         self,
         context: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        return _AUTONOMOUS_DEV_ORCHESTRATION.run_generation_cycle(
+            self,
+            context,
+        )
 
-        context = dict(context or {})
 
-        planning = self.last_planning_cycle
-
-        if (
-            planning is None
-            or planning.get("status")
-            != "READY_FOR_CODE_GENERATION"
-        ):
-            planning = self.run_planning_cycle(
-                context_by_module=context.get(
-                    "context_by_module"
-                )
-            )
-
-        if planning.get("status") != (
-            "READY_FOR_CODE_GENERATION"
-        ):
-            self.last_generation_cycle = dict(planning)
-            return planning
-
-        task = dict(planning.get("task") or {})
-        plan = dict(planning.get("plan") or {})
-
-        request = self._build_developer_request(
+    def _prepare_autonomous_code_context(
+        self,
+        *,
+        task: dict[str, Any],
+        plan: dict[str, Any],
+        context: dict[str, Any],
+    ) -> dict[str, Any]:
+        return _AUTONOMOUS_DEV_ORCHESTRATION._prepare_autonomous_code_context(
+            self,
             task=task,
             plan=plan,
             context=context,
         )
 
-        valid, errors = request.validate()
-
-        if not valid:
-            result = {
-                "success": False,
-                "status": "CODE_INPUT_REQUIRED",
-                "errors": errors,
-                "task": task,
-                "plan": plan,
-                "required": self._required_code_fields(
-                    request.mode
-                ),
-            }
-
-            self.last_generation_cycle = dict(result)
-            self._remember_learning(
-                success=False,
-                status="CODE_INPUT_REQUIRED",
-                task=task,
-                errors=errors,
-                lessons=[
-                    "Brak danych potrzebnych do wygenerowania patcha."
-                ],
-            )
-            return result
-
-        self.developer_controller.reset()
-
-        prepared = self.developer_controller.prepare(
-            request
-        )
-
-        result = {
-            "success": prepared.success,
-            "status": prepared.status,
-            "message": prepared.message,
-            "preview": prepared.preview,
-            "errors": list(prepared.errors),
-            "task": task,
-            "plan": plan,
-            "request": {
-                "goal": request.goal,
-                "target": request.target,
-                "mode": request.mode,
-                "path": request.path,
-                "function_name": request.function_name,
-                "files_count": len(request.replacements),
-            },
-        }
-
-        if prepared.success:
-            task_id = str(task.get("task_id", ""))
-
-            if task_id:
-                result["planner_task_id"] = task_id
-
-        self.last_generation_cycle = dict(result)
-        self._remember_learning(
-            success=prepared.success,
-            status=prepared.status,
-            task=task,
-            errors=list(prepared.errors),
-            lessons=[prepared.message],
-            metadata={
-                "stage": "prepare",
-                "preview_ready": bool(prepared.preview),
-            },
-        )
-        return result
 
     def _build_developer_request(
         self,
@@ -1143,8 +1528,16 @@ class AutonomousDevController:
                 return TaskPriority(
                     str(explicit_priority).upper()
                 )
-            except ValueError:
-                pass
+            except ValueError as error:
+                allowed = ", ".join(
+                    str(item.value)
+                    for item in TaskPriority
+                )
+                raise ValueError(
+                    "Nieznany priorytet AutoDev: "
+                    f"{explicit_priority}. "
+                    f"Dozwolone wartości: {allowed}."
+                ) from error
 
         normalized = str(goal).casefold()
 
@@ -1305,24 +1698,98 @@ class AutonomousDevController:
         self,
     ) -> dict[str, Any]:
 
-        tasks = self.list_tasks()
+        pipeline_tasks = self.list_tasks()
 
-        by_status: dict[str, int] = {}
+        pipeline_by_status: dict[str, int] = {}
         by_priority: dict[str, int] = {}
 
-        for task in tasks:
-            status = str(task.get("status", "UNKNOWN"))
-            priority = str(task.get("priority", "UNKNOWN"))
-
-            by_status[status] = by_status.get(status, 0) + 1
-            by_priority[priority] = (
-                by_priority.get(priority, 0) + 1
+        for task in pipeline_tasks:
+            status = str(
+                task.get(
+                    "status",
+                    "UNKNOWN",
+                )
+            )
+            priority = str(
+                task.get(
+                    "priority",
+                    "UNKNOWN",
+                )
             )
 
+            pipeline_by_status[status] = (
+                pipeline_by_status.get(
+                    status,
+                    0,
+                )
+                + 1
+            )
+            by_priority[priority] = (
+                by_priority.get(
+                    priority,
+                    0,
+                )
+                + 1
+            )
+
+        planner_summary = dict(
+            self.planner.backlog.summary()
+            or {}
+        )
+        planner_by_status = dict(
+            planner_summary.get(
+                "by_status",
+                {},
+            )
+            or {}
+        )
+
+        combined_by_status = dict(
+            pipeline_by_status
+        )
+
+        for status, count in planner_by_status.items():
+            combined_by_status[status] = (
+                combined_by_status.get(
+                    status,
+                    0,
+                )
+                + int(
+                    count
+                    or 0
+                )
+            )
+
+        planner_total = int(
+            planner_summary.get(
+                "total",
+                0,
+            )
+            or 0
+        )
+        pipeline_total = len(
+            pipeline_tasks
+        )
+
         return {
-            "total": len(tasks),
-            "by_status": by_status,
+            "total": (
+                pipeline_total
+                + planner_total
+            ),
+            "active": int(
+                planner_summary.get(
+                    "active",
+                    0,
+                )
+                or 0
+            ),
+            "pipeline_total": pipeline_total,
+            "planner_total": planner_total,
+            "by_status": combined_by_status,
             "by_priority": by_priority,
+            "next_task": planner_summary.get(
+                "next_task"
+            ),
             "limit": self.policy.max_backlog_size,
         }
 
@@ -1433,5 +1900,44 @@ class AutonomousDevController:
             "last_planning_cycle": self.last_planning_cycle,
             "last_generation_cycle": self.last_generation_cycle,
             "last_autonomous_loop": self.last_autonomous_loop,
+            "last_timed_loop": self.last_timed_loop,
+            "timed_loop_running": bool(
+                self._timed_thread is not None
+                and self._timed_thread.is_alive()
+            ),
+            "last_background_loop": (
+                self.last_background_loop
+            ),
+            "last_goal_generation": (
+                self.last_goal_generation
+            ),
+            "background_running": bool(
+                self._background_thread is not None
+                and self._background_thread.is_alive()
+            ),
+            "running": bool(
+                (
+                    self._background_thread is not None
+                    and self._background_thread.is_alive()
+                )
+                or (
+                    self._timed_thread is not None
+                    and self._timed_thread.is_alive()
+                )
+            ),
+            "status": (
+                "RUNNING"
+                if (
+                    (
+                        self._background_thread is not None
+                        and self._background_thread.is_alive()
+                    )
+                    or (
+                        self._timed_thread is not None
+                        and self._timed_thread.is_alive()
+                    )
+                )
+                else "READY"
+            ),
             "learning": self.learning_summary(),
         }

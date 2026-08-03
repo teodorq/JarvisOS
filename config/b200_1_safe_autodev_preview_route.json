@@ -1,0 +1,13 @@
+{
+  "stage": "B200.1",
+  "name": "Safe AutoDev Preview Route Fix",
+  "enabled": true,
+  "read_only_scan": true,
+  "requires_confirmation": false,
+  "max_files_per_scan": 500,
+  "max_proposals": 1,
+  "writes_project_files": false,
+  "creates_patch": false,
+  "dispatches_job": false,
+  "auto_approve": false
+}
