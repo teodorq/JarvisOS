@@ -21,7 +21,7 @@ def _shared_path_lock(path: Path):
 
 
 def _replace_with_retry(source: Path, destination: Path) -> None:
-    for attempt in range(16):
+    for attempt in range(32):
         try:
             os.replace(source, destination)
             return
