@@ -60,6 +60,10 @@ resource plannerApp 'Microsoft.App/containerApps@2024-03-01' = {
               secretRef: 'api-token'
             }
             {
+              name: 'JARVIS_OS_CLOUD_REQUESTS_PER_MINUTE'
+              value: '30'
+            }
+            {
               name: 'PORT'
               value: '8000'
             }

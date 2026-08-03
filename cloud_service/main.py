@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import hmac
 import json
+import math
 import os
+import threading
+import time
 import uuid
 from dataclasses import dataclass
 from http import HTTPStatus
@@ -20,7 +23,7 @@ from app.cloud.contracts import (
 
 
 SERVICE_NAME = "jarvis-os-cloud-planner"
-SERVICE_VERSION = "0.2.0"
+SERVICE_VERSION = "0.3.0"
 MAX_BODY_BYTES = 16_384
 
 
@@ -28,6 +31,7 @@ MAX_BODY_BYTES = 16_384
 class ServiceConfig:
     api_token: str
     environment: str = "production"
+    requests_per_minute: int = 30
 
     @classmethod
     def from_environment(cls) -> "ServiceConfig":
@@ -41,7 +45,20 @@ class ServiceConfig:
                 or os.getenv("JARVIS_ENV", "production").strip()
                 or "production"
             ),
+            requests_per_minute=_requests_per_minute_from_environment(),
         )
+
+def _requests_per_minute_from_environment() -> int:
+    value = (
+        os.getenv("JARVIS_OS_CLOUD_REQUESTS_PER_MINUTE", "").strip()
+        or os.getenv("JARVIS_CLOUD_REQUESTS_PER_MINUTE", "30").strip()
+    )
+    try:
+        limit = int(value)
+    except ValueError:
+        limit = 30
+    return min(max(limit, 1), 120)
+
 
 
 class PlannerService:
@@ -54,6 +71,35 @@ class PlannerService:
         return validate_cloud_plan(raw_plan)
 
 
+class PlanRateLimiter:
+    WINDOW_SECONDS = 60.0
+
+    def __init__(self, limit: int, clock=time.monotonic) -> None:
+        self.limit = min(max(int(limit), 1), 120)
+        self.clock = clock
+        self._lock = threading.Lock()
+        self._requests: dict[str, list[float]] = {}
+
+    def allow(self, key: str) -> tuple[bool, int]:
+        now = self.clock()
+        cutoff = now - self.WINDOW_SECONDS
+        with self._lock:
+            recent = [
+                value
+                for value in self._requests.get(key, [])
+                if value > cutoff
+            ]
+            if len(recent) >= self.limit:
+                retry_after = max(
+                    1, math.ceil(self.WINDOW_SECONDS - (now - recent[0]))
+                )
+                self._requests[key] = recent
+                return False, retry_after
+            recent.append(now)
+            self._requests[key] = recent
+            return True, 0
+
+
 class JarvisOSCloudServer(ThreadingHTTPServer):
     daemon_threads = True
 
@@ -62,9 +108,13 @@ class JarvisOSCloudServer(ThreadingHTTPServer):
         server_address: tuple[str, int],
         config: ServiceConfig,
         service: PlannerService,
+        rate_limiter: PlanRateLimiter | None = None,
     ) -> None:
         self.config = config
         self.planner_service = service
+        self.rate_limiter = rate_limiter or PlanRateLimiter(
+            config.requests_per_minute
+        )
         super().__init__(server_address, JarvisOSCloudHandler)
 
 
@@ -100,6 +150,17 @@ class JarvisOSCloudHandler(BaseHTTPRequestHandler):
         if not self._authorized():
             self._json(HTTPStatus.UNAUTHORIZED, {"error": "unauthorized"})
             return
+        allowed, retry_after = self.server.rate_limiter.allow(
+            self.client_address[0]
+        )
+        if not allowed:
+            self._json(
+                HTTPStatus.TOO_MANY_REQUESTS,
+                {"error": "rate_limited"},
+                headers={"Retry-After": str(retry_after)},
+            )
+            return
+
         try:
             payload = self._read_payload()
             if payload.get("schema_version") != SCHEMA_VERSION:
@@ -145,13 +206,21 @@ class JarvisOSCloudHandler(BaseHTTPRequestHandler):
             raise ValueError("request body must be an object")
         return payload
 
-    def _json(self, status: HTTPStatus, payload: dict[str, Any]) -> None:
+    def _json(
+        self,
+        status: HTTPStatus,
+        payload: dict[str, Any],
+        *,
+        headers: dict[str, str] | None = None,
+    ) -> None:
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(int(status))
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
+        for name, value in (headers or {}).items():
+            self.send_header(name, value)
         self.end_headers()
         self.wfile.write(body)
 
@@ -166,11 +235,13 @@ def build_server(
     *,
     config: ServiceConfig | None = None,
     service: PlannerService | None = None,
+    rate_limiter: PlanRateLimiter | None = None,
 ) -> JarvisOSCloudServer:
     return JarvisOSCloudServer(
         (host, port),
         config or ServiceConfig.from_environment(),
         service or PlannerService(),
+        rate_limiter=rate_limiter,
     )
 
 

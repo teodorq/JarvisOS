@@ -10,6 +10,8 @@ tokens remain on the desktop computer.
 - minReplicas: 0, so there is no replica while idle.
 - maxReplicas: 1, preventing horizontal scaling.
 - 0.25 vCPU and 0.5 GiB RAM.
+- At most 30 authenticated planning requests per minute and source.
+- A failed cloud call opens a 60-second local fallback circuit on the desktop.
 - No database, Azure Container Registry, private network, or paid Log
   Analytics workspace in this stage.
 - The 20 PLN budget is an alert, not a custom hard spending cap.
