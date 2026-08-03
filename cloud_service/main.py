@@ -20,7 +20,7 @@ from app.cloud.contracts import (
 
 
 SERVICE_NAME = "jarvis-os-cloud-planner"
-SERVICE_VERSION = "0.1.0"
+SERVICE_VERSION = "0.2.0"
 MAX_BODY_BYTES = 16_384
 
 
@@ -32,9 +32,15 @@ class ServiceConfig:
     @classmethod
     def from_environment(cls) -> "ServiceConfig":
         return cls(
-            api_token=os.getenv("JARVIS_CLOUD_API_TOKEN", "").strip(),
-            environment=os.getenv("JARVIS_ENV", "production").strip()
-            or "production",
+            api_token=(
+                os.getenv("JARVIS_OS_CLOUD_API_TOKEN", "").strip()
+                or os.getenv("JARVIS_CLOUD_API_TOKEN", "").strip()
+            ),
+            environment=(
+                os.getenv("JARVIS_OS_CLOUD_ENVIRONMENT", "").strip()
+                or os.getenv("JARVIS_ENV", "production").strip()
+                or "production"
+            ),
         )
 
 
@@ -48,7 +54,7 @@ class PlannerService:
         return validate_cloud_plan(raw_plan)
 
 
-class JarvisCloudServer(ThreadingHTTPServer):
+class JarvisOSCloudServer(ThreadingHTTPServer):
     daemon_threads = True
 
     def __init__(
@@ -59,11 +65,11 @@ class JarvisCloudServer(ThreadingHTTPServer):
     ) -> None:
         self.config = config
         self.planner_service = service
-        super().__init__(server_address, JarvisCloudHandler)
+        super().__init__(server_address, JarvisOSCloudHandler)
 
 
-class JarvisCloudHandler(BaseHTTPRequestHandler):
-    server: JarvisCloudServer
+class JarvisOSCloudHandler(BaseHTTPRequestHandler):
+    server: JarvisOSCloudServer
     protocol_version = "HTTP/1.1"
 
     def do_GET(self) -> None:
@@ -160,8 +166,8 @@ def build_server(
     *,
     config: ServiceConfig | None = None,
     service: PlannerService | None = None,
-) -> JarvisCloudServer:
-    return JarvisCloudServer(
+) -> JarvisOSCloudServer:
+    return JarvisOSCloudServer(
         (host, port),
         config or ServiceConfig.from_environment(),
         service or PlannerService(),
@@ -169,7 +175,11 @@ def build_server(
 
 
 def main() -> None:
-    host = os.getenv("JARVIS_HOST", "0.0.0.0")
+    host = (
+        os.getenv("JARVIS_OS_CLOUD_HOST", "").strip()
+        or os.getenv("JARVIS_HOST", "0.0.0.0").strip()
+        or "0.0.0.0"
+    )
     try:
         port = int(os.getenv("PORT", "8000"))
     except ValueError:

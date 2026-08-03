@@ -1,4 +1,4 @@
-# JARVIS Cloud - stage 1
+# JARVIS OS Cloud - stage 1
 
 This stage moves only safe, read-oriented planning to Azure. The GUI,
 microphone, Windows action execution, user confirmations, memory, and Google
@@ -19,16 +19,16 @@ tokens remain on the desktop computer.
 Set the same temporary random token in two terminals. In the first terminal:
 
 ~~~powershell
-$env:JARVIS_ENV = "development"
-$env:JARVIS_CLOUD_API_TOKEN = "local-test-token"
+$env:JARVIS_OS_CLOUD_ENVIRONMENT = "development"
+$env:JARVIS_OS_CLOUD_API_TOKEN = "local-test-token"
 .\.venv\Scripts\python.exe -m cloud_service.main
 ~~~
 
 In the second terminal, configure the JARVIS client:
 
 ~~~powershell
-$env:JARVIS_CLOUD_URL = "http://127.0.0.1:8000"
-$env:JARVIS_CLOUD_API_TOKEN = "local-test-token"
+$env:JARVIS_OS_CLOUD_URL = "http://127.0.0.1:8000"
+$env:JARVIS_OS_CLOUD_API_TOKEN = "local-test-token"
 .\.venv\Scripts\python.exe main.py
 ~~~
 
@@ -48,8 +48,11 @@ automatically uses the local planner.
 3. Install Azure CLI, sign in, and explicitly select the correct subscription.
 4. Deploy subscription.bicep with the full image name and a random API token
    passed as secure parameters. Never store that token in a file or Git.
-5. Check the returned /health URL before configuring JARVIS_CLOUD_URL and
-   JARVIS_CLOUD_API_TOKEN on the desktop.
+5. Check the returned /health URL before configuring JARVIS_OS_CLOUD_URL and
+   JARVIS_OS_CLOUD_API_TOKEN on the desktop.
+
+The previous JARVIS_CLOUD_* names remain accepted temporarily as migration
+aliases, but all new configuration should use JARVIS_OS_CLOUD_*.
 
 Do not deploy an image tagged only as latest. Use an immutable version tag or
 Git commit hash so a controlled rollback remains possible.

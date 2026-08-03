@@ -6,7 +6,7 @@ param namePrefix string = 'jarvis-os'
 @description('Deployment region. Poland Central keeps the service close to the desktop client.')
 param location string = 'polandcentral'
 
-@description('Public container image containing the JARVIS cloud planner.')
+@description('Public container image containing the JARVIS OS cloud planner.')
 param containerImage string
 
 @secure()

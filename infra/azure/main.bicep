@@ -4,7 +4,7 @@ param namePrefix string = 'jarvis-os'
 @description('Azure region for the Container Apps environment.')
 param location string = resourceGroup().location
 
-@description('Public container image containing the JARVIS cloud planner.')
+@description('Public container image containing the JARVIS OS cloud planner.')
 param containerImage string
 
 @secure()
@@ -52,11 +52,11 @@ resource plannerApp 'Microsoft.App/containerApps@2024-03-01' = {
           image: containerImage
           env: [
             {
-              name: 'JARVIS_ENV'
+              name: 'JARVIS_OS_CLOUD_ENVIRONMENT'
               value: 'production'
             }
             {
-              name: 'JARVIS_CLOUD_API_TOKEN'
+              name: 'JARVIS_OS_CLOUD_API_TOKEN'
               secretRef: 'api-token'
             }
             {
