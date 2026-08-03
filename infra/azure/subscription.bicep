@@ -1,7 +1,7 @@
 targetScope = 'subscription'
 
 @description('Short lowercase prefix used for Azure resource names.')
-param namePrefix string = 'jarvis'
+param namePrefix string = 'jarvis-os'
 
 @description('Deployment region. Poland Central keeps the service close to the desktop client.')
 param location string = 'polandcentral'

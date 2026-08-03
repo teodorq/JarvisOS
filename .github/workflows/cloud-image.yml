@@ -1,4 +1,4 @@
-name: Build JARVIS cloud planner
+name: Build JARVIS OS cloud planner
 
 on:
   push:
@@ -19,7 +19,7 @@ permissions:
   packages: write
 
 concurrency:
-  group: jarvis-cloud-image-${{ github.ref }}
+  group: jarvis-os-cloud-image-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -54,7 +54,7 @@ jobs:
           file: cloud_service/Dockerfile
           platforms: linux/amd64
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/jarvisai-cloud:sha-${{ github.sha }}
+          tags: ghcr.io/${{ github.repository_owner }}/jarvis-os-cloud:sha-${{ github.sha }}
           labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

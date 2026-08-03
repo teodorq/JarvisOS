@@ -40,7 +40,7 @@ automatically uses the local planner.
 
 1. Build the image from the repository root:
 
-   docker build -f cloud_service/Dockerfile -t <registry>/jarvis-cloud-planner:<tag> .
+   docker build -f cloud_service/Dockerfile -t <registry>/jarvis-os-cloud-planner:<tag> .
 
 2. Publish the image to a trusted registry. The template intentionally does
    not create a paid Azure Container Registry; the selected image must be

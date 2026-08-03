@@ -19,7 +19,7 @@ from app.cloud.contracts import (
 )
 
 
-SERVICE_NAME = "jarvis-cloud-planner"
+SERVICE_NAME = "jarvis-os-cloud-planner"
 SERVICE_VERSION = "0.1.0"
 MAX_BODY_BYTES = 16_384
 

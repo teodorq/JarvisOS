@@ -1,5 +1,5 @@
 @description('Short lowercase prefix used for Azure resource names.')
-param namePrefix string = 'jarvis'
+param namePrefix string = 'jarvis-os'
 
 @description('Azure region for the Container Apps environment.')
 param location string = resourceGroup().location
