@@ -7,6 +7,8 @@ class SystemCommand(BaseCommand):
         if (
             "status systemu" in command
             or "stan systemu" in command
+            or "status chmury" in command
+            or "stan chmury" in command
             or "jak działa system" in command
         ):
             return self._action("SYSTEM_STATUS")
