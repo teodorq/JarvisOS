@@ -21,7 +21,7 @@ from app.ai.executive_ai.executive_controller import (
 from app.ai.meta_executive.meta_controller import (
     MetaController,
 )
-from app.ai.planner_llm import PlannerLLM
+from app.cloud.hybrid_planner import HybridPlanner
 from app.ai.project_director.director_controller import (
     DirectorController,
 )
@@ -140,7 +140,7 @@ class Brain:
         self,
     ) -> None:
 
-        self.planner = PlannerLLM()
+        self.planner = HybridPlanner()
 
         self.executor = CommandExecutor()
 
