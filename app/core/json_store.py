@@ -21,14 +21,15 @@ def _shared_path_lock(path: Path):
 
 
 def _replace_with_retry(source: Path, destination: Path) -> None:
-    for attempt in range(8):
+    for attempt in range(16):
         try:
             os.replace(source, destination)
             return
         except PermissionError:
-            if attempt == 7:
+            if attempt == 15:
                 raise
-            time.sleep(0.01 * (attempt + 1))
+            # Windows file locks can be transient; retry with a short backoff.
+            time.sleep(min(0.05 * (attempt + 1), 1.0))
 
 
 class JsonStore:
@@ -123,3 +124,4 @@ class JsonStore:
                         raise RuntimeError("AutoDev: przechwycony wyjątek")
 
                 raise
+
