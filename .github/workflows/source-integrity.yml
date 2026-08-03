@@ -59,4 +59,15 @@ jobs:
         run: python -m compileall -q app cloud_service software_engineer tools
 
       - name: Run regression suite
-        run: python -m pytest -q
+        run: |
+          python -m pytest -q --maxfail=1 --durations=20 --junitxml=pytest-junit.xml 2>&1 | Tee-Object -FilePath pytest-out.txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Publish pytest report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-source-integrity-${{ github.run_id }}
+          path: |
+            pytest-junit.xml
+            pytest-out.txt
