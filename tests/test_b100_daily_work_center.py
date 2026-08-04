@@ -34,7 +34,11 @@ class B100DailyWorkCenterTests(unittest.TestCase):
             report = service.export_report()
             path = Path(report["path"])
             self.assertTrue(path.is_file())
-            self.assertTrue(str(path).startswith(str(Path(temporary))))
+            self.assertTrue(
+                path.resolve().is_relative_to(
+                    Path(temporary).resolve()
+                )
+            )
 
     def test_controller_parses_workflow_command(self) -> None:
         with TemporaryDirectory() as temporary:
