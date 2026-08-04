@@ -352,26 +352,6 @@ class ProjectBoundaryPolicy:
                     "Target zawiera dowiązanie symboliczne."
                 )
 
-        lexical = os.path.normcase(
-            os.path.abspath(
-                os.path.normpath(
-                    str(absolute)
-                )
-            )
-        )
-        resolved = os.path.normcase(
-            str(
-                absolute.resolve(
-                    strict=False
-                )
-            )
-        )
-
-        if lexical != resolved:
-            raise ValueError(
-                "Target zawiera dowiązanie symboliczne."
-            )
-
     @staticmethod
     def _is_link_or_reparse_point(
         path: Path,
