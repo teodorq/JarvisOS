@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.cloud.contracts import SCHEMA_VERSION, normalize_command, validate_cloud_plan
+from app.cloud.privacy import CloudPrivacyError, ensure_cloud_safe_command
 
 
 class CloudPlannerError(RuntimeError):
@@ -17,6 +18,10 @@ class CloudPlannerError(RuntimeError):
 
 class CloudPlannerUnavailable(CloudPlannerError):
     """The remote planner cannot safely serve the request."""
+
+
+class CloudSensitiveCommand(CloudPlannerError):
+    """The command contains data that must remain on the desktop."""
 
 
 @dataclass(frozen=True)
@@ -66,9 +71,16 @@ class CloudPlannerClient:
         if not self.is_configured:
             raise CloudPlannerUnavailable("cloud planner is not configured")
         self._validate_endpoint()
+        normalized = normalize_command(command)
+        try:
+            ensure_cloud_safe_command(normalized)
+        except CloudPrivacyError as error:
+            raise CloudSensitiveCommand(
+                "sensitive command requires local planning"
+            ) from error
         payload = {
             "schema_version": SCHEMA_VERSION,
-            "command": normalize_command(command),
+            "command": normalized,
         }
         response = self._request_json("/v1/plan", payload)
         if response.get("schema_version") != SCHEMA_VERSION:

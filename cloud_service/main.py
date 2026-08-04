@@ -20,10 +20,11 @@ from app.cloud.contracts import (
     normalize_command,
     validate_cloud_plan,
 )
+from app.cloud.privacy import CloudPrivacyError, ensure_cloud_safe_command
 
 
 SERVICE_NAME = "jarvis-os-cloud-planner"
-SERVICE_VERSION = "0.3.0"
+SERVICE_VERSION = "0.4.0"
 MAX_BODY_BYTES = 16_384
 
 
@@ -67,6 +68,7 @@ class PlannerService:
 
     def create_plan(self, command: Any) -> dict[str, Any]:
         normalized = normalize_command(command)
+        ensure_cloud_safe_command(normalized)
         raw_plan = self.planner.create_plan(normalized)
         return validate_cloud_plan(raw_plan)
 
@@ -166,6 +168,12 @@ class JarvisOSCloudHandler(BaseHTTPRequestHandler):
             if payload.get("schema_version") != SCHEMA_VERSION:
                 raise CloudContractError("unsupported request schema")
             plan = self.server.planner_service.create_plan(payload.get("command"))
+        except CloudPrivacyError:
+            self._json(
+                HTTPStatus.UNPROCESSABLE_ENTITY,
+                {"error": "sensitive_command_requires_local"},
+            )
+            return
         except CloudContractError:
             self._json(
                 HTTPStatus.UNPROCESSABLE_ENTITY,

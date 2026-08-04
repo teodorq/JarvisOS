@@ -6,7 +6,11 @@ from collections.abc import Callable
 from typing import Any
 
 from app.ai.planner_llm import PlannerLLM
-from app.cloud.client import CloudPlannerClient, CloudPlannerError
+from app.cloud.client import (
+    CloudPlannerClient,
+    CloudPlannerError,
+    CloudSensitiveCommand,
+)
 
 
 class HybridPlanner:
@@ -39,6 +43,9 @@ class HybridPlanner:
                 self.last_cloud_error = ""
                 self._retry_after = 0.0
                 return plan
+            except CloudSensitiveCommand as error:
+                self.last_cloud_error = type(error).__name__
+                self._retry_after = 0.0
             except CloudPlannerError as error:
                 self.last_cloud_error = type(error).__name__
                 self._retry_after = (

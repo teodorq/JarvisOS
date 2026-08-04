@@ -72,6 +72,47 @@ resource plannerApp 'Microsoft.App/containerApps@2024-03-01' = {
             cpu: json('0.25')
             memory: '0.5Gi'
           }
+          probes: [
+            {
+              type: 'Startup'
+              httpGet: {
+                path: '/health'
+                port: 8000
+                scheme: 'HTTP'
+              }
+              initialDelaySeconds: 1
+              periodSeconds: 2
+              timeoutSeconds: 1
+              failureThreshold: 10
+              successThreshold: 1
+            }
+            {
+              type: 'Readiness'
+              httpGet: {
+                path: '/health'
+                port: 8000
+                scheme: 'HTTP'
+              }
+              initialDelaySeconds: 1
+              periodSeconds: 10
+              timeoutSeconds: 2
+              failureThreshold: 3
+              successThreshold: 1
+            }
+            {
+              type: 'Liveness'
+              httpGet: {
+                path: '/health'
+                port: 8000
+                scheme: 'HTTP'
+              }
+              initialDelaySeconds: 5
+              periodSeconds: 30
+              timeoutSeconds: 2
+              failureThreshold: 3
+              successThreshold: 1
+            }
+          ]
         }
       ]
       scale: {

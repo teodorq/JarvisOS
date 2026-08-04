@@ -1,8 +1,14 @@
-# JARVIS OS Cloud - stage 1
+# JARVIS OS Cloud - stage 2
 
 This stage moves only safe, read-oriented planning to Azure. The GUI,
 microphone, Windows action execution, user confirmations, memory, and Google
 tokens remain on the desktop computer.
+
+Stage 2 adds a privacy gate on both sides of the connection. Commands that
+look like they contain passwords, API keys, bearer tokens, private keys, or
+provider credentials stay on the desktop and use the local planner. Azure
+also receives startup, readiness, and liveness probes without adding another
+paid service.
 
 ## Cost guardrails
 
@@ -14,6 +20,8 @@ tokens remain on the desktop computer.
 - A failed cloud call opens a 60-second local fallback circuit on the desktop.
 - No database, Azure Container Registry, private network, or paid Log
   Analytics workspace in this stage.
+- Commands containing likely credentials never leave the desktop; the cloud
+  service rejects them as a second line of defense.
 - The 20 PLN budget is an alert, not a custom hard spending cap.
 
 ## Local smoke test

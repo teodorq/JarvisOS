@@ -8,12 +8,15 @@ from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtWidgets import QApplication, QSplashScreen
 
 from app.business.business_config import BusinessConfigStore
+from app.cloud.environment import load_cloud_environment
 from app.core.project_paths import resolve_project_root
-from app.gui.main_window import MainWindow
 
 
 def main() -> int:
     project_root = resolve_project_root()
+    load_cloud_environment(project_root)
+    from app.gui.main_window import MainWindow
+
     config = BusinessConfigStore(project_root).ensure()
 
     app = QApplication(sys.argv)
