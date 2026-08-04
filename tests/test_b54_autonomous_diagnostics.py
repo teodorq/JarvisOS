@@ -228,6 +228,25 @@ class B54AutonomousDiagnosticsTests(unittest.TestCase):
         self.assertIn("<PROJECT_ROOT>", text)
         self.assertIn("<REDACTED>", text)
 
+    def test_collector_redacts_lexical_project_root_alias(self) -> None:
+        alias_root = self.root / "app" / ".."
+        collector = AutonomousDiagnosticsCollector(
+            alias_root
+        )
+
+        redacted = collector._redact(
+            f"Path {alias_root / 'app' / 'demo.py'}"
+        )
+
+        self.assertNotIn(
+            str(alias_root),
+            redacted,
+        )
+        self.assertIn(
+            "<PROJECT_ROOT>",
+            redacted,
+        )
+
     def test_collector_extracts_traceback_streams_and_files(self) -> None:
         collector = AutonomousDiagnosticsCollector(self.root)
         evidence = collector.evidence({

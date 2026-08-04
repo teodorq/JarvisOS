@@ -30,7 +30,14 @@ class AutonomousDiagnosticsCollector:
         *,
         long_running_store: LongRunningAutonomyStore | None = None,
     ) -> None:
-        self.project_root = Path(project_root).resolve(strict=False)
+        raw_project_root = Path(project_root).expanduser()
+        if not raw_project_root.is_absolute():
+            raw_project_root = Path.cwd() / raw_project_root
+        self.project_root = raw_project_root.resolve(strict=False)
+        self._project_root_aliases = self._path_aliases(
+            raw_project_root,
+            self.project_root,
+        )
         self.long_running_store = long_running_store or LongRunningAutonomyStore(
             self.project_root
         )
@@ -247,17 +254,45 @@ class AutonomousDiagnosticsCollector:
                     target.append(text)
 
     def _redact(self, value: Any) -> Any:
-        root = str(self.project_root)
         if isinstance(value, dict):
             return {str(key): self._redact(item) for key, item in value.items()}
         if isinstance(value, list):
             return [self._redact(item) for item in value]
         if isinstance(value, str):
-            text = value.replace(root, "<PROJECT_ROOT>")
+            text = value
+            for root in self._project_root_aliases:
+                text = re.sub(
+                    re.escape(root),
+                    "<PROJECT_ROOT>",
+                    text,
+                    flags=re.IGNORECASE,
+                )
             for pattern in self._SECRET_PATTERNS:
                 text = pattern.sub("<REDACTED>", text)
             return text
         return value
+
+    @staticmethod
+    def _path_aliases(
+        *paths: Path,
+    ) -> tuple[str, ...]:
+        aliases: set[str] = set()
+        for path in paths:
+            value = str(path).strip()
+            if not value:
+                continue
+            aliases.update({
+                value,
+                value.replace("\\", "/"),
+                value.replace("/", "\\"),
+            })
+        return tuple(
+            sorted(
+                aliases,
+                key=len,
+                reverse=True,
+            )
+        )
 
     @classmethod
     def _bounded(cls, value: Any, *, depth: int) -> Any:
