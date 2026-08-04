@@ -224,6 +224,26 @@ class AuditA43ExecutionPolicyTests(unittest.TestCase):
             decision.allowed
         )
 
+    def test_dangling_symlink_component_is_blocked(self) -> None:
+        link = self.root / "app/missing-link.py"
+        path_type = type(link)
+        original = path_type.is_symlink
+
+        def simulated_is_symlink(value: Path) -> bool:
+            return value == link or original(value)
+
+        boundary = ProjectBoundaryPolicy(
+            ExecutionPolicy(project_root=self.root)
+        )
+        with patch.object(
+            path_type,
+            "is_symlink",
+            autospec=True,
+            side_effect=simulated_is_symlink,
+        ):
+            with self.assertRaises(ValueError):
+                boundary._ensure_no_symlink_components(link)
+
     def test_validator_rejects_tampered_patch_hash(
         self,
     ) -> None:

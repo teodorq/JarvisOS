@@ -343,7 +343,7 @@ class ProjectBoundaryPolicy:
         for part in relative.parts:
             current = current / part
 
-            if current.exists() and current.is_symlink():
+            if current.is_symlink():
                 raise ValueError(
                     "Target zawiera dowiązanie symboliczne."
                 )
