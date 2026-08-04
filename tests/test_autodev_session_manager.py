@@ -1,8 +1,12 @@
+from pathlib import Path
 import unittest
 from unittest.mock import MagicMock
 
 from app.autodev.autodev_session_manager import (
     AutoDevSessionManager,
+)
+from app.autodev.execution_guard import (
+    ExecutionGuard,
 )
 from app.autodev.task_execution_planner import (
     TaskExecutionPlanner,
@@ -46,11 +50,16 @@ class TestAutoDevSessionManager(
     ) -> None:
 
         orchestrator = MagicMock()
+        project_root = Path(
+            __file__
+        ).resolve().parents[1]
 
         task = {
             "task_id": "task-1",
             "title": "Refactor module",
-            "target": "C:/JarvisAI/app/test.py",
+            "target": str(
+                project_root / "app/test.py"
+            ),
         }
 
         orchestrator.analyze.return_value = {
@@ -70,14 +79,11 @@ class TestAutoDevSessionManager(
         }
 
         manager = AutoDevSessionManager(
-            orchestrator=orchestrator
+            orchestrator=orchestrator,
+            guard=ExecutionGuard(
+                project_root=project_root,
+            ),
         )
-
-        manager.guard.project_root = __import__(
-            "pathlib"
-        ).Path(
-            "C:/JarvisAI"
-        ).resolve()
 
         result = manager.run_preview_session()
 
