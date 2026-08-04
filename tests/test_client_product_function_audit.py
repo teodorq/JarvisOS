@@ -65,6 +65,12 @@ class ClientProductFunctionAuditTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.app = QApplication.instance() or QApplication([])
 
+    @classmethod
+    def tearDownClass(cls) -> None:
+        app = QApplication.instance()
+        if app is not None:
+            app.quit()
+
     def test_every_direct_client_action_has_a_real_intent(self):
         for _group, actions in SAFE_CLIENT_ACTIONS:
             for action in actions:

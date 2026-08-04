@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import time
 from datetime import datetime, timezone
 import json
 from pathlib import Path
@@ -95,7 +97,32 @@ def _save_json(path: Path, value: dict[str, Any]) -> None:
         json.dumps(value, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
-    temporary.replace(path)
+    _replace_with_retry(
+        temporary,
+        path,
+    )
+
+
+def _replace_with_retry(
+    source: Path,
+    destination: Path,
+    *,
+    attempts: int = 16,
+) -> None:
+    last_error: OSError | None = None
+
+    for attempt in range(max(1, attempts)):
+        try:
+            os.replace(source, destination)
+            return
+        except OSError as error:
+            last_error = error
+            if attempt + 1 >= attempts:
+                break
+            time.sleep(0.05 * (attempt + 1))
+
+    if last_error is not None:
+        raise last_error
 
 
 def _clean_orphan_temps(directory: Path) -> int:
