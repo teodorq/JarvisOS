@@ -195,7 +195,7 @@ class TestBrainMetaExecutiveIntegration(
         self.brain.meta_controller.handle.assert_called_once_with(
             command=command,
             context={
-                "project_root": "C:/JarvisAI",
+                "project_root": self.brain.project_root,
                 "metadata": {
                     "source": "Brain",
                 },
