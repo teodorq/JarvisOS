@@ -329,6 +329,13 @@ class ProjectBoundaryPolicy:
         if not absolute.is_absolute():
             absolute = self.root / absolute
 
+        if self._is_link_or_reparse_point(
+            absolute
+        ):
+            raise ValueError(
+                "Target zawiera dowiązanie symboliczne."
+            )
+
         try:
             relative = absolute.relative_to(
                 self.root
@@ -356,6 +363,13 @@ class ProjectBoundaryPolicy:
     def _is_link_or_reparse_point(
         path: Path,
     ) -> bool:
+        try:
+            os.readlink(path)
+        except (OSError, ValueError):
+            pass
+        else:
+            return True
+
         try:
             metadata = os.lstat(path)
         except OSError:

@@ -259,6 +259,31 @@ class AuditA43ExecutionPolicyTests(unittest.TestCase):
                     link
                 )
 
+    def test_candidate_link_is_checked_before_root_mapping(
+        self,
+    ) -> None:
+        link = self.root / "alias/link.py"
+        boundary = ProjectBoundaryPolicy(
+            ExecutionPolicy(
+                project_root=self.root,
+            )
+        )
+        boundary.root = self.root / "canonical-root"
+
+        def fake_readlink(path):
+            if Path(path) == link:
+                return str(self.target)
+            raise OSError
+
+        with patch(
+            "app.autodev.execution_policy.os.readlink",
+            side_effect=fake_readlink,
+        ):
+            with self.assertRaises(ValueError):
+                boundary._ensure_no_symlink_components(
+                    link
+                )
+
     def test_validator_rejects_tampered_patch_hash(
         self,
     ) -> None:
