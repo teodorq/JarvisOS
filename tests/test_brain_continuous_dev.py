@@ -406,7 +406,7 @@ class BrainContinuousDevIntegrationTests(
 
         self.assertEqual(
             context["project_root"],
-            "C:/JarvisAI",
+            brain.project_root,
         )
 
     def test_brain_remembers_continuous_dev_result(
