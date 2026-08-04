@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import os
 from pathlib import Path
+import stat
 from types import SimpleNamespace
 import tempfile
 import unittest
@@ -223,6 +224,40 @@ class AuditA43ExecutionPolicyTests(unittest.TestCase):
         self.assertFalse(
             decision.allowed
         )
+
+    def test_windows_reparse_point_is_blocked(
+        self,
+    ) -> None:
+        link = self.root / "app/link.py"
+        reparse_flag = getattr(
+            stat,
+            "FILE_ATTRIBUTE_REPARSE_POINT",
+            0x400,
+        )
+        metadata = SimpleNamespace(
+            st_mode=0,
+            st_file_attributes=reparse_flag,
+        )
+
+        def fake_lstat(path):
+            if Path(path) == link:
+                return metadata
+            raise FileNotFoundError
+
+        boundary = ProjectBoundaryPolicy(
+            ExecutionPolicy(
+                project_root=self.root,
+            )
+        )
+
+        with patch(
+            "app.autodev.execution_policy.os.lstat",
+            side_effect=fake_lstat,
+        ):
+            with self.assertRaises(ValueError):
+                boundary._ensure_no_symlink_components(
+                    link
+                )
 
     def test_validator_rejects_tampered_patch_hash(
         self,

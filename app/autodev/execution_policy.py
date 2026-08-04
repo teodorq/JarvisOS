@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 import math
+import os
 from pathlib import Path
+import stat
 from typing import Any, Iterable
 
 from app.core.project_paths import resolve_project_root
@@ -343,10 +345,58 @@ class ProjectBoundaryPolicy:
         for part in relative.parts:
             current = current / part
 
-            if current.is_symlink():
+            if self._is_link_or_reparse_point(
+                current
+            ):
                 raise ValueError(
                     "Target zawiera dowiązanie symboliczne."
                 )
+
+        lexical = os.path.normcase(
+            os.path.abspath(
+                os.path.normpath(
+                    str(absolute)
+                )
+            )
+        )
+        resolved = os.path.normcase(
+            str(
+                absolute.resolve(
+                    strict=False
+                )
+            )
+        )
+
+        if lexical != resolved:
+            raise ValueError(
+                "Target zawiera dowiązanie symboliczne."
+            )
+
+    @staticmethod
+    def _is_link_or_reparse_point(
+        path: Path,
+    ) -> bool:
+        try:
+            metadata = os.lstat(path)
+        except OSError:
+            return False
+
+        if stat.S_ISLNK(metadata.st_mode):
+            return True
+
+        reparse_flag = getattr(
+            stat,
+            "FILE_ATTRIBUTE_REPARSE_POINT",
+            0x400,
+        )
+        file_attributes = getattr(
+            metadata,
+            "st_file_attributes",
+            0,
+        )
+        return bool(
+            file_attributes & reparse_flag
+        )
 
 
 def parse_risk_score(
