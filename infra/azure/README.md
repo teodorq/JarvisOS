@@ -22,7 +22,8 @@ paid service.
   Analytics workspace in this stage.
 - Commands containing likely credentials never leave the desktop; the cloud
   service rejects them as a second line of defense.
-- The 20 PLN budget is an alert, not a custom hard spending cap.
+- The subscription has a 4.60 EUR monthly budget with alerts at 50%, 80%,
+  and 100%. It is an alerting guardrail, not a custom hard spending cap.
 
 ## Local smoke test
 
@@ -66,3 +67,13 @@ aliases, but all new configuration should use JARVIS_OS_CLOUD_*.
 
 Do not deploy an image tagged only as latest. Use an immutable version tag or
 Git commit hash so a controlled rollback remains possible.
+
+## Continuous deployment
+
+Changes to the cloud boundary on `develop` are tested and published as an
+immutable `sha-<commit>` image by GitHub Actions. The workflow then signs in
+to Azure through OpenID Connect, updates only `jarvis-os-planner`, and waits
+for the public health check. No Azure password or client secret is stored in
+GitHub. The federated identity accepts tokens only from this repository's
+`develop` branch and has Container Apps Contributor access only to the
+planner resource.

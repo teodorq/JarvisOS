@@ -18,6 +18,7 @@ on:
 permissions:
   contents: read
   packages: write
+  id-token: write
 
 concurrency:
   group: jarvis-os-cloud-image-${{ github.ref }}
@@ -59,3 +60,50 @@ jobs:
           labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy immutable image to Azure
+    needs: test-and-publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Sign in to Azure with GitHub OIDC
+        uses: azure/login@v2
+        with:
+          client-id: 553e8a79-9004-49d5-b996-bc8f3768ffce
+          tenant-id: 1f218598-c698-404f-908f-025fe1b55870
+          subscription-id: c7cac745-0964-425d-97b4-61d19e4cef65
+
+      - name: Deploy the verified image
+        shell: bash
+        run: |
+          az config set extension.use_dynamic_install=yes_without_prompt
+          az containerapp update \
+            --name jarvis-os-planner \
+            --resource-group rg-jarvis-os-cloud \
+            --image "ghcr.io/${{ github.repository_owner }}/jarvis-os-cloud:sha-${{ github.sha }}" \
+            --only-show-errors \
+            --output none
+
+      - name: Verify the deployed revision
+        shell: bash
+        run: |
+          fqdn="$(az containerapp show \
+            --name jarvis-os-planner \
+            --resource-group rg-jarvis-os-cloud \
+            --query properties.configuration.ingress.fqdn \
+            --output tsv)"
+          health_url="https://${fqdn}/health"
+          for attempt in $(seq 1 12); do
+            response="$(curl --fail --silent --show-error --max-time 20 "${health_url}" || true)"
+            if python -c 'import json,sys; data=json.loads(sys.argv[1]); raise SystemExit(0 if data.get("status") == "ok" and data.get("service") == "jarvis-os-cloud-planner" else 1)' "${response}"; then
+              echo "JARVIS OS cloud planner is healthy at ${health_url}."
+              exit 0
+            fi
+            echo "Health check ${attempt}/12 is not ready yet."
+            sleep 5
+          done
+          echo "The deployed JARVIS OS cloud planner did not become healthy."
+          exit 1

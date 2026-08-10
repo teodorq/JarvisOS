@@ -18,7 +18,7 @@ resource resourceGroup 'Microsoft.Resources/resourceGroups@2024-03-01' = {
   location: location
   tags: {
     application: 'JARVIS OS'
-    costProfile: '20-pln-guarded'
+    costProfile: '4-60-eur-budget-alert'
   }
 }
 

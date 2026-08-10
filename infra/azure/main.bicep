@@ -14,7 +14,7 @@ param apiToken string
 var tags = {
   application: 'JARVIS OS'
   component: 'cloud-planner'
-  costProfile: '20-pln-guarded'
+  costProfile: '4-60-eur-budget-alert'
 }
 
 resource managedEnvironment 'Microsoft.App/managedEnvironments@2024-03-01' = {
