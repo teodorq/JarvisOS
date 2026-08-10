@@ -1,8 +1,8 @@
 # JARVIS OS Cloud - stage 2
 
-This stage moves only safe, read-oriented planning to Azure. The GUI,
-microphone, Windows action execution, user confirmations, memory, and Google
-tokens remain on the desktop computer.
+This stage moves safe planning and a durable phone command relay to Azure. The
+GUI, microphone, Windows action execution, user confirmations, memory, and
+Google tokens remain on the desktop computer.
 
 Stage 2 adds a privacy gate on both sides of the connection. Commands that
 look like they contain passwords, API keys, bearer tokens, private keys, or
@@ -18,7 +18,8 @@ paid service.
 - 0.25 vCPU and 0.5 GiB RAM.
 - At most 30 authenticated planning requests per minute and source.
 - A failed cloud call opens a 60-second local fallback circuit on the desktop.
-- No database, Azure Container Registry, private network, or paid Log
+- One Standard_LRS Table Storage account keeps short-lived relay records for
+  24 hours. There is no Azure Container Registry, private network, or paid Log
   Analytics workspace in this stage.
 - Commands containing likely credentials never leave the desktop; the cloud
   service rejects them as a second line of defense.
@@ -57,13 +58,23 @@ automatically uses the local planner.
    not create a paid Azure Container Registry; the selected image must be
    accessible to Container Apps.
 3. Install Azure CLI, sign in, and explicitly select the correct subscription.
-4. Deploy subscription.bicep with the full image name and a random API token
-   passed as secure parameters. Never store that token in a file or Git.
+4. Deploy subscription.bicep with the full image name, a random desktop API
+   token, and a different random phone API token passed as secure parameters.
+   Never store either token in a file or Git.
 5. Check the returned /health URL before configuring JARVIS_OS_CLOUD_URL and
    JARVIS_OS_CLOUD_API_TOKEN on the desktop.
 
 The previous JARVIS_CLOUD_* names remain accepted temporarily as migration
 aliases, but all new configuration should use JARVIS_OS_CLOUD_*.
+
+## Private phone command page
+
+The deployment returns a `/phone` URL. Pairing puts the phone token in the URL
+fragment, which is not sent to the server, and the page keeps it only in
+`sessionStorage`. The desktop must set `JARVIS_OS_REMOTE_DEVICE_ID=desktop-main`
+and remain running to receive commands. The phone cannot approve actions:
+anything protected by the normal confirmation policy still waits for local
+confirmation on the computer.
 
 Do not deploy an image tagged only as latest. Use an immutable version tag or
 Git commit hash so a controlled rollback remains possible.

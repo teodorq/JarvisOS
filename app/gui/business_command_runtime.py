@@ -9,6 +9,7 @@ from app.gui.confirmed_calendar_execution import execute_confirmed_calendar_plan
 from app.gui.client_command_runtime import ClientCommandRuntimeMixin
 from app.gui.confirmation_revision_runtime import handle_owner_confirmation
 from app.gui.owner_background_commands import execute_owner_thought, shutdown_owner_commands, start_owner_command
+from app.gui.remote_command_runtime import shutdown_remote_command_runtime
 from app.gui.repeated_confirmation import repeated_calendar_confirmation
 class BusinessCommandRuntimeMixin(ClientCommandRuntimeMixin):
     """Voice, confirmation and command execution lifecycle for Business UI."""
@@ -164,6 +165,7 @@ class BusinessCommandRuntimeMixin(ClientCommandRuntimeMixin):
 
     def closeEvent(self, event) -> None:
         shutdown_owner_commands(self)
+        shutdown_remote_command_runtime(self)
         try:
             if self.voice is not None:
                 self.voice.stop()

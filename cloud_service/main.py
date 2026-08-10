@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 from app.ai.planner_llm import PlannerLLM
 from app.cloud.contracts import (
@@ -21,10 +21,18 @@ from app.cloud.contracts import (
     validate_cloud_plan,
 )
 from app.cloud.privacy import CloudPrivacyError, ensure_cloud_safe_command
+from cloud_service.phone_ui import PHONE_PAGE
+from cloud_service.remote_store import (
+    RemoteCommandStore,
+    normalize_command_id,
+    normalize_device_id,
+    normalize_event_status,
+    remote_store_from_environment,
+)
 
 
 SERVICE_NAME = "jarvis-os-cloud-planner"
-SERVICE_VERSION = "0.4.0"
+SERVICE_VERSION = "0.5.0"
 MAX_BODY_BYTES = 16_384
 
 
@@ -33,6 +41,7 @@ class ServiceConfig:
     api_token: str
     environment: str = "production"
     requests_per_minute: int = 30
+    phone_api_token: str = ""
 
     @classmethod
     def from_environment(cls) -> "ServiceConfig":
@@ -47,6 +56,9 @@ class ServiceConfig:
                 or "production"
             ),
             requests_per_minute=_requests_per_minute_from_environment(),
+            phone_api_token=os.getenv(
+                "JARVIS_OS_PHONE_API_TOKEN", ""
+            ).strip(),
         )
 
 def _requests_per_minute_from_environment() -> int:
@@ -111,12 +123,14 @@ class JarvisOSCloudServer(ThreadingHTTPServer):
         config: ServiceConfig,
         service: PlannerService,
         rate_limiter: PlanRateLimiter | None = None,
+        remote_store: RemoteCommandStore | None = None,
     ) -> None:
         self.config = config
         self.planner_service = service
         self.rate_limiter = rate_limiter or PlanRateLimiter(
             config.requests_per_minute
         )
+        self.remote_store = remote_store
         super().__init__(server_address, JarvisOSCloudHandler)
 
 
@@ -125,73 +139,181 @@ class JarvisOSCloudHandler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
     def do_GET(self) -> None:
-        if urlsplit(self.path).path != "/health":
-            self._json(HTTPStatus.NOT_FOUND, {"error": "not_found"})
-            return
-        self._json(
-            HTTPStatus.OK,
-            {
+        parsed = urlsplit(self.path)
+        if parsed.path == "/health":
+            self._json(HTTPStatus.OK, {
                 "service": SERVICE_NAME,
                 "status": "ok",
                 "version": SERVICE_VERSION,
                 "environment": self.server.config.environment,
                 "auth_configured": bool(self.server.config.api_token),
-            },
-        )
+                "remote_configured": self._remote_ready(),
+            })
+            return
+        if parsed.path == "/phone":
+            self._html(PHONE_PAGE)
+            return
+        if parsed.path == "/v1/remote/commands/next":
+            self._handle_remote_claim(parsed)
+            return
+        parts = parsed.path.strip("/").split("/")
+        if len(parts) == 4 and parts[:3] == ["v1", "remote", "commands"]:
+            self._handle_remote_status(parsed, parts[3])
+            return
+        self._json(HTTPStatus.NOT_FOUND, {"error": "not_found"})
 
     def do_POST(self) -> None:
-        if urlsplit(self.path).path != "/v1/plan":
-            self._json(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+        parsed = urlsplit(self.path)
+        if parsed.path == "/v1/plan":
+            self._handle_plan()
             return
+        if parsed.path == "/v1/remote/commands":
+            self._handle_remote_submit()
+            return
+        parts = parsed.path.strip("/").split("/")
+        if (
+            len(parts) == 5
+            and parts[:3] == ["v1", "remote", "commands"]
+            and parts[4] == "events"
+        ):
+            self._handle_remote_event(parsed, parts[3])
+            return
+        self._json(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+
+    def _handle_plan(self) -> None:
         if not self.server.config.api_token:
-            self._json(
-                HTTPStatus.SERVICE_UNAVAILABLE,
-                {"error": "service_not_configured"},
-            )
+            self._json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "service_not_configured"})
             return
         if not self._authorized():
             self._json(HTTPStatus.UNAUTHORIZED, {"error": "unauthorized"})
             return
-        allowed, retry_after = self.server.rate_limiter.allow(
-            self.client_address[0]
-        )
+        allowed, retry_after = self.server.rate_limiter.allow(self.client_address[0])
         if not allowed:
-            self._json(
-                HTTPStatus.TOO_MANY_REQUESTS,
-                {"error": "rate_limited"},
-                headers={"Retry-After": str(retry_after)},
-            )
+            self._json(HTTPStatus.TOO_MANY_REQUESTS, {"error": "rate_limited"}, headers={"Retry-After": str(retry_after)})
             return
-
         try:
             payload = self._read_payload()
             if payload.get("schema_version") != SCHEMA_VERSION:
                 raise CloudContractError("unsupported request schema")
             plan = self.server.planner_service.create_plan(payload.get("command"))
         except CloudPrivacyError:
-            self._json(
-                HTTPStatus.UNPROCESSABLE_ENTITY,
-                {"error": "sensitive_command_requires_local"},
-            )
+            self._json(HTTPStatus.UNPROCESSABLE_ENTITY, {"error": "sensitive_command_requires_local"})
             return
         except CloudContractError:
-            self._json(
-                HTTPStatus.UNPROCESSABLE_ENTITY,
-                {"error": "unsupported_or_unsafe_plan"},
-            )
+            self._json(HTTPStatus.UNPROCESSABLE_ENTITY, {"error": "unsupported_or_unsafe_plan"})
             return
         except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
             self._json(HTTPStatus.BAD_REQUEST, {"error": "invalid_request"})
             return
-        self._json(
-            HTTPStatus.OK,
-            {
-                "schema_version": SCHEMA_VERSION,
-                "request_id": uuid.uuid4().hex,
-                "plan": plan,
-            },
+        self._json(HTTPStatus.OK, {"schema_version": SCHEMA_VERSION, "request_id": uuid.uuid4().hex, "plan": plan})
+
+    def _handle_remote_submit(self) -> None:
+        if not self._remote_ready():
+            self._json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "remote_not_configured"})
+            return
+        if not self._phone_authorized():
+            self._json(HTTPStatus.UNAUTHORIZED, {"error": "unauthorized"})
+            return
+        allowed, retry_after = self.server.rate_limiter.allow("phone:" + self.client_address[0])
+        if not allowed:
+            self._json(HTTPStatus.TOO_MANY_REQUESTS, {"error": "rate_limited"}, headers={"Retry-After": str(retry_after)})
+            return
+        try:
+            payload = self._read_payload()
+            device_id = normalize_device_id(payload.get("device_id"))
+            command = normalize_command(payload.get("command"))
+            ensure_cloud_safe_command(command)
+            record = self.server.remote_store.create(device_id, command)
+        except CloudPrivacyError:
+            self._json(HTTPStatus.UNPROCESSABLE_ENTITY, {"error": "sensitive_command_requires_local", "message": "To polecenie zawiera dane, które muszą pozostać na komputerze."})
+            return
+        except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
+            self._json(HTTPStatus.BAD_REQUEST, {"error": "invalid_request"})
+            return
+        self._json(HTTPStatus.ACCEPTED, record)
+
+    def _handle_remote_claim(self, parsed) -> None:
+        if not self._remote_ready():
+            self._json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "remote_not_configured"})
+            return
+        if not self._authorized():
+            self._json(HTTPStatus.UNAUTHORIZED, {"error": "unauthorized"})
+            return
+        try:
+            record = self.server.remote_store.claim_next(self._device_from_query(parsed))
+        except ValueError:
+            self._json(HTTPStatus.BAD_REQUEST, {"error": "invalid_request"})
+            return
+        if record is None:
+            self._empty(HTTPStatus.NO_CONTENT)
+            return
+        self._json(HTTPStatus.OK, record)
+
+    def _handle_remote_status(self, parsed, raw_command_id: str) -> None:
+        if not self._remote_ready():
+            self._json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "remote_not_configured"})
+            return
+        if not self._phone_authorized():
+            self._json(HTTPStatus.UNAUTHORIZED, {"error": "unauthorized"})
+            return
+        try:
+            record = self.server.remote_store.get(
+                self._device_from_query(parsed), normalize_command_id(raw_command_id)
+            )
+        except ValueError:
+            self._json(HTTPStatus.BAD_REQUEST, {"error": "invalid_request"})
+            return
+        if record is None:
+            self._json(HTTPStatus.NOT_FOUND, {"error": "command_not_found"})
+            return
+        self._json(HTTPStatus.OK, record)
+
+    def _handle_remote_event(self, parsed, raw_command_id: str) -> None:
+        if not self._remote_ready():
+            self._json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "remote_not_configured"})
+            return
+        if not self._authorized():
+            self._json(HTTPStatus.UNAUTHORIZED, {"error": "unauthorized"})
+            return
+        try:
+            device_id = self._device_from_query(parsed)
+            command_id = normalize_command_id(raw_command_id)
+            payload = self._read_payload()
+            status = normalize_event_status(payload.get("status"))
+            message = " ".join(str(payload.get("message", "")).split())[:2_000]
+            if not message:
+                raise ValueError("message cannot be empty")
+            try:
+                ensure_cloud_safe_command(message)
+            except CloudPrivacyError:
+                message = "Wynik zawiera prywatne dane i pozostał tylko na komputerze."
+            record = self.server.remote_store.set_status(device_id, command_id, status, message)
+        except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
+            self._json(HTTPStatus.BAD_REQUEST, {"error": "invalid_request"})
+            return
+        if record is None:
+            self._json(HTTPStatus.NOT_FOUND, {"error": "command_not_found"})
+            return
+        self._json(HTTPStatus.OK, record)
+
+    def _remote_ready(self) -> bool:
+        return bool(self.server.remote_store and self.server.config.phone_api_token)
+
+    def _phone_authorized(self) -> bool:
+        header = self.headers.get("Authorization", "")
+        prefix = "Bearer "
+        return bool(
+            self.server.config.phone_api_token
+            and header.startswith(prefix)
+            and hmac.compare_digest(
+                header[len(prefix):], self.server.config.phone_api_token
+            )
         )
 
+    @staticmethod
+    def _device_from_query(parsed) -> str:
+        value = parse_qs(parsed.query).get("device_id", [""])[0]
+        return normalize_device_id(value)
     def _authorized(self) -> bool:
         header = self.headers.get("Authorization", "")
         prefix = "Bearer "
@@ -232,6 +354,29 @@ class JarvisOSCloudHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _empty(self, status: HTTPStatus) -> None:
+        self.send_response(int(status))
+        self.send_header("Content-Length", "0")
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+
+    def _html(self, value: str) -> None:
+        body = value.encode("utf-8")
+        self.send_response(int(HTTPStatus.OK))
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header(
+            "Content-Security-Policy",
+            "default-src 'none'; style-src 'unsafe-inline'; "
+            "script-src 'unsafe-inline'; connect-src 'self'; "
+            "base-uri 'none'; frame-ancestors 'none'",
+        )
+        self.end_headers()
+        self.wfile.write(body)
     def log_message(self, format: str, *args: Any) -> None:
         # Never log request bodies, tokens, or user commands.
         print(f"{self.client_address[0]} - {format % args}", flush=True)
@@ -244,12 +389,15 @@ def build_server(
     config: ServiceConfig | None = None,
     service: PlannerService | None = None,
     rate_limiter: PlanRateLimiter | None = None,
+    remote_store: RemoteCommandStore | None = None,
 ) -> JarvisOSCloudServer:
+    selected_config = config or ServiceConfig.from_environment()
     return JarvisOSCloudServer(
         (host, port),
-        config or ServiceConfig.from_environment(),
+        selected_config,
         service or PlannerService(),
         rate_limiter=rate_limiter,
+        remote_store=remote_store if remote_store is not None else remote_store_from_environment(),
     )
 
 

@@ -6,6 +6,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PORT=8000
 
 WORKDIR /srv/jarvis
+COPY cloud_service/requirements.txt ./cloud_service/requirements.txt
+RUN pip install --no-cache-dir --requirement cloud_service/requirements.txt
 
 COPY --chown=10001:0 cloud_service ./cloud_service
 COPY --chown=10001:0 app/cloud ./app/cloud

@@ -13,6 +13,10 @@ param containerImage string
 @description('Bearer token shared only by the desktop client and Container App.')
 param apiToken string
 
+@secure()
+@description('Bearer token used only by the private phone command page.')
+param phoneApiToken string
+
 resource resourceGroup 'Microsoft.Resources/resourceGroups@2024-03-01' = {
   name: 'rg-${namePrefix}-cloud'
   location: location
@@ -30,9 +34,12 @@ module cloudPlanner './main.bicep' = {
     location: location
     containerImage: containerImage
     apiToken: apiToken
+    phoneApiToken: phoneApiToken
   }
 }
 
 output resourceGroupName string = resourceGroup.name
 output endpoint string = cloudPlanner.outputs.endpoint
 output healthUrl string = cloudPlanner.outputs.healthUrl
+output phoneUrl string = cloudPlanner.outputs.phoneUrl
+output remoteStorageAccountName string = cloudPlanner.outputs.remoteStorageAccountName

@@ -45,8 +45,14 @@ Copy `config/cloud.env.example` to `config/cloud.env` and provide:
 
 - `JARVIS_OS_CLOUD_URL`
 - `JARVIS_OS_CLOUD_API_TOKEN`
+- `JARVIS_OS_REMOTE_DEVICE_ID=desktop-main` to receive commands from the
+  private phone page
 
 The desktop validates every cloud plan. Windows actions, confirmations and private memory remain local, and the local planner is used automatically if Azure is unavailable.
+
+The Azure deployment also exposes a private `/phone` page. It uses a separate
+phone token, stores relay commands for at most 24 hours, and never bypasses the
+desktop confirmation policy.
 
 ## Repository layout
 
