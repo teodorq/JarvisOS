@@ -84,12 +84,20 @@ jobs:
         shell: bash
         run: |
           az config set extension.use_dynamic_install=yes_without_prompt
-          az containerapp update \
-            --name jarvis-os-planner \
-            --resource-group rg-jarvis-os-cloud \
-            --image "ghcr.io/${{ github.repository_owner }}/jarvis-os-cloud:sha-${{ github.sha }}" \
-            --only-show-errors \
-            --output none
+          for attempt in $(seq 1 5); do
+            if az containerapp update \
+              --name jarvis-os-planner \
+              --resource-group rg-jarvis-os-cloud \
+              --image "ghcr.io/${{ github.repository_owner }}/jarvis-os-cloud:sha-${{ github.sha }}" \
+              --only-show-errors \
+              --output none; then
+              exit 0
+            fi
+            echo "Azure update ${attempt}/5 failed; retrying after 15 seconds."
+            sleep 15
+          done
+          echo "Azure Container App update failed after 5 attempts."
+          exit 1
 
       - name: Verify the deployed revision
         shell: bash

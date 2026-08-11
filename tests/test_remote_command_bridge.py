@@ -50,7 +50,7 @@ class RemoteCommandBridgeTests(unittest.TestCase):
     device_id = "desktop-main"
     queue_url = (
         "https://jarvis.queue.core.windows.net/commands"
-        "?sv=2025-01-05&se=2030-01-01T00%3A00Z&sp=p&sr=q&sig=test"
+        "?sv=2025-01-05&se=2030-01-01T00%3A00Z&sp=p&sig=test"
     )
 
     def setUp(self) -> None:

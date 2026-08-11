@@ -344,7 +344,7 @@ class CloudPlannerClient:
     def _validate_queue_endpoint(self) -> None:
         parsed = urllib.parse.urlsplit(self.settings.remote_queue_url)
         query = urllib.parse.parse_qs(parsed.query, keep_blank_values=True)
-        required = {"se", "sig", "sp", "sr", "sv"}
+        required = {"se", "sig", "sp", "sv"}
         valid_host = bool(
             parsed.hostname
             and parsed.hostname.endswith(".queue.core.windows.net")
@@ -359,7 +359,7 @@ class CloudPlannerClient:
             or parsed.fragment
             or not required.issubset(query)
             or "p" not in query.get("sp", [""])[0]
-            or query.get("sr", [""])[0] != "q"
+            or ("sr" in query and query.get("sr", [""])[0] != "q")
         ):
             raise CloudPlannerUnavailable("invalid remote queue URL")
 
