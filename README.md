@@ -54,6 +54,20 @@ The Azure deployment also exposes a private `/phone` page. It uses a separate
 phone token, stores relay commands for at most 24 hours, and never bypasses the
 desktop confirmation policy.
 
+## Optional Windows autostart
+
+The phone bridge can receive commands only while the desktop application is
+running. Install the per-user watchdog to start JARVIS OS after sign-in and
+restart it after an unexpected exit:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\install_jarvis_autostart.ps1
+```
+
+The watchdog uses a single instance and a 5-to-60-second restart backoff. To
+remove the scheduled task and stop the watchdog, run the same script with
+`-Remove`.
+
 ## Repository layout
 
 - `app/` - desktop application and local capabilities

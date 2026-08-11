@@ -32,6 +32,9 @@ Desktop.ini
 runtime/voice_env/
 runtime/voice_cache/
 runtime/voice_output/
+runtime/jarvis_watchdog.log
+runtime/jarvis_watchdog.log.previous
+runtime/jarvis_watchdog.stop
 
 # Local JARVIS OS state, generated backups and release artifacts
 data/
