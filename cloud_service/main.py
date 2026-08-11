@@ -32,7 +32,7 @@ from cloud_service.remote_store import (
 
 
 SERVICE_NAME = "jarvis-os-cloud-planner"
-SERVICE_VERSION = "0.5.0"
+SERVICE_VERSION = "0.6.0"
 MAX_BODY_BYTES = 16_384
 
 
@@ -148,6 +148,7 @@ class JarvisOSCloudHandler(BaseHTTPRequestHandler):
                 "environment": self.server.config.environment,
                 "auth_configured": bool(self.server.config.api_token),
                 "remote_configured": self._remote_ready(),
+                "remote_transport": self._remote_transport(),
             })
             return
         if parsed.path == "/phone":
@@ -169,6 +170,9 @@ class JarvisOSCloudHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/v1/remote/commands":
             self._handle_remote_submit()
+            return
+        if parsed.path == "/v1/remote/probe":
+            self._handle_remote_probe()
             return
         parts = parsed.path.strip("/").split("/")
         if (
@@ -223,12 +227,59 @@ class JarvisOSCloudHandler(BaseHTTPRequestHandler):
             device_id = normalize_device_id(payload.get("device_id"))
             command = normalize_command(payload.get("command"))
             ensure_cloud_safe_command(command)
-            record = self.server.remote_store.create(device_id, command)
+            record = self.server.remote_store.create(
+                device_id, command, kind="command"
+            )
         except CloudPrivacyError:
             self._json(HTTPStatus.UNPROCESSABLE_ENTITY, {"error": "sensitive_command_requires_local", "message": "To polecenie zawiera dane, które muszą pozostać na komputerze."})
             return
         except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
             self._json(HTTPStatus.BAD_REQUEST, {"error": "invalid_request"})
+            return
+        except Exception:
+            self._json(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"error": "remote_temporarily_unavailable"},
+            )
+            return
+        self._json(HTTPStatus.ACCEPTED, record)
+
+    def _handle_remote_probe(self) -> None:
+        if not self._remote_ready():
+            self._json(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"error": "remote_not_configured"},
+            )
+            return
+        if not self._phone_authorized():
+            self._json(HTTPStatus.UNAUTHORIZED, {"error": "unauthorized"})
+            return
+        allowed, retry_after = self.server.rate_limiter.allow(
+            "phone:" + self.client_address[0]
+        )
+        if not allowed:
+            self._json(
+                HTTPStatus.TOO_MANY_REQUESTS,
+                {"error": "rate_limited"},
+                headers={"Retry-After": str(retry_after)},
+            )
+            return
+        try:
+            payload = self._read_payload()
+            device_id = normalize_device_id(payload.get("device_id"))
+            record = self.server.remote_store.create(
+                device_id,
+                "sprawdzenie dostępności",
+                kind="probe",
+            )
+        except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
+            self._json(HTTPStatus.BAD_REQUEST, {"error": "invalid_request"})
+            return
+        except Exception:
+            self._json(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"error": "remote_temporarily_unavailable"},
+            )
             return
         self._json(HTTPStatus.ACCEPTED, record)
 
@@ -238,6 +289,11 @@ class JarvisOSCloudHandler(BaseHTTPRequestHandler):
             return
         if not self._authorized():
             self._json(HTTPStatus.UNAUTHORIZED, {"error": "unauthorized"})
+            return
+        if bool(
+            getattr(self.server.remote_store, "direct_queue_enabled", False)
+        ):
+            self._empty(HTTPStatus.NO_CONTENT)
             return
         try:
             record = self.server.remote_store.claim_next(self._device_from_query(parsed))
@@ -298,6 +354,15 @@ class JarvisOSCloudHandler(BaseHTTPRequestHandler):
 
     def _remote_ready(self) -> bool:
         return bool(self.server.remote_store and self.server.config.phone_api_token)
+
+    def _remote_transport(self) -> str:
+        if not self.server.remote_store:
+            return "disabled"
+        if bool(
+            getattr(self.server.remote_store, "direct_queue_enabled", False)
+        ):
+            return "azure_queue"
+        return "https_poll"
 
     def _phone_authorized(self) -> bool:
         header = self.headers.get("Authorization", "")

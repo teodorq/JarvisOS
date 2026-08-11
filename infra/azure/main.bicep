@@ -52,6 +52,16 @@ resource commandsTable 'Microsoft.Storage/storageAccounts/tableServices/tables@2
   name: 'commands'
 }
 
+resource queueService 'Microsoft.Storage/storageAccounts/queueServices@2023-05-01' = {
+  parent: remoteStorage
+  name: 'default'
+}
+
+resource commandsQueue 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-05-01' = {
+  parent: queueService
+  name: 'commands'
+}
+
 var storageKey = remoteStorage.listKeys().keys[0].value
 var storageConnection = 'DefaultEndpointsProtocol=https;AccountName=${remoteStorage.name};AccountKey=${storageKey};EndpointSuffix=${environment().suffixes.storage}'
 
@@ -116,6 +126,10 @@ resource plannerApp 'Microsoft.App/containerApps@2024-03-01' = {
             {
               name: 'JARVIS_OS_REMOTE_TABLE'
               value: commandsTable.name
+            }
+            {
+              name: 'JARVIS_OS_REMOTE_QUEUE'
+              value: commandsQueue.name
             }
             {
               name: 'JARVIS_OS_CLOUD_REQUESTS_PER_MINUTE'
@@ -185,3 +199,4 @@ output endpoint string = 'https://${plannerApp.properties.configuration.ingress.
 output healthUrl string = 'https://${plannerApp.properties.configuration.ingress.fqdn}/health'
 output phoneUrl string = 'https://${plannerApp.properties.configuration.ingress.fqdn}/phone'
 output remoteStorageAccountName string = remoteStorage.name
+output remoteQueueName string = commandsQueue.name

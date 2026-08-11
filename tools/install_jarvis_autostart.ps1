@@ -39,6 +39,11 @@ $action = New-ScheduledTaskAction `
     -WorkingDirectory $projectPath
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $userId
 $trigger.Delay = "PT20S"
+$maintenanceTrigger = New-ScheduledTaskTrigger `
+    -Once `
+    -At (Get-Date).AddMinutes(1) `
+    -RepetitionInterval (New-TimeSpan -Minutes 1) `
+    -RepetitionDuration (New-TimeSpan -Days 3650)
 $principal = New-ScheduledTaskPrincipal `
     -UserId $userId `
     -LogonType Interactive `
@@ -53,7 +58,7 @@ $settings = New-ScheduledTaskSettingsSet `
     -MultipleInstances IgnoreNew
 $definition = New-ScheduledTask `
     -Action $action `
-    -Trigger $trigger `
+    -Trigger @($trigger, $maintenanceTrigger) `
     -Principal $principal `
     -Settings $settings `
     -Description (

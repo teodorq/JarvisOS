@@ -11,6 +11,7 @@ on:
       - app/ai/planner_llm.py
       - app/ai/commands/**
       - tests/test_cloud*.py
+      - tests/test_remote_command_bridge.py
       - .dockerignore
       - .github/workflows/cloud-image.yml
   workflow_dispatch:
@@ -38,6 +39,9 @@ jobs:
 
       - name: Test cloud boundary
         run: python -m unittest discover -s tests -p "test_cloud*.py" -v
+
+      - name: Test phone command relay
+        run: python -m unittest discover -s tests -p "test_remote_command_bridge.py" -v
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3

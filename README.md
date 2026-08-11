@@ -47,12 +47,16 @@ Copy `config/cloud.env.example` to `config/cloud.env` and provide:
 - `JARVIS_OS_CLOUD_API_TOKEN`
 - `JARVIS_OS_REMOTE_DEVICE_ID=desktop-main` to receive commands from the
   private phone page
+- `JARVIS_OS_REMOTE_QUEUE_URL` with a private, queue-scoped Azure SAS URL that
+  grants only process permission
 
 The desktop validates every cloud plan. Windows actions, confirmations and private memory remain local, and the local planner is used automatically if Azure is unavailable.
 
 The Azure deployment also exposes a private `/phone` page. It uses a separate
 phone token, stores relay commands for at most 24 hours, and never bypasses the
-desktop confirmation policy.
+desktop confirmation policy. The page performs an on-demand online check when
+it opens. Desktop command polling goes directly to Azure Storage Queue, so the
+Container App can scale to zero while the phone page is not being used.
 
 ## Optional Windows autostart
 
@@ -64,7 +68,8 @@ restart it after an unexpected exit:
 powershell -ExecutionPolicy Bypass -File tools\install_jarvis_autostart.ps1
 ```
 
-The watchdog uses a single instance and a 5-to-60-second restart backoff. To
+The watchdog uses a single instance, a 5-to-60-second restart backoff, and a
+one-minute recovery trigger if Windows terminates the watchdog itself. To
 remove the scheduled task and stop the watchdog, run the same script with
 `-Remove`.
 

@@ -32,11 +32,31 @@ function Write-WatchdogLog {
     Add-Content -LiteralPath $logPath -Value "$timestamp $Message" -Encoding UTF8
 }
 
+function Get-RunningJarvisProcess {
+    $escapedMainPath = [regex]::Escape($mainPath)
+    $record = Get-CimInstance Win32_Process |
+        Where-Object {
+            $_.ExecutablePath -eq $pythonwPath -and
+            $_.CommandLine -match $escapedMainPath
+        } |
+        Sort-Object CreationDate |
+        Select-Object -First 1
+    if ($null -eq $record) {
+        return $null
+    }
+    return Get-Process -Id $record.ProcessId -ErrorAction SilentlyContinue
+}
+
 $mutex = New-Object Threading.Mutex($false, "Local\JARVIS_OS_WATCHDOG")
 $ownsMutex = $false
 
 try {
-    $ownsMutex = $mutex.WaitOne(0, $false)
+    try {
+        $ownsMutex = $mutex.WaitOne(0, $false)
+    }
+    catch [Threading.AbandonedMutexException] {
+        $ownsMutex = $true
+    }
     if (-not $ownsMutex) {
         exit 0
     }
@@ -52,13 +72,19 @@ try {
         $startedAt = Get-Date
         $exitCode = -1
         try {
-            $argument = '"' + $mainPath + '"'
-            $process = Start-Process `
-                -FilePath $pythonwPath `
-                -ArgumentList $argument `
-                -WorkingDirectory $projectPath `
-                -PassThru
-            Write-WatchdogLog "JARVIS OS started with PID $($process.Id)."
+            $process = Get-RunningJarvisProcess
+            if ($null -eq $process) {
+                $argument = '"' + $mainPath + '"'
+                $process = Start-Process `
+                    -FilePath $pythonwPath `
+                    -ArgumentList $argument `
+                    -WorkingDirectory $projectPath `
+                    -PassThru
+                Write-WatchdogLog "JARVIS OS started with PID $($process.Id)."
+            }
+            else {
+                Write-WatchdogLog "Existing JARVIS OS PID $($process.Id) adopted."
+            }
             $process.WaitForExit()
             $exitCode = $process.ExitCode
         }

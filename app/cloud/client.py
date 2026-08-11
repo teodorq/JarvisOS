@@ -30,6 +30,7 @@ class CloudPlannerSettings:
     api_token: str = ""
     timeout_seconds: float = 30.0
     remote_device_id: str = ""
+    remote_queue_url: str = ""
 
     @classmethod
     def from_environment(cls) -> "CloudPlannerSettings":
@@ -53,6 +54,9 @@ class CloudPlannerSettings:
             remote_device_id=_environment_value(
                 "JARVIS_OS_REMOTE_DEVICE_ID", "JARVIS_REMOTE_DEVICE_ID"
             ).lower(),
+            remote_queue_url=os.getenv(
+                "JARVIS_OS_REMOTE_QUEUE_URL", ""
+            ).strip(),
         )
 
 
@@ -64,8 +68,15 @@ def _environment_value(primary: str, legacy: str, *, default: str = "") -> str:
 
 
 class CloudPlannerClient:
-    def __init__(self, settings: CloudPlannerSettings | None = None) -> None:
+    def __init__(
+        self,
+        settings: CloudPlannerSettings | None = None,
+        *,
+        queue_client: Any | None = None,
+    ) -> None:
         self.settings = settings or CloudPlannerSettings.from_environment()
+        self._queue_client = queue_client
+        self._queue_receipts: dict[str, tuple[str, str]] = {}
 
     @property
     def is_configured(self) -> bool:
@@ -113,21 +124,24 @@ class CloudPlannerClient:
             and device_id == device_id.lower()
         )
 
+    @property
+    def queue_transport_enabled(self) -> bool:
+        return bool(self.settings.remote_queue_url)
+
     def claim_remote_command(self) -> dict[str, Any] | None:
         if not self.remote_enabled:
             return None
         self._validate_endpoint()
+        if self.queue_transport_enabled:
+            self._validate_queue_endpoint()
+            return self._claim_remote_queue_command()
         device_id = urllib.parse.quote(self.settings.remote_device_id, safe="")
         record = self._remote_request_json(
             "GET", f"/v1/remote/commands/next?device_id={device_id}"
         )
         if record is None:
             return None
-        command_id = str(record.get("id", ""))
-        command = str(record.get("command", ""))
-        if len(command_id) != 32 or not command or len(command) > 4_000:
-            raise CloudPlannerUnavailable("invalid remote command")
-        return record
+        return self._validate_remote_record(record)
 
     def report_remote_command(
         self, command_id: str, status: str, message: str,
@@ -150,7 +164,110 @@ class CloudPlannerClient:
         )
         if not isinstance(result, dict):
             raise CloudPlannerUnavailable("invalid remote command response")
+        if self.queue_transport_enabled:
+            self._ack_remote_queue_command(command_id)
         return result
+
+    def _queue_client_instance(self) -> Any:
+        if self._queue_client is None:
+            try:
+                from azure.storage.queue import QueueClient
+            except ImportError as error:
+                raise CloudPlannerUnavailable(
+                    "Azure Queue support is not installed"
+                ) from error
+            try:
+                self._queue_client = QueueClient.from_queue_url(
+                    self.settings.remote_queue_url
+                )
+            except Exception as error:
+                raise CloudPlannerUnavailable(
+                    "remote queue could not be configured"
+                ) from error
+        return self._queue_client
+
+    def _claim_remote_queue_command(self) -> dict[str, Any] | None:
+        queue = self._queue_client_instance()
+        try:
+            message = next(
+                iter(
+                    queue.receive_messages(
+                        messages_per_page=1,
+                        visibility_timeout=120,
+                    )
+                ),
+                None,
+            )
+        except Exception as error:
+            raise CloudPlannerUnavailable("remote queue request failed") from error
+        if message is None:
+            return None
+        try:
+            record = json.loads(str(message.content))
+            if not isinstance(record, dict):
+                raise ValueError("queue message must be an object")
+        except (TypeError, ValueError, json.JSONDecodeError) as error:
+            self._discard_remote_queue_message(message)
+            raise CloudPlannerUnavailable("invalid remote queue message") from error
+        try:
+            record = self._validate_remote_record(record)
+        except CloudPlannerUnavailable:
+            self._discard_remote_queue_message(message)
+            raise
+        if record.get("device_id") != self.settings.remote_device_id:
+            raise CloudPlannerUnavailable(
+                "remote queue message belongs to another device"
+            )
+        self._queue_receipts[record["id"]] = (
+            str(message.id),
+            str(message.pop_receipt),
+        )
+        return record
+
+    def _validate_remote_record(
+        self, record: dict[str, Any]
+    ) -> dict[str, Any]:
+        command_id = str(record.get("id", "")).lower()
+        command = str(record.get("command", ""))
+        kind = str(record.get("kind", "command")).lower()
+        device_id = str(
+            record.get("device_id", self.settings.remote_device_id)
+        ).lower()
+        if len(command_id) != 32 or any(
+            char not in "0123456789abcdef" for char in command_id
+        ):
+            raise CloudPlannerUnavailable("invalid remote command id")
+        if not command or len(command) > 4_000:
+            raise CloudPlannerUnavailable("invalid remote command")
+        if kind not in {"command", "probe"}:
+            raise CloudPlannerUnavailable("invalid remote command kind")
+        record.update(
+            id=command_id,
+            command=command,
+            kind=kind,
+            device_id=device_id,
+        )
+        return record
+
+    def _ack_remote_queue_command(self, command_id: str) -> None:
+        receipt = self._queue_receipts.get(command_id)
+        if receipt is None:
+            return
+        try:
+            self._queue_client_instance().delete_message(*receipt)
+        except Exception as error:
+            raise CloudPlannerUnavailable(
+                "remote queue acknowledgement failed"
+            ) from error
+        self._queue_receipts.pop(command_id, None)
+
+    def _discard_remote_queue_message(self, message: Any) -> None:
+        try:
+            self._queue_client_instance().delete_message(
+                str(message.id), str(message.pop_receipt)
+            )
+        except Exception:
+            pass
 
     def _remote_request_json(
         self, method: str, path: str, payload: dict[str, Any] | None = None,
@@ -223,6 +340,28 @@ class CloudPlannerClient:
         if not isinstance(parsed, dict):
             raise CloudPlannerUnavailable("cloud planner response must be an object")
         return parsed
+
+    def _validate_queue_endpoint(self) -> None:
+        parsed = urllib.parse.urlsplit(self.settings.remote_queue_url)
+        query = urllib.parse.parse_qs(parsed.query, keep_blank_values=True)
+        required = {"se", "sig", "sp", "sr", "sv"}
+        valid_host = bool(
+            parsed.hostname
+            and parsed.hostname.endswith(".queue.core.windows.net")
+        )
+        valid_path = len([part for part in parsed.path.split("/") if part]) == 1
+        if (
+            parsed.scheme != "https"
+            or not valid_host
+            or not valid_path
+            or parsed.username
+            or parsed.password
+            or parsed.fragment
+            or not required.issubset(query)
+            or "p" not in query.get("sp", [""])[0]
+            or query.get("sr", [""])[0] != "q"
+        ):
+            raise CloudPlannerUnavailable("invalid remote queue URL")
 
     def _validate_endpoint(self) -> None:
         parsed = urllib.parse.urlsplit(self.settings.base_url)

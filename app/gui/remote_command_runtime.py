@@ -84,9 +84,13 @@ class RemoteCommandRuntime(QObject):
             return
         command_id = str(record.get("id", ""))
         command = str(record.get("command", "")).strip()
+        kind = str(record.get("kind", "command")).strip().lower()
         if len(command_id) != 32 or not command:
             return
         self._active_id = command_id
+        if kind == "probe":
+            self._queue_report("completed", "Komputer jest online.", True)
+            return
         try:
             self.window.process_client_command(command)
         except Exception:
