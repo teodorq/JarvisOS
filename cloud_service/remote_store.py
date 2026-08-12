@@ -22,11 +22,20 @@ class RemoteStoreError(RuntimeError):
     """Raised when the durable command relay cannot be used safely."""
 
 
+class RemoteStoreConflict(RemoteStoreError):
+    """Raised when one request id is reused for a different command."""
+
+
 class RemoteCommandStore(Protocol):
     direct_queue_enabled: bool
 
     def create(
-        self, device_id: str, command: str, *, kind: str = "command"
+        self,
+        device_id: str,
+        command: str,
+        *,
+        kind: str = "command",
+        request_id: str | None = None,
     ) -> dict[str, Any]: ...
 
     def claim_next(self, device_id: str) -> dict[str, Any] | None: ...
@@ -87,26 +96,48 @@ class MemoryRemoteCommandStore:
         self._records: dict[tuple[str, str], dict[str, Any]] = {}
 
     def create(
-        self, device_id: str, command: str, *, kind: str = "command"
+        self,
+        device_id: str,
+        command: str,
+        *,
+        kind: str = "command",
+        request_id: str | None = None,
     ) -> dict[str, Any]:
         device_id = normalize_device_id(device_id)
         kind = _validate_kind(kind)
+        command_text = str(command)
+        command_id = (
+            normalize_command_id(request_id)
+            if request_id is not None
+            else uuid.uuid4().hex
+        )
         now = int(self.clock())
-        record = {
-            "id": uuid.uuid4().hex,
-            "device_id": device_id,
-            "command": str(command),
-            "kind": kind,
-            "status": "queued",
-            "message": _queued_message(kind),
-            "created_at": now,
-            "updated_at": now,
-            "expires_at": now + COMMAND_TTL_SECONDS,
-            "lease_until": 0,
-        }
+        key = (device_id, command_id)
         with self._lock:
             self._cleanup(now)
-            self._records[(device_id, record["id"])] = record
+            existing = self._records.get(key)
+            if existing is not None:
+                if (
+                    existing["command"] != command_text
+                    or existing["kind"] != kind
+                ):
+                    raise RemoteStoreConflict(
+                        "request id belongs to another command"
+                    )
+                return dict(existing)
+            record = {
+                "id": command_id,
+                "device_id": device_id,
+                "command": command_text,
+                "kind": kind,
+                "status": "queued",
+                "message": _queued_message(kind),
+                "created_at": now,
+                "updated_at": now,
+                "expires_at": now + COMMAND_TTL_SECONDS,
+                "lease_until": 0,
+            }
+            self._records[key] = record
             return dict(record)
 
     def claim_next(self, device_id: str) -> dict[str, Any] | None:
@@ -195,6 +226,7 @@ class AzureTableRemoteCommandStore:
             from azure.data.tables import TableServiceClient, UpdateMode
         except ImportError as error:
             raise RemoteStoreError("azure-data-tables is not installed") from error
+        self._exists = ResourceExistsError
         self._not_found = ResourceNotFoundError
         self._update_mode = UpdateMode.REPLACE
         self.table = TableServiceClient.from_connection_string(
@@ -235,15 +267,26 @@ class AzureTableRemoteCommandStore:
         }
 
     def create(
-        self, device_id: str, command: str, *, kind: str = "command"
+        self,
+        device_id: str,
+        command: str,
+        *,
+        kind: str = "command",
+        request_id: str | None = None,
     ) -> dict[str, Any]:
         device_id = normalize_device_id(device_id)
         kind = _validate_kind(kind)
+        command_text = str(command)
+        command_id = (
+            normalize_command_id(request_id)
+            if request_id is not None
+            else uuid.uuid4().hex
+        )
         now = int(time.time())
         entity = {
             "PartitionKey": device_id,
-            "RowKey": uuid.uuid4().hex,
-            "Command": str(command),
+            "RowKey": command_id,
+            "Command": command_text,
             "Kind": kind,
             "Status": "queued",
             "Message": _queued_message(kind),
@@ -253,12 +296,23 @@ class AzureTableRemoteCommandStore:
             "LeaseUntil": 0,
         }
         self._cleanup(device_id, now)
-        self.table.create_entity(entity)
+        try:
+            self.table.create_entity(entity)
+        except self._exists:
+            existing = self.table.get_entity(device_id, command_id)
+            if (
+                str(existing.get("Command", "")) != command_text
+                or str(existing.get("Kind", "command")) != kind
+            ):
+                raise RemoteStoreConflict(
+                    "request id belongs to another command"
+                )
+            return self._public(existing)
         if self.queue is not None:
             message = {
-                "id": entity["RowKey"],
+                "id": command_id,
                 "device_id": device_id,
-                "command": entity["Command"],
+                "command": command_text,
                 "kind": kind,
             }
             try:
@@ -268,7 +322,7 @@ class AzureTableRemoteCommandStore:
                 )
             except Exception:
                 try:
-                    self.table.delete_entity(device_id, entity["RowKey"])
+                    self.table.delete_entity(device_id, command_id)
                 except Exception:
                     pass
                 raise

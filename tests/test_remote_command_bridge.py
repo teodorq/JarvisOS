@@ -12,7 +12,11 @@ from app.cloud.client import (
     CloudPlannerUnavailable,
 )
 from cloud_service.main import ServiceConfig, build_server
-from cloud_service.remote_store import MemoryRemoteCommandStore
+from cloud_service.remote_store import (
+    AzureTableRemoteCommandStore,
+    MemoryRemoteCommandStore,
+    RemoteStoreConflict,
+)
 
 
 class FakeQueueMessage:
@@ -42,6 +46,38 @@ class FakeQueueClient:
     def delete_message(self, message_id: str, pop_receipt: str) -> None:
         self.deleted.append((message_id, pop_receipt))
         self.messages.clear()
+
+
+class FakeResourceExistsError(Exception):
+    pass
+
+
+class FakeAzureTable:
+    def __init__(self) -> None:
+        self.records: dict[tuple[str, str], dict] = {}
+
+    def create_entity(self, entity: dict) -> None:
+        key = (entity["PartitionKey"], entity["RowKey"])
+        if key in self.records:
+            raise FakeResourceExistsError
+        self.records[key] = dict(entity)
+
+    def get_entity(self, device_id: str, command_id: str) -> dict:
+        return dict(self.records[(device_id, command_id)])
+
+    def query_entities(self, **_options):
+        return [dict(record) for record in self.records.values()]
+
+    def delete_entity(self, device_id: str, command_id: str) -> None:
+        self.records.pop((device_id, command_id), None)
+
+
+class FakeAzureSendQueue:
+    def __init__(self) -> None:
+        self.sent: list[tuple[str, int]] = []
+
+    def send_message(self, message: str, *, time_to_live: int) -> None:
+        self.sent.append((message, time_to_live))
 
 
 class RemoteCommandBridgeTests(unittest.TestCase):
@@ -124,6 +160,9 @@ class RemoteCommandBridgeTests(unittest.TestCase):
         self.assertIn("JARVIS OS", page)
         self.assertIn("KOMPUTER ONLINE", page)
         self.assertIn("sessionStorage", page)
+        self.assertIn("jarvisPendingRequest", page)
+        self.assertIn("crypto.subtle.digest", page)
+        self.assertIn("request_id", page)
         self.assertNotIn(self.desktop_token, page)
         self.assertNotIn(self.phone_token, page)
         self.assertNotIn("localStorage", page)
@@ -164,6 +203,61 @@ class RemoteCommandBridgeTests(unittest.TestCase):
         )
         self.assertEqual(status, 200)
         self.assertEqual(fetched["message"], "System działa poprawnie.")
+
+    def test_retry_with_same_request_id_creates_one_command(self) -> None:
+        request_id = "a" * 32
+        payload = {
+            "device_id": self.device_id,
+            "command": "status systemu",
+            "request_id": request_id,
+        }
+
+        first_status, first = self._phone_request(
+            "/v1/remote/commands", method="POST", payload=payload
+        )
+        retry_status, retry = self._phone_request(
+            "/v1/remote/commands", method="POST", payload=payload
+        )
+
+        self.assertEqual(first_status, 202)
+        self.assertEqual(retry_status, 202)
+        self.assertEqual(first["id"], request_id)
+        self.assertEqual(retry["id"], request_id)
+        client = CloudPlannerClient(self._settings())
+        self.assertEqual(client.claim_remote_command()["id"], request_id)
+        self.assertIsNone(client.claim_remote_command())
+
+    def test_request_id_cannot_be_reused_for_another_command(self) -> None:
+        request_id = "b" * 32
+        base = {"device_id": self.device_id, "request_id": request_id}
+        first_status, _ = self._phone_request(
+            "/v1/remote/commands",
+            method="POST",
+            payload={**base, "command": "status systemu"},
+        )
+        conflict_status, conflict = self._phone_request(
+            "/v1/remote/commands",
+            method="POST",
+            payload={**base, "command": "status chmury"},
+        )
+
+        self.assertEqual(first_status, 202)
+        self.assertEqual(conflict_status, 409)
+        self.assertEqual(conflict["error"], "request_id_conflict")
+
+    def test_invalid_request_id_is_rejected(self) -> None:
+        status, payload = self._phone_request(
+            "/v1/remote/commands",
+            method="POST",
+            payload={
+                "device_id": self.device_id,
+                "command": "status systemu",
+                "request_id": "not-a-valid-request-id",
+            },
+        )
+
+        self.assertEqual(status, 400)
+        self.assertEqual(payload["error"], "invalid_request")
 
     def test_queue_transport_claims_and_acknowledges_after_report(self) -> None:
         status, submitted = self._phone_request(
@@ -271,6 +365,38 @@ class RemoteCommandBridgeTests(unittest.TestCase):
         serialized = json.dumps(payload)
         self.assertNotIn(self.desktop_token, serialized)
         self.assertNotIn(self.phone_token, serialized)
+
+
+class AzureRemoteStoreIdempotencyTests(unittest.TestCase):
+    def test_retry_sends_only_one_azure_queue_message(self) -> None:
+        store = object.__new__(AzureTableRemoteCommandStore)
+        store._exists = FakeResourceExistsError
+        store.table = FakeAzureTable()
+        store.queue = FakeAzureSendQueue()
+        request_id = "c" * 32
+
+        first = store.create(
+            "desktop-main",
+            "status systemu",
+            request_id=request_id,
+        )
+        retry = store.create(
+            "desktop-main",
+            "status systemu",
+            request_id=request_id,
+        )
+
+        self.assertEqual(first["id"], request_id)
+        self.assertEqual(retry["id"], request_id)
+        self.assertEqual(len(store.queue.sent), 1)
+        queued = json.loads(store.queue.sent[0][0])
+        self.assertEqual(queued["id"], request_id)
+        with self.assertRaises(RemoteStoreConflict):
+            store.create(
+                "desktop-main",
+                "status chmury",
+                request_id=request_id,
+            )
 
 
 if __name__ == "__main__":

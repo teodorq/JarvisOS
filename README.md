@@ -57,6 +57,10 @@ phone token, stores relay commands for at most 24 hours, and never bypasses the
 desktop confirmation policy. The page performs an on-demand online check when
 it opens. Desktop command polling goes directly to Azure Storage Queue, so the
 Container App can scale to zero while the phone page is not being used.
+If a mobile connection drops during submission, the page safely reuses a
+short-lived request identifier. Azure returns the original command instead of
+placing a duplicate in the desktop queue; command text is not persisted in
+browser storage.
 
 ## Optional Windows autostart
 

@@ -1,10 +1,10 @@
-# JARVIS OS Cloud - stage 2
+# JARVIS OS Cloud
 
-This stage moves safe planning and a durable phone command relay to Azure. The
+This architecture moves safe planning and a durable phone command relay to Azure. The
 GUI, microphone, Windows action execution, user confirmations, memory, and
 Google tokens remain on the desktop computer.
 
-Stage 2 adds a privacy gate on both sides of the connection. Commands that
+The cloud boundary adds a privacy gate on both sides of the connection. Commands that
 look like they contain passwords, API keys, bearer tokens, private keys, or
 provider credentials stay on the desktop and use the local planner. Azure
 also receives startup, readiness, and liveness probes without adding another
@@ -75,6 +75,12 @@ fragment, which is not sent to the server, and the page keeps it only in
 and remain running to receive commands. The phone cannot approve actions:
 anything protected by the normal confirmation policy still waits for local
 confirmation on the computer.
+
+Each phone submission carries a random idempotency key. A retry with the same
+device, command, and key returns the existing 24-hour record and does not send
+a second Azure Queue message. Reusing the key for different content is rejected
+with HTTP 409. The browser stores only the key and a SHA-256 signature for an
+unfinished submission, never the command text.
 
 Do not deploy an image tagged only as latest. Use an immutable version tag or
 Git commit hash so a controlled rollback remains possible.

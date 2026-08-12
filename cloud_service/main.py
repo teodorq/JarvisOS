@@ -24,6 +24,7 @@ from app.cloud.privacy import CloudPrivacyError, ensure_cloud_safe_command
 from cloud_service.phone_ui import PHONE_PAGE
 from cloud_service.remote_store import (
     RemoteCommandStore,
+    RemoteStoreConflict,
     normalize_command_id,
     normalize_device_id,
     normalize_event_status,
@@ -32,7 +33,7 @@ from cloud_service.remote_store import (
 
 
 SERVICE_NAME = "jarvis-os-cloud-planner"
-SERVICE_VERSION = "0.6.0"
+SERVICE_VERSION = "0.7.0"
 MAX_BODY_BYTES = 16_384
 
 
@@ -228,8 +229,17 @@ class JarvisOSCloudHandler(BaseHTTPRequestHandler):
             command = normalize_command(payload.get("command"))
             ensure_cloud_safe_command(command)
             record = self.server.remote_store.create(
-                device_id, command, kind="command"
+                device_id,
+                command,
+                kind="command",
+                request_id=self._request_id(payload),
             )
+        except RemoteStoreConflict:
+            self._json(
+                HTTPStatus.CONFLICT,
+                {"error": "request_id_conflict"},
+            )
+            return
         except CloudPrivacyError:
             self._json(HTTPStatus.UNPROCESSABLE_ENTITY, {"error": "sensitive_command_requires_local", "message": "To polecenie zawiera dane, które muszą pozostać na komputerze."})
             return
@@ -271,7 +281,14 @@ class JarvisOSCloudHandler(BaseHTTPRequestHandler):
                 device_id,
                 "sprawdzenie dostępności",
                 kind="probe",
+                request_id=self._request_id(payload),
             )
+        except RemoteStoreConflict:
+            self._json(
+                HTTPStatus.CONFLICT,
+                {"error": "request_id_conflict"},
+            )
+            return
         except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
             self._json(HTTPStatus.BAD_REQUEST, {"error": "invalid_request"})
             return
@@ -379,6 +396,14 @@ class JarvisOSCloudHandler(BaseHTTPRequestHandler):
     def _device_from_query(parsed) -> str:
         value = parse_qs(parsed.query).get("device_id", [""])[0]
         return normalize_device_id(value)
+
+    @staticmethod
+    def _request_id(payload: dict[str, Any]) -> str | None:
+        value = payload.get("request_id")
+        if value in (None, ""):
+            return None
+        return normalize_command_id(value)
+
     def _authorized(self) -> bool:
         header = self.headers.get("Authorization", "")
         prefix = "Bearer "
