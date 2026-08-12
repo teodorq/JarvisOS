@@ -26,7 +26,11 @@ class WindowsSystemSapiEngineTests(unittest.TestCase):
         self.assertIn("ReadLine", source)
         self.assertNotIn("Invoke-Expression", source)
 
-    @unittest.skipUnless(os.name == "nt", "SAPI is a Windows service")
+    @unittest.skipUnless(
+        os.name == "nt"
+        and os.environ.get("GITHUB_ACTIONS", "").casefold() != "true",
+        "SAPI requires an interactive Windows audio session",
+    )
     def test_worker_starts_and_stays_ready(self) -> None:
         engine = WindowsSystemSapiEngine()
         try:
