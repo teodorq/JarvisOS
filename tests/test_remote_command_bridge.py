@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import http.client
 import json
 import threading
 import unittest
@@ -365,6 +366,26 @@ class RemoteCommandBridgeTests(unittest.TestCase):
         self.assertEqual(status, 401)
         self.assertEqual(payload["error"], "unauthorized")
 
+    def test_rejected_post_closes_connection_before_unread_body(self) -> None:
+        host, port = self.server.server_address
+        connection = http.client.HTTPConnection(host, port, timeout=2)
+        try:
+            connection.request(
+                "POST",
+                "/v1/remote/commands",
+                body=b"{}",
+                headers={
+                    "Authorization": "Bearer wrong-token",
+                    "Content-Type": "application/json",
+                },
+            )
+            response = connection.getresponse()
+            response.read()
+            self.assertEqual(response.status, 401)
+            self.assertEqual(response.getheader("Connection"), "close")
+            self.assertTrue(response.will_close)
+        finally:
+            connection.close()
     def test_easy_auth_owner_can_use_phone_without_pairing_token(self) -> None:
         owner = "77f4b7fe-8e18-498b-8898-84befa780edb"
         identity_store = MemoryRemoteCommandStore()

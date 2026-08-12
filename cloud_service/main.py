@@ -41,7 +41,7 @@ from cloud_service.remote_store import (
 
 
 SERVICE_NAME = "jarvis-os-cloud-planner"
-SERVICE_VERSION = "0.8.0"
+SERVICE_VERSION = "0.8.1"
 MAX_BODY_BYTES = 16_384
 
 
@@ -526,6 +526,8 @@ class JarvisOSCloudHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Connection", "close")
+        self.close_connection = True
         for name, value in (headers or {}).items():
             self.send_header(name, value)
         self.end_headers()
