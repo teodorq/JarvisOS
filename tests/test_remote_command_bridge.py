@@ -163,9 +163,34 @@ class RemoteCommandBridgeTests(unittest.TestCase):
         self.assertIn("jarvisPendingRequest", page)
         self.assertIn("crypto.subtle.digest", page)
         self.assertIn("request_id", page)
+        self.assertIn("phone.webmanifest", page)
+        self.assertIn("beforeinstallprompt", page)
+        self.assertIn("jarvisLastCommand", page)
+        self.assertIn("/.auth/logout", page)
+        self.assertNotIn("Kod parowania", page)
         self.assertNotIn(self.desktop_token, page)
         self.assertNotIn(self.phone_token, page)
         self.assertNotIn("localStorage", page)
+
+    def test_phone_pwa_assets_are_public_and_scoped(self) -> None:
+        with urllib.request.urlopen(
+            self.base_url + "/phone.webmanifest", timeout=2
+        ) as response:
+            manifest = json.loads(response.read().decode("utf-8"))
+            self.assertEqual(
+                response.headers.get_content_type(),
+                "application/manifest+json",
+            )
+        self.assertEqual(manifest["display"], "standalone")
+        self.assertEqual(manifest["scope"], "/phone")
+        with urllib.request.urlopen(
+            self.base_url + "/phone-sw.js", timeout=2
+        ) as response:
+            service_worker = response.read().decode("utf-8")
+            self.assertEqual(
+                response.headers["Service-Worker-Allowed"], "/phone"
+            )
+        self.assertIn("phone-offline", service_worker)
 
     def test_end_to_end_command_lifecycle_with_http_fallback(self) -> None:
         status, submitted = self._phone_request(
@@ -339,6 +364,108 @@ class RemoteCommandBridgeTests(unittest.TestCase):
         )
         self.assertEqual(status, 401)
         self.assertEqual(payload["error"], "unauthorized")
+
+    def test_easy_auth_owner_can_use_phone_without_pairing_token(self) -> None:
+        owner = "77f4b7fe-8e18-498b-8898-84befa780edb"
+        identity_store = MemoryRemoteCommandStore()
+        identity_server = build_server(
+            "127.0.0.1",
+            0,
+            config=ServiceConfig(
+                api_token=self.desktop_token,
+                phone_principal_id=owner,
+                environment="test",
+            ),
+            remote_store=identity_store,
+        )
+        thread = threading.Thread(
+            target=identity_server.serve_forever, daemon=True
+        )
+        thread.start()
+        host, port = identity_server.server_address
+        base_url = f"http://{host}:{port}"
+        owner_headers = {
+            "X-MS-CLIENT-PRINCIPAL-ID": owner,
+            "X-MS-CLIENT-PRINCIPAL-IDP": "aad",
+            "X-MS-CLIENT-PRINCIPAL-NAME": "Kacper Zakrzewski",
+        }
+        try:
+            with urllib.request.urlopen(
+                base_url + "/phone", timeout=2
+            ) as response:
+                login_page = response.read().decode("utf-8")
+            self.assertIn("ZALOGUJ PRZEZ MICROSOFT", login_page)
+
+            request = urllib.request.Request(
+                base_url + "/phone", headers=owner_headers
+            )
+            with urllib.request.urlopen(request, timeout=2) as response:
+                page = response.read().decode("utf-8")
+            self.assertIn("SESJA AKTYWNA", page)
+
+            request = urllib.request.Request(
+                base_url + "/v1/phone/me", headers=owner_headers
+            )
+            with urllib.request.urlopen(request, timeout=2) as response:
+                identity = json.loads(response.read().decode("utf-8"))
+            self.assertEqual(identity["name"], "Kacper Zakrzewski")
+            self.assertEqual(identity["session_minutes"], 60)
+
+            payload = json.dumps(
+                {"device_id": self.device_id, "command": "status systemu"}
+            ).encode("utf-8")
+            request = urllib.request.Request(
+                base_url + "/v1/remote/commands",
+                data=payload,
+                method="POST",
+                headers={
+                    **owner_headers,
+                    "Content-Type": "application/json",
+                },
+            )
+            with urllib.request.urlopen(request, timeout=2) as response:
+                submitted = json.loads(response.read().decode("utf-8"))
+                self.assertEqual(response.status, 202)
+            self.assertEqual(submitted["status"], "queued")
+        finally:
+            identity_server.shutdown()
+            identity_server.server_close()
+            thread.join(timeout=2)
+
+    def test_easy_auth_rejects_wrong_owner_or_provider(self) -> None:
+        owner = "77f4b7fe-8e18-498b-8898-84befa780edb"
+        identity_server = build_server(
+            "127.0.0.1",
+            0,
+            config=ServiceConfig(
+                api_token=self.desktop_token,
+                phone_principal_id=owner,
+                environment="test",
+            ),
+            remote_store=MemoryRemoteCommandStore(),
+        )
+        thread = threading.Thread(
+            target=identity_server.serve_forever, daemon=True
+        )
+        thread.start()
+        host, port = identity_server.server_address
+        try:
+            cases = (("wrong-owner", "aad"), (owner, "github"))
+            for principal_id, provider in cases:
+                request = urllib.request.Request(
+                    f"http://{host}:{port}/v1/phone/me",
+                    headers={
+                        "X-MS-CLIENT-PRINCIPAL-ID": principal_id,
+                        "X-MS-CLIENT-PRINCIPAL-IDP": provider,
+                    },
+                )
+                with self.assertRaises(urllib.error.HTTPError) as raised:
+                    urllib.request.urlopen(request, timeout=2)
+                self.assertEqual(raised.exception.code, 401)
+        finally:
+            identity_server.shutdown()
+            identity_server.server_close()
+            thread.join(timeout=2)
 
     def test_sensitive_command_never_enters_the_queue(self) -> None:
         status, payload = self._phone_request(

@@ -61,7 +61,9 @@ jobs:
         run: python -m compileall -q app cloud_service software_engineer tools
 
       - name: Validate Azure infrastructure
-        run: az bicep build --file infra/azure/main.bicep --stdout | Out-Null
+        run: |
+          az bicep build --file infra/azure/main.bicep --stdout | Out-Null
+          az bicep build --file infra/azure/subscription.bicep --stdout | Out-Null
 
       - name: Run regression suite
         run: |

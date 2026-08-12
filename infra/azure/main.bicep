@@ -11,9 +11,15 @@ param containerImage string
 @description('Bearer token shared only by the desktop client and Container App.')
 param apiToken string
 
+@description('Microsoft Entra application client ID used by the phone page.')
+param phoneEntraClientId string
+
 @secure()
-@description('Bearer token used only by the private phone command page.')
-param phoneApiToken string
+@description('Microsoft Entra application secret used by Container Apps authentication.')
+param phoneEntraClientSecret string
+
+@description('Microsoft Entra object ID of the only account allowed to use the phone page.')
+param phoneOwnerPrincipalId string
 
 var tags = {
   application: 'JARVIS OS'
@@ -92,8 +98,8 @@ resource plannerApp 'Microsoft.App/containerApps@2024-03-01' = {
           value: apiToken
         }
         {
-          name: 'phone-api-token'
-          value: phoneApiToken
+          name: 'phone-entra-client-secret'
+          value: phoneEntraClientSecret
         }
         {
           name: 'remote-storage-connection'
@@ -116,8 +122,8 @@ resource plannerApp 'Microsoft.App/containerApps@2024-03-01' = {
               secretRef: 'api-token'
             }
             {
-              name: 'JARVIS_OS_PHONE_API_TOKEN'
-              secretRef: 'phone-api-token'
+              name: 'JARVIS_OS_PHONE_PRINCIPAL_ID'
+              value: phoneOwnerPrincipalId
             }
             {
               name: 'JARVIS_OS_REMOTE_STORAGE_CONNECTION'
@@ -195,6 +201,60 @@ resource plannerApp 'Microsoft.App/containerApps@2024-03-01' = {
   }
 }
 
+resource phoneAuth 'Microsoft.App/containerApps/authConfigs@2025-01-01' = {
+  parent: plannerApp
+  name: 'current'
+  properties: {
+    platform: {
+      enabled: true
+    }
+    globalValidation: {
+      unauthenticatedClientAction: 'AllowAnonymous'
+    }
+    httpSettings: {
+      requireHttps: true
+      routes: {
+        apiPrefix: '/.auth'
+      }
+    }
+    identityProviders: {
+      azureActiveDirectory: {
+        enabled: true
+        isAutoProvisioned: false
+        registration: {
+          clientId: phoneEntraClientId
+          clientSecretSettingName: 'phone-entra-client-secret'
+          openIdIssuer: '${environment().authentication.loginEndpoint}${tenant().tenantId}/v2.0'
+        }
+        validation: {
+          allowedAudiences: [
+            phoneEntraClientId
+          ]
+          defaultAuthorizationPolicy: {
+            allowedPrincipals: {
+              identities: [
+                phoneOwnerPrincipalId
+              ]
+            }
+          }
+        }
+      }
+    }
+    login: {
+      cookieExpiration: {
+        convention: 'FixedTime'
+        timeToExpiration: '01:00:00'
+      }
+      preserveUrlFragmentsForLogins: false
+      routes: {
+        logoutEndpoint: '/.auth/logout'
+      }
+      tokenStore: {
+        enabled: false
+      }
+    }
+  }
+}
 output endpoint string = 'https://${plannerApp.properties.configuration.ingress.fqdn}'
 output healthUrl string = 'https://${plannerApp.properties.configuration.ingress.fqdn}/health'
 output phoneUrl string = 'https://${plannerApp.properties.configuration.ingress.fqdn}/phone'

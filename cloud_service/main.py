@@ -21,7 +21,15 @@ from app.cloud.contracts import (
     validate_cloud_plan,
 )
 from app.cloud.privacy import CloudPrivacyError, ensure_cloud_safe_command
-from cloud_service.phone_ui import PHONE_PAGE
+from cloud_service.phone_ui import (
+    PHONE_FORBIDDEN_PAGE,
+    PHONE_ICON,
+    PHONE_LOGIN_PAGE,
+    PHONE_MANIFEST,
+    PHONE_OFFLINE_PAGE,
+    PHONE_PAGE,
+    PHONE_SERVICE_WORKER,
+)
 from cloud_service.remote_store import (
     RemoteCommandStore,
     RemoteStoreConflict,
@@ -33,7 +41,7 @@ from cloud_service.remote_store import (
 
 
 SERVICE_NAME = "jarvis-os-cloud-planner"
-SERVICE_VERSION = "0.7.0"
+SERVICE_VERSION = "0.8.0"
 MAX_BODY_BYTES = 16_384
 
 
@@ -43,6 +51,7 @@ class ServiceConfig:
     environment: str = "production"
     requests_per_minute: int = 30
     phone_api_token: str = ""
+    phone_principal_id: str = ""
 
     @classmethod
     def from_environment(cls) -> "ServiceConfig":
@@ -60,6 +69,9 @@ class ServiceConfig:
             phone_api_token=os.getenv(
                 "JARVIS_OS_PHONE_API_TOKEN", ""
             ).strip(),
+            phone_principal_id=os.getenv(
+                "JARVIS_OS_PHONE_PRINCIPAL_ID", ""
+            ).strip().lower(),
         )
 
 def _requests_per_minute_from_environment() -> int:
@@ -153,7 +165,28 @@ class JarvisOSCloudHandler(BaseHTTPRequestHandler):
             })
             return
         if parsed.path == "/phone":
-            self._html(PHONE_PAGE)
+            self._handle_phone_page()
+            return
+        if parsed.path == "/phone.webmanifest":
+            self._asset(
+                PHONE_MANIFEST, "application/manifest+json; charset=utf-8"
+            )
+            return
+        if parsed.path == "/phone-sw.js":
+            self._asset(
+                PHONE_SERVICE_WORKER,
+                "application/javascript; charset=utf-8",
+                headers={"Service-Worker-Allowed": "/phone"},
+            )
+            return
+        if parsed.path == "/phone-icon.svg":
+            self._asset(PHONE_ICON, "image/svg+xml; charset=utf-8")
+            return
+        if parsed.path == "/phone-offline":
+            self._html(PHONE_OFFLINE_PAGE)
+            return
+        if parsed.path == "/v1/phone/me":
+            self._handle_phone_identity()
             return
         if parsed.path == "/v1/remote/commands/next":
             self._handle_remote_claim(parsed)
@@ -370,7 +403,13 @@ class JarvisOSCloudHandler(BaseHTTPRequestHandler):
         self._json(HTTPStatus.OK, record)
 
     def _remote_ready(self) -> bool:
-        return bool(self.server.remote_store and self.server.config.phone_api_token)
+        return bool(
+            self.server.remote_store
+            and (
+                self.server.config.phone_principal_id
+                or self.server.config.phone_api_token
+            )
+        )
 
     def _remote_transport(self) -> str:
         if not self.server.remote_store:
@@ -382,6 +421,8 @@ class JarvisOSCloudHandler(BaseHTTPRequestHandler):
         return "https_poll"
 
     def _phone_authorized(self) -> bool:
+        if self._phone_identity_authorized():
+            return True
         header = self.headers.get("Authorization", "")
         prefix = "Bearer "
         return bool(
@@ -390,6 +431,52 @@ class JarvisOSCloudHandler(BaseHTTPRequestHandler):
             and hmac.compare_digest(
                 header[len(prefix):], self.server.config.phone_api_token
             )
+        )
+
+    def _phone_identity_authorized(self) -> bool:
+        expected = self.server.config.phone_principal_id
+        principal_id = self.headers.get(
+            "X-MS-CLIENT-PRINCIPAL-ID", ""
+        ).strip().lower()
+        provider = self.headers.get(
+            "X-MS-CLIENT-PRINCIPAL-IDP", ""
+        ).strip().lower()
+        return bool(
+            expected
+            and principal_id
+            and provider == "aad"
+            and hmac.compare_digest(principal_id, expected)
+        )
+
+    def _handle_phone_page(self) -> None:
+        if not self.server.config.phone_principal_id:
+            self._html(PHONE_PAGE)
+            return
+        principal_id = self.headers.get(
+            "X-MS-CLIENT-PRINCIPAL-ID", ""
+        ).strip()
+        if not principal_id:
+            self._html(PHONE_LOGIN_PAGE)
+            return
+        if not self._phone_identity_authorized():
+            self._html(
+                PHONE_FORBIDDEN_PAGE, status=HTTPStatus.FORBIDDEN
+            )
+            return
+        self._html(PHONE_PAGE)
+
+    def _handle_phone_identity(self) -> None:
+        if not self._phone_identity_authorized():
+            self._json(
+                HTTPStatus.UNAUTHORIZED, {"error": "unauthorized"}
+            )
+            return
+        name = self.headers.get(
+            "X-MS-CLIENT-PRINCIPAL-NAME", ""
+        ).strip()
+        self._json(
+            HTTPStatus.OK,
+            {"name": name or "Konto Microsoft", "session_minutes": 60},
         )
 
     @staticmethod
@@ -450,9 +537,11 @@ class JarvisOSCloudHandler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
 
-    def _html(self, value: str) -> None:
+    def _html(
+        self, value: str, *, status: HTTPStatus = HTTPStatus.OK
+    ) -> None:
         body = value.encode("utf-8")
-        self.send_response(int(HTTPStatus.OK))
+        self.send_response(int(status))
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
@@ -463,10 +552,30 @@ class JarvisOSCloudHandler(BaseHTTPRequestHandler):
             "Content-Security-Policy",
             "default-src 'none'; style-src 'unsafe-inline'; "
             "script-src 'unsafe-inline'; connect-src 'self'; "
+            "img-src 'self'; manifest-src 'self'; worker-src 'self'; "
             "base-uri 'none'; frame-ancestors 'none'",
         )
         self.end_headers()
         self.wfile.write(body)
+
+    def _asset(
+        self,
+        value: str,
+        content_type: str,
+        *,
+        headers: dict[str, str] | None = None,
+    ) -> None:
+        body = value.encode("utf-8")
+        self.send_response(int(HTTPStatus.OK))
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "public, max-age=3600")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        for name, header_value in (headers or {}).items():
+            self.send_header(name, header_value)
+        self.end_headers()
+        self.wfile.write(body)
+
     def log_message(self, format: str, *args: Any) -> None:
         # Never log request bodies, tokens, or user commands.
         print(f"{self.client_address[0]} - {format % args}", flush=True)

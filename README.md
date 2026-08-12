@@ -52,11 +52,14 @@ Copy `config/cloud.env.example` to `config/cloud.env` and provide:
 
 The desktop validates every cloud plan. Windows actions, confirmations and private memory remain local, and the local planner is used automatically if Azure is unavailable.
 
-The Azure deployment also exposes a private `/phone` page. It uses a separate
-phone token, stores relay commands for at most 24 hours, and never bypasses the
-desktop confirmation policy. The page performs an on-demand online check when
-it opens. Desktop command polling goes directly to Azure Storage Queue, so the
-Container App can scale to zero while the phone page is not being used.
+The Azure deployment also exposes a private, installable `/phone` app. Access
+uses the owner's Microsoft account and a fixed 60-minute Azure session instead
+of a pairing code. Signing out invalidates the current session; the Microsoft
+"My sign-ins" page can revoke a lost phone. The relay stores commands for at
+most 24 hours and never bypasses the desktop confirmation policy. The page
+restores the last command status after a refresh without storing its text.
+Desktop command polling goes directly to Azure Storage Queue, so the Container
+App can scale to zero while the phone page is not being used.
 If a mobile connection drops during submission, the page safely reuses a
 short-lived request identifier. Azure returns the original command instead of
 placing a duplicate in the desktop queue; command text is not persisted in

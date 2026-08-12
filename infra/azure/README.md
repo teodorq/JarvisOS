@@ -58,10 +58,12 @@ automatically uses the local planner.
    not create a paid Azure Container Registry; the selected image must be
    accessible to Container Apps.
 3. Install Azure CLI, sign in, and explicitly select the correct subscription.
-4. Deploy subscription.bicep with the full image name, a random desktop API
-   token, and a different random phone API token passed as secure parameters.
-   Never store either token in a file or Git.
-5. Check the returned /health URL before configuring JARVIS_OS_CLOUD_URL and
+4. Register the phone page in Microsoft Entra with the Container Apps callback
+   URL, create a client secret, and note the owner's Entra object ID.
+5. Deploy subscription.bicep with the image, desktop API token, Entra client
+   ID and secret, and owner object ID passed as secure parameters. Never store
+   the desktop token or Entra secret in a file or Git.
+6. Check the returned /health URL before configuring JARVIS_OS_CLOUD_URL and
    JARVIS_OS_CLOUD_API_TOKEN on the desktop.
 
 The previous JARVIS_CLOUD_* names remain accepted temporarily as migration
@@ -69,12 +71,15 @@ aliases, but all new configuration should use JARVIS_OS_CLOUD_*.
 
 ## Private phone command page
 
-The deployment returns a `/phone` URL. Pairing puts the phone token in the URL
-fragment, which is not sent to the server, and the page keeps it only in
-`sessionStorage`. The desktop must set `JARVIS_OS_REMOTE_DEVICE_ID=desktop-main`
-and remain running to receive commands. The phone cannot approve actions:
-anything protected by the normal confirmation policy still waits for local
-confirmation on the computer.
+The deployment returns a `/phone` URL. Container Apps authenticates the owner
+through Microsoft Entra and issues a fixed 60-minute cookie. The application
+checks the injected provider and exact owner object ID again before accepting
+commands. The page supports PWA installation, logout, lost-device session
+review, and restoration of the last command status after refresh. It stores
+only command and device identifiers in `sessionStorage`, never command text or
+results. The desktop must remain running to receive commands. The phone cannot
+approve actions: anything protected by the normal confirmation policy still
+waits for local confirmation on the computer.
 
 Each phone submission carries a random idempotency key. A retry with the same
 device, command, and key returns the existing 24-hour record and does not send

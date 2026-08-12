@@ -13,9 +13,15 @@ param containerImage string
 @description('Bearer token shared only by the desktop client and Container App.')
 param apiToken string
 
+@description('Microsoft Entra application client ID used by the phone page.')
+param phoneEntraClientId string
+
 @secure()
-@description('Bearer token used only by the private phone command page.')
-param phoneApiToken string
+@description('Microsoft Entra application secret used by Container Apps authentication.')
+param phoneEntraClientSecret string
+
+@description('Microsoft Entra object ID of the only account allowed to use the phone page.')
+param phoneOwnerPrincipalId string
 
 resource resourceGroup 'Microsoft.Resources/resourceGroups@2024-03-01' = {
   name: 'rg-${namePrefix}-cloud'
@@ -34,7 +40,9 @@ module cloudPlanner './main.bicep' = {
     location: location
     containerImage: containerImage
     apiToken: apiToken
-    phoneApiToken: phoneApiToken
+    phoneEntraClientId: phoneEntraClientId
+    phoneEntraClientSecret: phoneEntraClientSecret
+    phoneOwnerPrincipalId: phoneOwnerPrincipalId
   }
 }
 
