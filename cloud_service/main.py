@@ -28,6 +28,7 @@ from cloud_service.phone_ui import (
     PHONE_MANIFEST,
     PHONE_OFFLINE_PAGE,
     PHONE_PAGE,
+    PHONE_RECOVERY_PAGE,
     PHONE_SERVICE_WORKER,
 )
 from cloud_service.remote_store import (
@@ -41,7 +42,7 @@ from cloud_service.remote_store import (
 
 
 SERVICE_NAME = "jarvis-os-cloud-planner"
-SERVICE_VERSION = "0.8.1"
+SERVICE_VERSION = "0.8.2"
 MAX_BODY_BYTES = 16_384
 
 
@@ -184,6 +185,9 @@ class JarvisOSCloudHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/phone-offline":
             self._html(PHONE_OFFLINE_PAGE)
+            return
+        if parsed.path == "/phone-recover":
+            self._html(PHONE_RECOVERY_PAGE)
             return
         if parsed.path == "/v1/phone/me":
             self._handle_phone_identity()

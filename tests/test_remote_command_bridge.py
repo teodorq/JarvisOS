@@ -167,7 +167,7 @@ class RemoteCommandBridgeTests(unittest.TestCase):
         self.assertIn("phone.webmanifest", page)
         self.assertIn("beforeinstallprompt", page)
         self.assertIn("jarvisLastCommand", page)
-        self.assertIn("/.auth/logout", page)
+        self.assertIn("/phone-recover", page)
         self.assertNotIn("Kod parowania", page)
         self.assertNotIn(self.desktop_token, page)
         self.assertNotIn(self.phone_token, page)
@@ -192,6 +192,13 @@ class RemoteCommandBridgeTests(unittest.TestCase):
                 response.headers["Service-Worker-Allowed"], "/phone"
             )
         self.assertIn("phone-offline", service_worker)
+        with urllib.request.urlopen(
+            self.base_url + "/phone-recover", timeout=2
+        ) as response:
+            recovery = response.read().decode("utf-8")
+        self.assertIn("navigator.serviceWorker.getRegistrations", recovery)
+        self.assertIn('fetch("/.auth/logout"', recovery)
+        self.assertIn("location.replace", recovery)
 
     def test_end_to_end_command_lifecycle_with_http_fallback(self) -> None:
         status, submitted = self._phone_request(
