@@ -246,9 +246,6 @@ resource phoneAuth 'Microsoft.App/containerApps/authConfigs@2025-01-01' = {
         timeToExpiration: '01:00:00'
       }
       preserveUrlFragmentsForLogins: false
-      routes: {
-        logoutEndpoint: '/.auth/logout'
-      }
       tokenStore: {
         enabled: false
       }

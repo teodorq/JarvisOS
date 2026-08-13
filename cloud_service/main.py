@@ -42,7 +42,7 @@ from cloud_service.remote_store import (
 
 
 SERVICE_NAME = "jarvis-os-cloud-planner"
-SERVICE_VERSION = "0.8.2"
+SERVICE_VERSION = "0.8.3"
 MAX_BODY_BYTES = 16_384
 
 
@@ -186,7 +186,7 @@ class JarvisOSCloudHandler(BaseHTTPRequestHandler):
         if parsed.path == "/phone-offline":
             self._html(PHONE_OFFLINE_PAGE)
             return
-        if parsed.path == "/phone-recover":
+        if parsed.path in {"/phone-recover", "/mobile-start"}:
             self._html(PHONE_RECOVERY_PAGE)
             return
         if parsed.path == "/v1/phone/me":
