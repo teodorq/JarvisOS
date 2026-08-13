@@ -89,6 +89,7 @@ jobs:
               --name jarvis-os-planner \
               --resource-group rg-jarvis-os-cloud \
               --image "ghcr.io/${{ github.repository_owner }}/jarvis-os-cloud:sha-${{ github.sha }}" \
+              --set-env-vars "JARVIS_OS_BUILD_SHA=${{ github.sha }}" \
               --only-show-errors \
               --output none; then
               exit 0
@@ -108,14 +109,41 @@ jobs:
             --query properties.configuration.ingress.fqdn \
             --output tsv)"
           health_url="https://${fqdn}/health"
+          expected_sha="${{ github.sha }}"
           for attempt in $(seq 1 12); do
             response="$(curl --fail --silent --show-error --max-time 20 "${health_url}" || true)"
-            if python -c 'import json,sys; data=json.loads(sys.argv[1]); raise SystemExit(0 if data.get("status") == "ok" and data.get("service") == "jarvis-os-cloud-planner" else 1)' "${response}"; then
-              echo "JARVIS OS cloud planner is healthy at ${health_url}."
+            if python -c 'import json,sys; data=json.loads(sys.argv[1]); raise SystemExit(0 if data.get("status") == "ok" and data.get("service") == "jarvis-os-cloud-planner" and data.get("build_sha") == sys.argv[2] else 1)' "${response}" "${expected_sha}"; then
+              echo "JARVIS OS revision ${expected_sha} is healthy at ${health_url}."
               exit 0
             fi
-            echo "Health check ${attempt}/12 is not ready yet."
+            echo "Revision check ${attempt}/12 is not ready yet."
             sleep 5
           done
-          echo "The deployed JARVIS OS cloud planner did not become healthy."
+          echo "Azure did not serve the expected JARVIS OS revision ${expected_sha}."
           exit 1
+
+      - name: Smoke-test public routes
+        shell: bash
+        run: |
+          fqdn="$(az containerapp show \
+            --name jarvis-os-planner \
+            --resource-group rg-jarvis-os-cloud \
+            --query properties.configuration.ingress.fqdn \
+            --output tsv)"
+          for path in /mobile-start /phone /phone.webmanifest; do
+            curl --fail --silent --show-error --max-time 20 \
+              "https://${fqdn}${path}" > /dev/null
+            echo "Public route ${path} is available."
+          done
+          login_status="$(curl --silent --show-error --max-time 20 \
+            --output /dev/null --write-out "%{http_code}" \
+            "https://${fqdn}/.auth/login/aad?post_login_redirect_uri=%2Fphone")"
+          case "${login_status}" in
+            301|302|303|307|308)
+              echo "Microsoft login route redirects correctly (${login_status})."
+              ;;
+            *)
+              echo "Microsoft login route returned ${login_status}; expected a redirect."
+              exit 1
+              ;;
+          esac

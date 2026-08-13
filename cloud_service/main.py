@@ -42,7 +42,7 @@ from cloud_service.remote_store import (
 
 
 SERVICE_NAME = "jarvis-os-cloud-planner"
-SERVICE_VERSION = "0.8.3"
+SERVICE_VERSION = "0.8.4"
 MAX_BODY_BYTES = 16_384
 
 
@@ -53,6 +53,7 @@ class ServiceConfig:
     requests_per_minute: int = 30
     phone_api_token: str = ""
     phone_principal_id: str = ""
+    build_sha: str = "development"
 
     @classmethod
     def from_environment(cls) -> "ServiceConfig":
@@ -73,6 +74,10 @@ class ServiceConfig:
             phone_principal_id=os.getenv(
                 "JARVIS_OS_PHONE_PRINCIPAL_ID", ""
             ).strip().lower(),
+            build_sha=(
+                os.getenv("JARVIS_OS_BUILD_SHA", "").strip().lower()
+                or "development"
+            ),
         )
 
 def _requests_per_minute_from_environment() -> int:
@@ -159,6 +164,7 @@ class JarvisOSCloudHandler(BaseHTTPRequestHandler):
                 "service": SERVICE_NAME,
                 "status": "ok",
                 "version": SERVICE_VERSION,
+                "build_sha": self.server.config.build_sha,
                 "environment": self.server.config.environment,
                 "auth_configured": bool(self.server.config.api_token),
                 "remote_configured": self._remote_ready(),

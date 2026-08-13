@@ -4,6 +4,8 @@ import json
 import threading
 import unittest
 import urllib.request
+from pathlib import Path
+from unittest.mock import patch
 
 from app.cloud.client import (
     CloudPlannerClient,
@@ -56,12 +58,17 @@ class _OfflineCloudClient:
 
 class CloudMigrationTests(unittest.TestCase):
     token = "test-token-with-enough-entropy"
+    build_sha = "a" * 40
 
     def setUp(self) -> None:
         self.server = build_server(
             "127.0.0.1",
             0,
-            config=ServiceConfig(api_token=self.token, environment="test"),
+            config=ServiceConfig(
+                api_token=self.token,
+                environment="test",
+                build_sha=self.build_sha,
+            ),
         )
         self.thread = threading.Thread(
             target=self.server.serve_forever,
@@ -80,8 +87,32 @@ class CloudMigrationTests(unittest.TestCase):
         with urllib.request.urlopen(f"{self.base_url}/health", timeout=2) as response:
             payload = json.loads(response.read().decode("utf-8"))
         self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["build_sha"], self.build_sha)
         self.assertTrue(payload["auth_configured"])
         self.assertNotIn(self.token, json.dumps(payload))
+
+    def test_build_sha_comes_from_the_deployment_environment(self) -> None:
+        with patch.dict(
+            "os.environ",
+            {"JARVIS_OS_BUILD_SHA": "B" * 40},
+            clear=True,
+        ):
+            config = ServiceConfig.from_environment()
+        self.assertEqual(config.build_sha, "b" * 40)
+
+    def test_workflow_attests_revision_and_smokes_public_routes(self) -> None:
+        workflow = Path(".github/workflows/cloud-image.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            'JARVIS_OS_BUILD_SHA=${{ github.sha }}', workflow
+        )
+        self.assertIn(
+            'data.get("build_sha") == sys.argv[2]', workflow
+        )
+        for path in ("/mobile-start", "/phone", "/phone.webmanifest"):
+            self.assertIn(path, workflow)
+        self.assertIn("/.auth/login/aad", workflow)
 
     def test_authorized_client_receives_safe_plan(self) -> None:
         client = CloudPlannerClient(
