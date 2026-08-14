@@ -8,28 +8,22 @@ class ClientTheme:
     def stylesheet() -> str:
         return """
         QWidget#ClientRoot { color: #EAF8FF; font-family: "Segoe UI"; font-size: 14px; }
-        QFrame#ClientTopBar {
-            background-color: rgba(2, 12, 22, 154);
-            border: 1px solid rgba(60, 185, 232, 72); border-radius: 4px;
-        }
+        QFrame#ClientTopBar { background: transparent; border: 0; }
         QFrame#ClientCard {
-            background-color: rgba(2, 10, 19, 106);
-            border: 1px solid rgba(45, 157, 205, 45); border-radius: 6px;
+            background: transparent; border: 0;
         }
         QFrame#SetupCard {
             background-color: rgba(2, 10, 19, 174);
             border: 1px solid rgba(45, 157, 205, 76); border-radius: 9px;
         }
-        QLabel#ClientBrand { color: #F3FBFF; font-size: 30px; font-weight: 800; letter-spacing: 6px; }
-        QLabel#ClientSubtitle { color: #58BDE5; font-size: 11px; letter-spacing: 3px; }
-        QLabel#ClientState { color: #F4FCFF; font-size: 28px; font-weight: 700; letter-spacing: 5px; }
+        QLabel#ClientBrand { color: #DDF8FF; font-size: 16px; font-weight: 800; letter-spacing: 5px; }
+        QLabel#ClientSubtitle { color: #477C94; font-size: 8px; letter-spacing: 2px; }
+        QLabel#ClientState { color: #BDEEFF; font-size: 13px; font-weight: 700; letter-spacing: 4px; }
         QLabel#ClientMessage { color: #A9C8D8; font-size: 15px; }
         QLabel#ClientResultText {
-            color: #E9F9FF; font-size: 18px;
+            color: #9EC7D8; font-size: 12px;
             background: transparent; border: 0;
-            border-top: 1px solid rgba(61, 187, 234, 45);
-            border-bottom: 1px solid rgba(61, 187, 234, 45);
-            padding: 10px 18px;
+            padding: 3px 10px;
         }
         QLabel#ClientHint { color: #6F9DB4; font-size: 11px; letter-spacing: 1px; }
         QLabel#ClientHealthy { color: #52F0BB; font-weight: 700; letter-spacing: 1px; }
@@ -52,19 +46,23 @@ class ClientTheme:
         QPushButton#ClientSecondary:hover {
             border-color: #50D9FF; background-color: rgba(8, 48, 73, 188);
         }
-        QFrame#HudCornerColumn { background: transparent; border: 0; }
-        QFrame#HudCornerPanel, QFrame#HudChatDock {
-            background-color: rgba(2, 14, 24, 154); border: 1px solid rgba(65, 199, 244, 72); border-radius: 5px;
+        QFrame#HudEdgeColumn { background: transparent; border: 0; }
+        QFrame#HudStatusCard, QFrame#HudMenuPanel, QFrame#HudChatDock {
+            background-color: rgba(2, 13, 23, 138); border: 1px solid rgba(55, 181, 224, 62); border-radius: 3px;
         }
-        QFrame#HudChatDock { min-height: 260px; }
-        QLabel#HudCornerTitle { color: #DFF8FF; font-size: 11px; font-weight: 800; letter-spacing: 3px; }
-        QLabel#HudStatusLine { color: #55D8C1; font-size: 10px; letter-spacing: 1px; padding: 2px 0; }
-        QLabel#HudCornerHint { color: #567F92; font-size: 9px; padding-top: 5px; }
+        QFrame#HudChatDock { min-height: 260px; max-height: 390px; }
+        QFrame#HudPresenceFrame { background-color: rgba(1, 10, 19, 120); border: 1px solid rgba(68, 203, 244, 72); border-radius: 57px; }
+        QFrame#HudCommandBox { background-color: rgba(1, 8, 15, 210); border: 1px solid rgba(65, 190, 230, 68); border-radius: 3px; }
+        QLabel#HudPanelTitle { color: #BCEEFF; font-size: 9px; font-weight: 800; letter-spacing: 3px; }
+        QLabel#HudStatusKey { color: #507E92; font-size: 8px; letter-spacing: 2px; }
+        QLabel#HudStatusValue { color: #4DD9C2; font-size: 9px; font-weight: 700; letter-spacing: 1px; }
+        QLabel#HudMicroHint { color: #456F82; font-size: 8px; padding-top: 3px; }
         QLabel#HudChatPlaceholder { color: #567F92; font-size: 11px; padding: 10px 2px; }
         QPushButton#HudMenuAction {
             text-align: left; color: #BDEBFA; background: transparent; border: 0; border-bottom: 1px solid rgba(52, 170, 214, 52); padding: 9px 4px; font-size: 11px; letter-spacing: 2px;
         }
         QPushButton#HudMenuAction:hover { color: #FFFFFF; border-bottom-color: #51D9FF; }
+        QPushButton#HudSendAction { color: #DFFAFF; background: #116A8A; border: 1px solid #42CFF5; padding: 8px 11px; font-size: 16px; }
         QPushButton#ClientConfirm { background-color: #126D50; color: #EDFFF8; border: 1px solid #35C78F; }
         QPushButton#ClientCancel { background-color: #672D3B; color: #FFECEF; border: 1px solid #B8576D; }
         QProgressBar#ClientProgress {

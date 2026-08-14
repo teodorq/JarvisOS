@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 from app.gui.client_exit_intent import request_jarvis_shutdown
 from app.gui.client_result_formatter import ClientResultCard, ClientResultFormatter
 from app.gui.client_tool_drawer import ClientToolDrawer
+from app.gui.client_hud_panels import mount_client_command_input, mount_client_status
 
 
 class ClientExperienceV2:
@@ -137,6 +138,8 @@ class ClientExperienceV2:
         self.window.message_label.setMinimumHeight(42)
         self.window.message_label.setMaximumHeight(96)
         self.window.command_entry.setClearButtonEnabled(True)
+        mount_client_status(self.window)
+        mount_client_command_input(self.window)
         for button in getattr(self.window, "quick_buttons", []):
             button.hide()
         self.window.command_entry.setFocus(Qt.OtherFocusReason)

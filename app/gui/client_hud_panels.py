@@ -6,91 +6,85 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
 
 from app.gui.client_exit_intent import request_jarvis_shutdown
+from app.gui.halo_widget import HaloWidget
 
 
 def build_client_hud_row(window: Any, halo: Any) -> QHBoxLayout:
-    """Build a Stark-like HUD with controls kept away from the central core."""
+    """Build a sparse, edge-mounted cinematic HUD around the entity."""
     row = QHBoxLayout()
-    row.setSpacing(26)
+    row.setSpacing(18)
     row.addWidget(_left_column(window), 0, Qt.AlignVCenter)
     row.addStretch(1)
     row.addWidget(halo, 0, Qt.AlignCenter)
     row.addStretch(1)
-    row.addWidget(_chat_dock(window), 0, Qt.AlignVCenter)
+    row.addWidget(_right_column(window), 0, Qt.AlignVCenter)
     return row
 
 
 def _left_column(window: Any) -> QFrame:
     frame = QFrame()
-    frame.setObjectName("HudCornerColumn")
-    frame.setMinimumWidth(210)
-    frame.setMaximumWidth(238)
+    frame.setObjectName("HudEdgeColumn")
+    frame.setMinimumWidth(178)
+    frame.setMaximumWidth(212)
     layout = QVBoxLayout(frame)
     layout.setContentsMargins(0, 0, 0, 0)
-    layout.setSpacing(18)
-    layout.addWidget(_status_panel(window))
+    layout.setSpacing(10)
+    layout.addWidget(_status_card("RDZEŃ", "ONLINE"))
+    layout.addWidget(_status_card("GŁOS", _voice_status(window)))
+    layout.addWidget(_status_card("AZURE", "POŁĄCZONE"))
     layout.addStretch(1)
     layout.addWidget(_menu_panel(window, show_tools=True))
     return frame
 
 
-def _status_panel(window: Any) -> QFrame:
+def _voice_status(window: Any) -> str:
+    online = bool(getattr(getattr(window, "owner_window", None), "voice_online", False))
+    return "GOTOWY" if online else "TRYB TEKSTOWY"
+
+
+def _status_card(label: str, value: str) -> QFrame:
     frame = QFrame()
-    frame.setObjectName("HudCornerPanel")
+    frame.setObjectName("HudStatusCard")
     layout = QVBoxLayout(frame)
-    layout.setContentsMargins(15, 14, 15, 15)
-    layout.setSpacing(7)
-
-    title = QLabel("STATUS SYSTEMU")
-    title.setObjectName("HudCornerTitle")
-    layout.addWidget(title)
-
-    voice_online = bool(getattr(getattr(window, "owner_window", None), "voice_online", False))
-    voice = "GŁOS  •  GOTOWY" if voice_online else "GŁOS  •  TRYB TEKSTOWY"
-    for text in (
-        "● RDZEŃ  •  ONLINE",
-        f"● {voice}",
-        "● AZURE  •  POŁĄCZONE",
-        "● OCHRONA  •  AKTYWNA",
-    ):
-        indicator = QLabel(text)
-        indicator.setObjectName("HudStatusLine")
-        layout.addWidget(indicator)
+    layout.setContentsMargins(12, 9, 12, 9)
+    layout.setSpacing(2)
+    key = QLabel(label)
+    key.setObjectName("HudStatusKey")
+    status = QLabel(f"● {value}")
+    status.setObjectName("HudStatusValue")
+    layout.addWidget(key)
+    layout.addWidget(status)
     return frame
 
 
 def _menu_panel(window: Any, *, show_tools: bool = False) -> QFrame:
     frame = QFrame()
-    frame.setObjectName("HudCornerPanel")
+    frame.setObjectName("HudMenuPanel")
     layout = QVBoxLayout(frame)
-    layout.setContentsMargins(15, 14, 15, 15)
-    layout.setSpacing(6)
-
+    layout.setContentsMargins(12, 11, 12, 11)
+    layout.setSpacing(4)
     title = QLabel("MENU")
-    title.setObjectName("HudCornerTitle")
+    title.setObjectName("HudPanelTitle")
     layout.addWidget(title)
-
     if show_tools:
         tools = _menu_button("NARZĘDZIA")
         tools.clicked.connect(lambda: getattr(window, "experience_v2").toggle_tools())
         window.tools_button = tools
         layout.addWidget(tools)
-
     settings = _menu_button("USTAWIENIA")
     settings.clicked.connect(lambda: _open_owner_settings(window))
     window.settings_button = settings
     layout.addWidget(settings)
-
     leave = _menu_button("WYJDŹ")
     leave.clicked.connect(lambda: request_jarvis_shutdown(window))
     window.exit_button = leave
     layout.addWidget(leave)
-    hint = QLabel("Powiedz: „Pokaż mój plan na dziś”")
-    hint.setObjectName("HudCornerHint")
+    hint = QLabel("Pokaż mój plan na dziś")
+    hint.setObjectName("HudMicroHint")
     hint.setWordWrap(True)
     layout.addWidget(hint)
     guide = QLabel("Kliknij albo poproś własnymi słowami")
-    guide.setObjectName("HudCornerHint")
+    guide.setObjectName("HudMicroHint")
     guide.setWordWrap(True)
     layout.addWidget(guide)
     return frame
@@ -104,7 +98,6 @@ def _menu_button(label: str) -> QPushButton:
 
 
 def _open_owner_settings(window: Any) -> None:
-    """Keep the protected owner gate before revealing system settings."""
     access = getattr(window, "owner_access", None)
     if access is None:
         return
@@ -116,34 +109,96 @@ def _open_owner_settings(window: Any) -> None:
         show_page("settings")
 
 
+def _right_column(window: Any) -> QFrame:
+    frame = QFrame()
+    frame.setObjectName("HudEdgeColumn")
+    frame.setMinimumWidth(230)
+    frame.setMaximumWidth(276)
+    layout = QVBoxLayout(frame)
+    layout.setContentsMargins(0, 0, 0, 0)
+    presence_frame = QFrame()
+    presence_frame.setObjectName("HudPresenceFrame")
+    presence_layout = QVBoxLayout(presence_frame)
+    presence_layout.setContentsMargins(5, 5, 5, 5)
+    presence = HaloWidget()
+    presence.setFixedSize(104, 104)
+    presence.set_animation_active(False)
+    presence_layout.addWidget(presence)
+    layout.addWidget(presence_frame, 0, Qt.AlignRight)
+    layout.addStretch(1)
+    layout.addWidget(_chat_dock(window))
+    window.presence_halo = presence
+    return frame
+
+
 def _chat_dock(window: Any) -> QFrame:
     frame = QFrame()
     frame.setObjectName("HudChatDock")
-    frame.setMinimumWidth(270)
-    frame.setMaximumWidth(330)
     layout = QVBoxLayout(frame)
-    layout.setContentsMargins(14, 16, 14, 16)
-    layout.setSpacing(8)
-    layout.addStretch(1)
-
+    layout.setContentsMargins(12, 12, 12, 12)
+    layout.setSpacing(7)
     title = QLabel("ROZMOWA")
-    title.setObjectName("HudCornerTitle")
+    title.setObjectName("HudPanelTitle")
     layout.addWidget(title)
-    placeholder = QLabel("Czat pojawi się tutaj po wydaniu polecenia.")
+    status_host = QVBoxLayout()
+    status_host.setContentsMargins(0, 0, 0, 0)
+    status_host.setSpacing(4)
+    layout.addLayout(status_host)
+    placeholder = QLabel("Czat otworzy się po wydaniu polecenia.")
     placeholder.setObjectName("HudChatPlaceholder")
     placeholder.setWordWrap(True)
     layout.addWidget(placeholder)
-
-    host = QVBoxLayout()
-    host.setContentsMargins(0, 0, 0, 0)
-    host.setSpacing(0)
-    layout.addLayout(host)
-    layout.addStretch(1)
-
-    window.conversation_host_layout = host
+    conversation_host = QVBoxLayout()
+    conversation_host.setContentsMargins(0, 0, 0, 0)
+    layout.addLayout(conversation_host)
+    command_box = QFrame()
+    command_box.setObjectName("HudCommandBox")
+    command_layout = QHBoxLayout(command_box)
+    command_layout.setContentsMargins(5, 5, 5, 5)
+    command_layout.setSpacing(5)
+    layout.addWidget(command_box)
+    window.conversation_host_layout = conversation_host
     window.conversation_placeholder = placeholder
+    window.status_host_layout = status_host
+    window.command_input_layout = command_layout
+    window.command_box = command_box
     window.conversation_dock = frame
     return frame
 
 
-__all__ = ["build_client_hud_row"]
+def mount_client_status(window: Any) -> None:
+    """Keep the center clean by mounting live task state inside the chat."""
+    widgets = (
+        window.state_label,
+        window.message_label,
+        window.activity_label,
+        window.activity_progress,
+        window.confirm_frame,
+    )
+    for widget in widgets:
+        widget.setParent(window.conversation_dock)
+        window.status_host_layout.addWidget(widget)
+    window.state_label.setAlignment(Qt.AlignLeft)
+    window.message_label.setAlignment(Qt.AlignLeft)
+    window.message_label.setMinimumHeight(0)
+    window.message_label.setMaximumHeight(64)
+    window.activity_label.setAlignment(Qt.AlignLeft)
+
+
+def mount_client_command_input(window: Any) -> None:
+    """Move the existing tested input controls into the compact chat dock."""
+    send = next(
+        button for button in window.findChildren(QPushButton)
+        if button.objectName() == "ClientPrimary"
+        and button.parentWidget() is window.command_entry.parentWidget()
+    )
+    controls = (window.command_entry, window.listen_button, send)
+    for widget in controls:
+        widget.setParent(window.command_box)
+        window.command_input_layout.addWidget(widget, 1 if widget is window.command_entry else 0)
+    window.listen_button.setText("MÓW")
+    send.setText("›")
+    send.setObjectName("HudSendAction")
+
+
+__all__ = ["build_client_hud_row", "mount_client_command_input", "mount_client_status"]

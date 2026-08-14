@@ -20,6 +20,7 @@ from app.client_experience.controller import ClientExperienceController
 from app.gui.client_theme import ClientTheme
 from app.gui.client_hud_backdrop import ClientHudBackdrop
 from app.gui.client_hud_panels import build_client_hud_row
+from app.gui.cinematic_entity_widget import CinematicEntityWidget
 from app.gui.client_owner_access import ClientOwnerAccess
 from app.gui.client_state_presenter import ClientStatePresenter
 from app.gui.client_v12_mixin import ClientV12Mixin
@@ -28,7 +29,6 @@ from app.gui.client_voice_mixin import ClientVoiceMixin
 from app.gui.client_input_policy import should_block_client_input
 from app.gui.client_experience_v2 import ClientExperienceV2
 from app.gui.client_window_mode import ClientWindowModeRuntime
-from app.gui.halo_widget import HaloWidget
 from app.gui.user_text_widgets import clean_user_visible_widgets, naturalize_user_text
 class ClientExperienceWindow(ClientVoiceMixin, ClientOnlineMixin, ClientV12Mixin, QMainWindow):
     """B116-B120 simplified client shell while owner tools remain separate."""
@@ -102,7 +102,7 @@ class ClientExperienceWindow(ClientVoiceMixin, ClientOnlineMixin, ClientV12Mixin
         )
         footer.setObjectName("ClientHint")
         footer.setAlignment(Qt.AlignCenter)
-        layout.addWidget(footer)
+        layout.addWidget(footer); footer.hide()
     def _top_bar(self) -> QFrame:
         frame = QFrame()
         frame.setObjectName("ClientTopBar")
@@ -200,7 +200,7 @@ class ClientExperienceWindow(ClientVoiceMixin, ClientOnlineMixin, ClientV12Mixin
         content.setContentsMargins(28, 20, 28, 22)
         content.setSpacing(10)
         content.addStretch(1)
-        self.halo = HaloWidget()
+        self.halo = CinematicEntityWidget()
         content.addLayout(build_client_hud_row(self, self.halo))
         self.state_label = QLabel("JESTEM GOTOWY")
         self.state_label.setObjectName("ClientState")
