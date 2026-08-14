@@ -254,6 +254,7 @@ class CloudInfrastructureTests(unittest.TestCase):
             "az containerapp auth show",
             "--remove-env-vars",
             "JARVIS_OS_REMOTE_STORAGE_ACCOUNT",
+            "for secret_attempt in $(seq 1 6)",
         ):
             self.assertIn(expected, workflow)
 

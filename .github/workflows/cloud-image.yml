@@ -122,12 +122,22 @@ jobs:
                 --resource-group rg-jarvis-os-cloud \
                 --query "[?name=='remote-storage-connection'].name" \
                 --output tsv | grep -qx "remote-storage-connection"; then
-                az containerapp secret remove \
-                  --name jarvis-os-planner \
-                  --resource-group rg-jarvis-os-cloud \
-                  --secret-names remote-storage-connection \
-                  --only-show-errors \
-                  --output none
+                for secret_attempt in $(seq 1 6); do
+                  if az containerapp secret remove \
+                    --name jarvis-os-planner \
+                    --resource-group rg-jarvis-os-cloud \
+                    --secret-names remote-storage-connection \
+                    --only-show-errors \
+                    --output none; then
+                    break
+                  fi
+                  if [ "${secret_attempt}" -eq 6 ]; then
+                    echo "Storage connection secret could not be removed."
+                    exit 1
+                  fi
+                  echo "Secret removal ${secret_attempt}/6 is waiting for revision propagation."
+                  sleep 10
+                done
               fi
               exit 0
             fi
