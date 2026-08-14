@@ -9,6 +9,9 @@ param location string = 'polandcentral'
 @description('Public container image containing the JARVIS OS cloud planner.')
 param containerImage string
 
+@description('Exact Git commit represented by the deployed container image.')
+param buildSha string = 'development'
+
 @secure()
 @description('Bearer token shared only by the desktop client and Container App.')
 param apiToken string
@@ -39,6 +42,7 @@ module cloudPlanner './main.bicep' = {
     namePrefix: namePrefix
     location: location
     containerImage: containerImage
+    buildSha: buildSha
     apiToken: apiToken
     phoneEntraClientId: phoneEntraClientId
     phoneEntraClientSecret: phoneEntraClientSecret

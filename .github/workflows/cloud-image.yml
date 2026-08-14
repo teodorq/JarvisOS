@@ -12,6 +12,7 @@ on:
       - app/ai/commands/**
       - tests/test_cloud*.py
       - tests/test_remote_command_bridge.py
+      - infra/azure/**
       - .dockerignore
       - .github/workflows/cloud-image.yml
   workflow_dispatch:
@@ -43,6 +44,14 @@ jobs:
       - name: Test phone command relay
         run: python -m unittest discover -s tests -p "test_remote_command_bridge.py" -v
 
+      - name: Validate Azure templates
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            az bicep build \
+              --file infra/azure/subscription.bicep \
+              --stdout > /dev/null
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -73,6 +82,9 @@ jobs:
       contents: read
       id-token: write
     steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
       - name: Sign in to Azure with GitHub OIDC
         uses: azure/login@v2
         with:
@@ -89,7 +101,17 @@ jobs:
               --name jarvis-os-planner \
               --resource-group rg-jarvis-os-cloud \
               --image "ghcr.io/${{ github.repository_owner }}/jarvis-os-cloud:sha-${{ github.sha }}" \
-              --set-env-vars "JARVIS_OS_BUILD_SHA=${{ github.sha }}" \
+              --cpu 0.25 \
+              --memory 0.5Gi \
+              --min-replicas 0 \
+              --max-replicas 1 \
+              --set-env-vars \
+                "JARVIS_OS_BUILD_SHA=${{ github.sha }}" \
+                "JARVIS_OS_CLOUD_ENVIRONMENT=production" \
+                "JARVIS_OS_REMOTE_TABLE=commands" \
+                "JARVIS_OS_REMOTE_QUEUE=commands" \
+                "JARVIS_OS_CLOUD_REQUESTS_PER_MINUTE=30" \
+                "PORT=8000" \
               --only-show-errors \
               --output none; then
               exit 0
@@ -98,6 +120,35 @@ jobs:
             sleep 15
           done
           echo "Azure Container App update failed after 5 attempts."
+          exit 1
+
+      - name: Verify declared Azure configuration
+        shell: bash
+        run: |
+          app_json="${RUNNER_TEMP}/jarvis-os-app.json"
+          auth_json="${RUNNER_TEMP}/jarvis-os-auth.json"
+          expected_image="ghcr.io/${{ github.repository_owner }}/jarvis-os-cloud:sha-${{ github.sha }}"
+          for attempt in $(seq 1 12); do
+            az containerapp show \
+              --name jarvis-os-planner \
+              --resource-group rg-jarvis-os-cloud \
+              --output json > "${app_json}"
+            az containerapp auth show \
+              --name jarvis-os-planner \
+              --resource-group rg-jarvis-os-cloud \
+              --output json > "${auth_json}"
+            if python infra/azure/verify_deployment.py \
+              --app-json "${app_json}" \
+              --auth-json "${auth_json}" \
+              --expected-image "${expected_image}" \
+              --expected-build-sha "${{ github.sha }}" \
+              --expected-tenant-id "1f218598-c698-404f-908f-025fe1b55870"; then
+              exit 0
+            fi
+            echo "Azure declaration check ${attempt}/12 is not ready yet."
+            sleep 5
+          done
+          echo "Azure configuration did not converge to the declaration."
           exit 1
 
       - name: Verify the deployed revision

@@ -7,6 +7,9 @@ param location string = resourceGroup().location
 @description('Public container image containing the JARVIS OS cloud planner.')
 param containerImage string
 
+@description('Exact Git commit represented by the deployed container image.')
+param buildSha string = 'development'
+
 @secure()
 @description('Bearer token shared only by the desktop client and Container App.')
 param apiToken string
@@ -116,6 +119,10 @@ resource plannerApp 'Microsoft.App/containerApps@2024-03-01' = {
             {
               name: 'JARVIS_OS_CLOUD_ENVIRONMENT'
               value: 'production'
+            }
+            {
+              name: 'JARVIS_OS_BUILD_SHA'
+              value: buildSha
             }
             {
               name: 'JARVIS_OS_CLOUD_API_TOKEN'

@@ -94,8 +94,16 @@ Git commit hash so a controlled rollback remains possible.
 
 Changes to the cloud boundary on `develop` are tested and published as an
 immutable `sha-<commit>` image by GitHub Actions. The workflow then signs in
-to Azure through OpenID Connect, updates only `jarvis-os-planner`, and waits
-for the public health check. No Azure password or client secret is stored in
-GitHub. The federated identity accepts tokens only from this repository's
-`develop` branch and has Container Apps Contributor access only to the
-planner resource.
+to Azure through OpenID Connect, reapplies the declared CPU, memory, replica,
+environment and image settings to `jarvis-os-planner`, and waits for the
+public health check. It compiles `subscription.bicep` before publishing and
+compares the live Container App and EasyAuth configuration with the checked-in
+runtime contract after deployment. A mismatched image, build SHA, cost limit,
+probe, secret reference, Entra owner, audience, issuer, or login policy fails
+the workflow instead of silently accepting configuration drift.
+
+No Azure password, desktop token, or Entra client secret is stored in GitHub.
+The federated identity accepts tokens only from this repository's `develop`
+branch and has Container Apps Contributor access only to the planner resource.
+Storage-account and identity changes remain deliberate Bicep deployments until
+the relay moves from a shared storage key to managed identity and RBAC.
