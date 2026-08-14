@@ -20,7 +20,7 @@ from app.client_experience.controller import ClientExperienceController
 from app.gui.client_theme import ClientTheme
 from app.gui.client_hud_backdrop import ClientHudBackdrop
 from app.gui.client_hud_panels import build_client_hud_row
-from app.gui.cinematic_entity_widget import CinematicEntityWidget
+from app.gui.halo_widget import HaloWidget
 from app.gui.client_owner_access import ClientOwnerAccess
 from app.gui.client_state_presenter import ClientStatePresenter
 from app.gui.client_v12_mixin import ClientV12Mixin
@@ -200,7 +200,7 @@ class ClientExperienceWindow(ClientVoiceMixin, ClientOnlineMixin, ClientV12Mixin
         content.setContentsMargins(28, 20, 28, 22)
         content.setSpacing(10)
         content.addStretch(1)
-        self.halo = CinematicEntityWidget()
+        self.halo = HaloWidget()
         content.addLayout(build_client_hud_row(self, self.halo))
         self.state_label = QLabel("JESTEM GOTOWY")
         self.state_label.setObjectName("ClientState")
