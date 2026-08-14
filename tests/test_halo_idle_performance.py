@@ -46,6 +46,20 @@ class HaloIdlePerformanceTests(unittest.TestCase):
             halo.set_animation_active(False)
             halo.deleteLater()
 
+    def test_orb_animation_crosses_old_loop_boundary_without_reset(self) -> None:
+        halo = HaloWidget()
+        try:
+            halo._angle = 359.9  # noqa: SLF001 - boundary regression check
+            halo._scan = 359.9  # noqa: SLF001 - boundary regression check
+
+            halo._tick()  # noqa: SLF001 - drive exactly one animation frame
+
+            self.assertGreater(halo._angle, 360.0)  # noqa: SLF001
+            self.assertGreater(halo._scan, 360.0)  # noqa: SLF001
+        finally:
+            halo.set_animation_active(False)
+            halo.deleteLater()
+
 
 if __name__ == "__main__":
     unittest.main()

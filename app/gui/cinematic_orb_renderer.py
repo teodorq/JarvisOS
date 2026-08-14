@@ -25,7 +25,7 @@ class _Particle:
 class CinematicOrbRenderer:
     """Gęsta, przestrzenna kula cząsteczkowa inspirowana filmowym JARVISEM."""
 
-    PARTICLE_COUNT = 1200
+    PARTICLE_COUNT = 1800
 
     def __init__(self) -> None:
         self._particles = self._build_particles(self.PARTICLE_COUNT)
@@ -56,6 +56,9 @@ class CinematicOrbRenderer:
         self._draw_ambient_glow(
             painter, center, size, color, pulse, intensity
         )
+        self._draw_corona_wisps(
+            painter, center, size, color, angle, pulse_phase, intensity
+        )
         self._draw_orbits(painter, center, size, color, angle, intensity)
         self._draw_sphere_body(
             painter, center, size, color, pulse, intensity
@@ -72,6 +75,9 @@ class CinematicOrbRenderer:
         )
         self._draw_energy_filaments(
             painter, center, size, color, angle, pulse_phase, intensity
+        )
+        self._draw_shell_refraction(
+            painter, center, size, color, angle, pulse, intensity
         )
         self._draw_progress_ring(
             painter, center, size, color, state, progress, scan
@@ -136,6 +142,48 @@ class CinematicOrbRenderer:
         painter.setPen(Qt.NoPen)
         painter.setBrush(glow)
         painter.drawEllipse(center, radius, radius)
+
+    @staticmethod
+    def _draw_corona_wisps(
+        painter: QPainter,
+        center: QPointF,
+        size: float,
+        color: QColor,
+        angle: float,
+        pulse_phase: float,
+        intensity: float,
+    ) -> None:
+        """Draw continuously flowing energy without a loop boundary."""
+        phase = math.radians(angle * 0.14) + pulse_phase * 0.11
+        painter.setBrush(Qt.NoBrush)
+        for arm in range(7):
+            path = QPainterPath()
+            arm_phase = phase + arm * math.tau / 7.0
+            for step in range(42):
+                travel = step / 41.0
+                theta = arm_phase + travel * (1.15 + 0.08 * arm)
+                wave = math.sin(travel * math.tau * 1.5 + arm_phase)
+                radius = size * (0.305 + travel * 0.155 + wave * 0.008)
+                squash = 0.72 + 0.08 * math.sin(arm_phase * 0.7)
+                point = QPointF(
+                    center.x() + math.cos(theta) * radius,
+                    center.y() + math.sin(theta) * radius * squash,
+                )
+                if step == 0:
+                    path.moveTo(point)
+                else:
+                    path.lineTo(point)
+            wisp = QColor(color)
+            wisp.setAlpha(int((18 + (arm % 3) * 9) * intensity))
+            painter.setPen(
+                QPen(
+                    wisp,
+                    max(0.55, min(1.35, size / (760.0 - arm * 28.0))),
+                    Qt.SolidLine,
+                    Qt.RoundCap,
+                )
+            )
+            painter.drawPath(path)
 
     @staticmethod
     def _draw_orbits(
@@ -239,14 +287,29 @@ class CinematicOrbRenderer:
         if state in {"idle", "brief", "success"}:
             stride = max(stride, 2)
         batches: list[list[QPointF]] = [[], [], [], []]
+        corona: list[QPointF] = []
         energy = 1.12 if state in {"listening", "thinking", "acting"} else 1.0
+        flow_phase = math.radians(angle * 0.045) + pulse_phase * 0.19
 
         for index in range(0, len(self._particles), stride):
             particle = self._particles[index]
-            x1 = particle.x * cy + particle.z * sy
-            z1 = -particle.x * sy + particle.z * cy
-            y2 = particle.y * cp - z1 * sp
-            z2 = particle.y * sp + z1 * cp
+            organic = 0.018 * math.sin(
+                flow_phase
+                + particle.shimmer * math.tau
+                + particle.y * 3.6
+                + particle.z * 1.8
+            )
+            lateral = 0.012 * math.sin(
+                flow_phase * 0.73 + particle.shimmer * 9.0 + particle.x * 2.4
+            )
+            radial = 1.0 + organic
+            px = particle.x * radial + lateral * particle.z
+            py = particle.y * (1.0 + organic * 0.58)
+            pz = particle.z * radial - lateral * particle.x
+            x1 = px * cy + pz * sy
+            z1 = -px * sy + pz * cy
+            y2 = py * cp - z1 * sp
+            z2 = py * sp + z1 * cp
             perspective = 0.91 + z2 * 0.085
             point = QPointF(
                 center.x() + x1 * radius * perspective,
@@ -257,6 +320,16 @@ class CinematicOrbRenderer:
             )
             tone = max(0.0, min(0.999, (z2 + 1.0) * 0.5 + twinkle))
             batches[min(3, int(tone * 4.0))].append(point)
+            if index % 29 == 0 and z2 > -0.4:
+                halo_scale = 1.12 + 0.075 * math.sin(
+                    flow_phase * 0.61 + particle.shimmer * math.tau
+                )
+                corona.append(
+                    QPointF(
+                        center.x() + x1 * radius * perspective * halo_scale,
+                        center.y() + y2 * radius * perspective * halo_scale,
+                    )
+                )
 
         base_width = max(0.65, min(1.45, size / 530.0))
         alpha_values = (42, 76, 132, 224)
@@ -279,6 +352,12 @@ class CinematicOrbRenderer:
                 )
             )
             painter.drawPoints(QPolygonF(points))
+        if corona:
+            spark = QColor(190, 242, 255, int(118 * intensity))
+            painter.setPen(
+                QPen(spark, max(0.7, size / 520.0), Qt.SolidLine, Qt.RoundCap)
+            )
+            painter.drawPoints(QPolygonF(corona))
 
     def _draw_energy_filaments(
         self,
@@ -293,14 +372,19 @@ class CinematicOrbRenderer:
         radius = size * 0.324
         yaw = math.radians(angle * 0.31)
         pitch = math.radians(-8.0 + math.sin(pulse_phase * 0.42) * 3.2)
-        for band in range(3):
+        for band in range(5):
             path = QPainterPath()
             first = True
             for step in range(73):
                 longitude = math.tau * step / 72.0
                 latitude = (
-                    (band - 1) * 0.34
-                    + 0.055 * math.sin(longitude * 3.0 + pulse_phase + band)
+                    (band - 2) * 0.19
+                    + 0.05
+                    * math.sin(
+                        longitude * (2.0 + (band % 2))
+                        + pulse_phase * (0.43 + band * 0.04)
+                        + band
+                    )
                 )
                 x = math.cos(latitude) * math.cos(longitude)
                 y = math.sin(latitude)
@@ -317,7 +401,7 @@ class CinematicOrbRenderer:
                 else:
                     path.lineTo(point)
             filament = QColor(color)
-            filament.setAlpha(int((46 + band * 9) * intensity))
+            filament.setAlpha(int((32 + band * 7) * intensity))
             painter.setBrush(Qt.NoBrush)
             painter.setPen(
                 QPen(
@@ -328,6 +412,41 @@ class CinematicOrbRenderer:
                 )
             )
             painter.drawPath(path)
+
+    @staticmethod
+    def _draw_shell_refraction(
+        painter: QPainter,
+        center: QPointF,
+        size: float,
+        color: QColor,
+        angle: float,
+        pulse: float,
+        intensity: float,
+    ) -> None:
+        painter.setBrush(Qt.NoBrush)
+        for layer in range(3):
+            radius = size * (0.334 + layer * 0.009 + pulse * 0.0015)
+            rect = QRectF(
+                center.x() - radius,
+                center.y() - radius,
+                radius * 2.0,
+                radius * 2.0,
+            )
+            rim = QColor(color).lighter(145)
+            rim.setAlpha(int((52 - layer * 12) * intensity))
+            painter.setPen(
+                QPen(
+                    rim,
+                    max(0.65, size / (720.0 + layer * 180.0)),
+                    Qt.SolidLine,
+                    Qt.RoundCap,
+                )
+            )
+            start = 198.0 + layer * 77.0 + angle * (0.12 - layer * 0.025)
+            painter.drawArc(rect, int(start * 16), int((44 - layer * 7) * 16))
+            painter.drawArc(
+                rect, int((start + 164.0) * 16), int((24 + layer * 4) * 16)
+            )
 
     @staticmethod
     def _project(
@@ -378,14 +497,16 @@ class CinematicOrbRenderer:
         painter.setBrush(Qt.NoBrush)
         painter.setPen(QPen(track, max(1.0, size / 520.0)))
         painter.drawArc(rect, 90 * 16, -360 * 16)
-        value = progress if progress > 0 else int(scan % 100)
         active = QColor(color)
         active.setAlpha(205)
         painter.setPen(
             QPen(active, max(1.5, size / 330.0), Qt.SolidLine, Qt.RoundCap)
         )
-        span = max(18, int(360 * value / 100.0))
-        painter.drawArc(rect, 90 * 16, -span * 16)
+        if progress > 0:
+            start, span = 90.0, max(18, int(360 * progress / 100.0))
+        else:
+            start, span = 90.0 - scan, 82
+        painter.drawArc(rect, int(start * 16), -span * 16)
 
     @staticmethod
     def _draw_core(
@@ -412,6 +533,21 @@ class CinematicOrbRenderer:
         painter.setPen(Qt.NoPen)
         painter.setBrush(core)
         painter.drawEllipse(center, radius, radius)
+        halo_radius = radius * (1.55 + pulse * 0.08)
+        core_halo = QRadialGradient(center, halo_radius)
+        core_halo.setColorAt(0.0, QColor(255, 255, 255, 88))
+        core_halo.setColorAt(
+            0.42,
+            QColor(color.red(), color.green(), color.blue(), int(72 * intensity)),
+        )
+        core_halo.setColorAt(1.0, QColor(0, 0, 0, 0))
+        painter.setBrush(core_halo)
+        painter.drawEllipse(center, halo_radius, halo_radius)
+        hot = QColor(235, 253, 255, int(205 * intensity))
+        painter.setBrush(Qt.NoBrush)
+        painter.setPen(QPen(hot, max(0.7, size / 610.0)))
+        ring_radius = radius * (0.67 + pulse * 0.04)
+        painter.drawEllipse(center, ring_radius, ring_radius)
 
     def _draw_state_accent(
         self,

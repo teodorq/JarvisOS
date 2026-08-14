@@ -131,11 +131,11 @@ class HaloWidget(QWidget):
 
     def _tick(self) -> None:
         speed = self.SPEEDS[self._state]
-        self._angle = (self._angle + speed) % 360.0
+        self._angle += speed
         self._pulse = (
             self._pulse + 0.038 * max(speed, 0.65)
         ) % (math.pi * 2)
-        self._scan = (self._scan + 1.8 * max(speed, 0.65)) % 360.0
+        self._scan += 1.8 * max(speed, 0.65)
         self._intensity += (
             self._target_intensity - self._intensity
         ) * 0.08
