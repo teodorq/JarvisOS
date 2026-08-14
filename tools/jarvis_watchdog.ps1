@@ -93,6 +93,13 @@ try {
         }
 
         $runtimeSeconds = ((Get-Date) - $startedAt).TotalSeconds
+        if ($exitCode -eq 0) {
+            Write-WatchdogLog (
+                "JARVIS OS exited normally after " +
+                "$([Math]::Round($runtimeSeconds)) seconds; watchdog is exiting."
+            )
+            break
+        }
         Write-WatchdogLog (
             "JARVIS OS exited with code $exitCode after " +
             "$([Math]::Round($runtimeSeconds)) seconds; restart in " +

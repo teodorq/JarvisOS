@@ -75,10 +75,11 @@ restart it after an unexpected exit:
 powershell -ExecutionPolicy Bypass -File tools\install_jarvis_autostart.ps1
 ```
 
-The watchdog uses a single instance, a 5-to-60-second restart backoff, and a
-one-minute recovery trigger if Windows terminates the watchdog itself. To
-remove the scheduled task and stop the watchdog, run the same script with
-`-Remove`.
+The watchdog uses a single instance and a 5-to-60-second restart backoff after
+an application failure. Closing JARVIS OS normally also closes the watchdog,
+so the application stays off until it is started manually or at the next
+Windows sign-in. To remove the scheduled task and stop the watchdog, run the
+same script with `-Remove`.
 
 ## Repository layout
 
