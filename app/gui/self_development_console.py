@@ -42,7 +42,7 @@ def is_real_development_thought(thought: object) -> bool:
 
 
 class SelfDevelopmentConsoleSession:
-    """Visible Python monitor backed by truthful events from an actual run."""
+    """Background Python monitor backed by truthful events from an actual run."""
 
     def __init__(self, project_root: object, thought: dict[str, Any]) -> None:
         self.project_root = resolve_project_root(project_root)
@@ -112,7 +112,7 @@ class SelfDevelopmentConsoleSession:
             runner.open(
                 [sys.executable, str(script), str(self.log_path)],
                 cwd=self.project_root,
-                creationflags=subprocess.CREATE_NEW_CONSOLE,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
         except (OSError, ValueError):
             return

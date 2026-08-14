@@ -24,6 +24,7 @@ class B87B88BusinessReleaseIntegrationTests(unittest.TestCase):
             "main.py": "pass\n",
             "requirements.txt": "\n",
             "start_jarvis.bat": "@echo off\n",
+            "start_jarvis.vbs": "Option Explicit\n",
             "app/gui/main_window.py": "class MainWindow: pass\n",
             "app/business/business_edition_service.py": "class BusinessEditionService: pass\n",
             "tests/test_sample.py": "# sample\n",

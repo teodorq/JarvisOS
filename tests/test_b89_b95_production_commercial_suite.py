@@ -11,7 +11,7 @@ from app.business.sales_readiness import SalesReadiness
 from app.business.production_release import ProductionRelease
 class B89B95CoreTests(unittest.TestCase):
     def setUp(self):
-        self.tmp=tempfile.TemporaryDirectory(); self.root=Path(self.tmp.name); (self.root/'app').mkdir(); (self.root/'config').mkdir(); (self.root/'AI_PLIKI').mkdir(); (self.root/'app'/'x.py').write_text('x=1\n'); (self.root/'main.py').write_text('pass\n'); (self.root/'requirements.txt').write_text(''); (self.root/'start_jarvis.bat').write_text(''); (self.root/'JARVIS_OS.ico').write_bytes(b'i'); (self.root/'JARVIS_OS.png').write_bytes(b'p')
+        self.tmp=tempfile.TemporaryDirectory(); self.root=Path(self.tmp.name); (self.root/'app').mkdir(); (self.root/'config').mkdir(); (self.root/'AI_PLIKI').mkdir(); (self.root/'app'/'x.py').write_text('x=1\n'); (self.root/'main.py').write_text('pass\n'); (self.root/'requirements.txt').write_text(''); (self.root/'start_jarvis.bat').write_text(''); (self.root/'start_jarvis.vbs').write_text(''); (self.root/'JARVIS_OS.ico').write_bytes(b'i'); (self.root/'JARVIS_OS.png').write_bytes(b'p')
     def tearDown(self): self.tmp.cleanup()
     def test_b89_version_channels(self):
         svc=ProductionVersioning(self.root); self.assertFalse(svc.status()['prepared']); self.assertEqual(svc.prepare()['version'],'1.0.0'); self.assertEqual(svc.promote_stable()['channel'],'STABLE')

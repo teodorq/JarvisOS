@@ -496,10 +496,9 @@ class SafeProcessRunner:
     ) -> dict:
         if os.name == "nt":
             return {
-                "creationflags": getattr(
-                    subprocess,
-                    "CREATE_NEW_PROCESS_GROUP",
-                    0,
+                "creationflags": (
+                    getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+                    | getattr(subprocess, "CREATE_NO_WINDOW", 0)
                 ),
             }
 

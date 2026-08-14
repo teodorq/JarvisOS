@@ -12,6 +12,28 @@ def test_autostart_runs_only_at_sign_in() -> None:
     assert "New-ScheduledTaskTrigger -AtLogOn" in installer
     assert "RepetitionInterval" not in installer
     assert "-Trigger $trigger" in installer
+    assert "-WindowStyle Hidden" in installer
+
+
+def test_manual_launcher_and_shortcut_do_not_open_a_console() -> None:
+    hidden = (ROOT / "start_jarvis.vbs").read_text(encoding="utf-8")
+    scripts = (ROOT / "app/business/installation_scripts.py").read_text(
+        encoding="utf-8"
+    )
+    assert "shell.Run command, 0, False" in hidden
+    assert "start_jarvis.vbs" in scripts
+    assert "$shortcut.TargetPath=$wscript" in scripts
+    assert "//B //NoLogo" in scripts
+
+
+def test_runtime_processes_use_no_window_flags() -> None:
+    safe_process = (ROOT / "app/core/safe_process.py").read_text(encoding="utf-8")
+    monitor = (
+        ROOT / "app/gui/self_development_console.py"
+    ).read_text(encoding="utf-8")
+    assert "CREATE_NO_WINDOW" in safe_process
+    assert "CREATE_NEW_CONSOLE" not in monitor
+    assert "CREATE_NO_WINDOW" in monitor
 
 
 def test_reinstall_clears_the_previous_stop_marker() -> None:

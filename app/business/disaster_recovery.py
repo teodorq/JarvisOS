@@ -21,7 +21,7 @@ class BusinessDisasterRecovery:
     MAX_FILES = 6000
     DEFAULT_TARGETS = (
         "app", "tests", "config", "assets", "main.py", "requirements.txt",
-        "start_jarvis.bat", "install.bat", "JARVIS_OS.ico", "JARVIS_OS.png",
+        "start_jarvis.bat", "start_jarvis.vbs", "install.bat", "JARVIS_OS.ico", "JARVIS_OS.png",
     )
     EXCLUDED_PARTS = {
         "__pycache__", ".pytest_cache", ".git", ".venv", "venv",

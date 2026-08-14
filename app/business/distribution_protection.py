@@ -36,7 +36,7 @@ class DistributionProtection:
             for p in sorted((self.paths.root/base).rglob('*')):
                 if p.is_file() and not p.is_symlink() and p.suffix.lower() not in {'.pyc','.tmp','.log'}:
                     yield p,p.relative_to(self.paths.root).as_posix()
-        for name in ('main.py','requirements.txt','start_jarvis.bat','JARVIS_OS.ico','JARVIS_OS.png'):
+        for name in ('main.py','requirements.txt','start_jarvis.bat','start_jarvis.vbs','JARVIS_OS.ico','JARVIS_OS.png'):
             p=self.paths.root/name
             if p.is_file(): yield p,name
     def _default(self): return {"schema_version":1,"verified":False,"file_count":0,"manifest_path":None,"errors":[],"cycles":0}

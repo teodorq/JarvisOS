@@ -25,6 +25,7 @@ class B87BusinessInstallerTests(unittest.TestCase):
             "main.py": "pass\n",
             "requirements.txt": "\n",
             "start_jarvis.bat": "@echo off\n",
+            "start_jarvis.vbs": "Option Explicit\n",
             "app/gui/main_window.py": "class MainWindow: pass\n",
             "app/business/business_edition_service.py": "class BusinessEditionService: pass\n",
             "app/sample.py": "VALUE = 1\n",
@@ -76,6 +77,8 @@ class B87BusinessInstallerTests(unittest.TestCase):
             start = archive.read("PAYLOAD/start_jarvis.bat").decode("ascii")
             self.assertIn('%~dp0', start)
             self.assertNotIn("C:\\JarvisAI", start)
+            hidden = archive.read("PAYLOAD/start_jarvis.vbs").decode("ascii")
+            self.assertIn("shell.Run command, 0, False", hidden)
 
     def test_package_excludes_runtime_and_secret_like_artifacts(self) -> None:
         runtime = self.root / "AI_PLIKI/private.txt"

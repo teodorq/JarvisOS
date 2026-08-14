@@ -3,13 +3,23 @@ from __future__ import annotations
 
 START_SCRIPT = r'''@echo off
 setlocal
-cd /d "%~dp0"
-if exist ".venv\Scripts\pythonw.exe" (
-    start "" ".venv\Scripts\pythonw.exe" main.py
-) else (
-    start "" pythonw.exe main.py
-)
+start "" wscript.exe //B //NoLogo "%~dp0start_jarvis.vbs"
 exit /b 0
+'''
+
+HIDDEN_START_SCRIPT = r'''Option Explicit
+Dim shell, files, root, pythonw, main, command
+Set shell = CreateObject("WScript.Shell")
+Set files = CreateObject("Scripting.FileSystemObject")
+root = files.GetParentFolderName(WScript.ScriptFullName)
+pythonw = files.BuildPath(root, ".venv\Scripts\pythonw.exe")
+main = files.BuildPath(root, "main.py")
+If Not files.FileExists(pythonw) Then
+  pythonw = "pythonw.exe"
+End If
+command = Chr(34) & pythonw & Chr(34) & " " & Chr(34) & main & Chr(34)
+shell.CurrentDirectory = root
+shell.Run command, 0, False
 '''
 
 
@@ -82,13 +92,23 @@ try{
   Set-Content -LiteralPath (Join-Path $target 'start_jarvis.bat') -Value @'
 @echo off
 setlocal
-cd /d "%~dp0"
-if exist ".venv\Scripts\pythonw.exe" (
-    start "" ".venv\Scripts\pythonw.exe" main.py
-) else (
-    start "" pythonw.exe main.py
-)
+start "" wscript.exe //B //NoLogo "%~dp0start_jarvis.vbs"
 exit /b 0
+'@ -Encoding ASCII
+  Set-Content -LiteralPath (Join-Path $target 'start_jarvis.vbs') -Value @'
+Option Explicit
+Dim shell, files, root, pythonw, main, command
+Set shell = CreateObject("WScript.Shell")
+Set files = CreateObject("Scripting.FileSystemObject")
+root = files.GetParentFolderName(WScript.ScriptFullName)
+pythonw = files.BuildPath(root, ".venv\Scripts\pythonw.exe")
+main = files.BuildPath(root, "main.py")
+If Not files.FileExists(pythonw) Then
+  pythonw = "pythonw.exe"
+End If
+command = Chr(34) & pythonw & Chr(34) & " " & Chr(34) & main & Chr(34)
+shell.CurrentDirectory = root
+shell.Run command, 0, False
 '@ -Encoding ASCII
   $python=(Get-Command py -ErrorAction SilentlyContinue)
   if($python){& py -3 -m venv (Join-Path $target '.venv')}
@@ -125,13 +145,15 @@ def shortcut_ps1() -> str:
     return r'''param([Parameter(Mandatory=$true)][string]$InstallRoot)
 $ErrorActionPreference='Stop'
 $root=[IO.Path]::GetFullPath($InstallRoot)
-$launcher=Join-Path $root 'start_jarvis.bat'
-if(-not (Test-Path -LiteralPath $launcher -PathType Leaf)){throw 'Brak start_jarvis.bat.'}
+$launcher=Join-Path $root 'start_jarvis.vbs'
+if(-not (Test-Path -LiteralPath $launcher -PathType Leaf)){throw 'Brak start_jarvis.vbs.'}
+$wscript=Join-Path $env:SystemRoot 'System32\wscript.exe'
 $desktop=[Environment]::GetFolderPath('Desktop')
 $link=Join-Path $desktop 'JARVIS OS.lnk'
 $shell=New-Object -ComObject WScript.Shell
 $shortcut=$shell.CreateShortcut($link)
-$shortcut.TargetPath=$launcher
+$shortcut.TargetPath=$wscript
+$shortcut.Arguments='//B //NoLogo "'+$launcher+'"'
 $shortcut.WorkingDirectory=$root
 $icon=Join-Path $root 'JARVIS_OS.ico'
 if(Test-Path -LiteralPath $icon){$shortcut.IconLocation=$icon}

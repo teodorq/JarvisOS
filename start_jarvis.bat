@@ -1,9 +1,4 @@
 @echo off
 setlocal
-cd /d "%~dp0"
-if exist ".venv\Scripts\pythonw.exe" (
-    start "" ".venv\Scripts\pythonw.exe" main.py
-) else (
-    start "" pythonw.exe main.py
-)
+start "" wscript.exe //B //NoLogo "%~dp0start_jarvis.vbs"
 exit /b 0

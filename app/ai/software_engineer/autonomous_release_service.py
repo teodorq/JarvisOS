@@ -16,7 +16,7 @@ _ALLOWED_TOP_LEVEL = {
     "app", "tests", "tools", "assets", "config", "software_engineer",
 }
 _ALLOWED_ROOT_FILES = {
-    "main.py", "requirements.txt", "start_jarvis.bat", "install.bat",
+    "main.py", "requirements.txt", "start_jarvis.bat", "start_jarvis.vbs", "install.bat",
     "JARVIS_OS.ico", "JARVIS_OS.png", ".gitignore",
 }
 

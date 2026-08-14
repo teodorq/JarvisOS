@@ -15,6 +15,7 @@ from app.core.project_paths import ProjectPaths
 from .access_control import BusinessAccessControl
 from .business_config import BusinessConfigStore
 from .installation_scripts import (
+    HIDDEN_START_SCRIPT,
     START_SCRIPT,
     install_cmd,
     install_ps1,
@@ -34,6 +35,7 @@ class BusinessInstallationManager:
         "main.py",
         "requirements.txt",
         "start_jarvis.bat",
+        "start_jarvis.vbs",
         "app/gui/main_window.py",
         "app/business/business_edition_service.py",
         "JARVIS_OS.ico",
@@ -153,7 +155,12 @@ class BusinessInstallationManager:
             for source, relative in files:
                 destination = payload_dir.joinpath(*relative.split("/"))
                 destination.parent.mkdir(parents=True, exist_ok=True)
-                data = START_SCRIPT.encode("ascii") if relative == "start_jarvis.bat" else source.read_bytes()
+                if relative == "start_jarvis.bat":
+                    data = START_SCRIPT.encode("ascii")
+                elif relative == "start_jarvis.vbs":
+                    data = HIDDEN_START_SCRIPT.encode("ascii")
+                else:
+                    data = source.read_bytes()
                 destination.write_bytes(data)
                 manifest_files[relative] = hashlib.sha256(data).hexdigest()
             manifest = {

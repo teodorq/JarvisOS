@@ -17,7 +17,7 @@ User memory, command history, Google tokens, voice models, logs, generated backu
 
 1. Clone the repository and switch to the `develop` branch.
 2. Run `install.bat`.
-3. Run `start_jarvis.bat`.
+3. Run `start_jarvis.vbs` to start JARVIS OS without a console window.
 
 The installer creates a local `.venv` environment. It uses `requirements-lock.txt` when available, so the verified package versions are reproducible.
 
