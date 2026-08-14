@@ -51,7 +51,6 @@ class ClientTheme:
             background-color: rgba(2, 13, 23, 138); border: 1px solid rgba(55, 181, 224, 62); border-radius: 3px;
         }
         QFrame#HudChatDock { min-height: 260px; max-height: 390px; }
-        QFrame#HudPresenceFrame { background-color: rgba(1, 10, 19, 120); border: 1px solid rgba(68, 203, 244, 72); border-radius: 57px; }
         QFrame#HudCommandBox { background-color: rgba(1, 8, 15, 210); border: 1px solid rgba(65, 190, 230, 68); border-radius: 3px; }
         QLabel#HudPanelTitle { color: #BCEEFF; font-size: 9px; font-weight: 800; letter-spacing: 3px; }
         QLabel#HudStatusKey { color: #507E92; font-size: 8px; letter-spacing: 2px; }

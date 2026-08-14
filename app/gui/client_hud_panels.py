@@ -6,7 +6,6 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
 
 from app.gui.client_exit_intent import request_jarvis_shutdown
-from app.gui.halo_widget import HaloWidget
 
 
 def build_client_hud_row(window: Any, halo: Any) -> QHBoxLayout:
@@ -154,18 +153,8 @@ def _right_column(window: Any) -> QFrame:
     frame.setMaximumWidth(276)
     layout = QVBoxLayout(frame)
     layout.setContentsMargins(0, 0, 0, 0)
-    presence_frame = QFrame()
-    presence_frame.setObjectName("HudPresenceFrame")
-    presence_layout = QVBoxLayout(presence_frame)
-    presence_layout.setContentsMargins(5, 5, 5, 5)
-    presence = HaloWidget()
-    presence.setFixedSize(104, 104)
-    presence.set_animation_active(False)
-    presence_layout.addWidget(presence)
-    layout.addWidget(presence_frame, 0, Qt.AlignRight)
     layout.addStretch(1)
     layout.addWidget(_chat_dock(window))
-    window.presence_halo = presence
     return frame
 
 

@@ -68,6 +68,7 @@ class ClientStarkHudTests(unittest.TestCase):
         self.assertEqual(window.exit_button.text(), "WYJDŹ")
         self.assertIsNotNone(window.conversation_host_layout)
         self.assertIsNotNone(window.status_host_layout)
+        self.assertFalse(hasattr(window, "presence_halo"))
         self.assertIn("po wydaniu polecenia", window.conversation_placeholder.text())
         window.settings_button.click()
         self.assertIs(window.stack.currentWidget(), window.setup_page)
