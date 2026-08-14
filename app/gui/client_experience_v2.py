@@ -95,9 +95,13 @@ class ClientExperienceV2:
         outer.addWidget(scroll)
         self._scroll = scroll
         frame.hide()
-        parent_layout = self.window.message_label.parentWidget().layout()
-        index = parent_layout.indexOf(self.window.message_label)
-        parent_layout.insertWidget(index + 1, frame)
+        host = getattr(self.window, "conversation_host_layout", None)
+        if host is not None:
+            host.addWidget(frame)
+        else:
+            parent_layout = self.window.message_label.parentWidget().layout()
+            index = parent_layout.indexOf(self.window.message_label)
+            parent_layout.insertWidget(index + 1, frame)
         self.frame = frame
 
     def _wrap_runtime(self) -> None:
@@ -141,6 +145,9 @@ class ClientExperienceV2:
         self._messages.clear()
         self._last_assistant = ""
         self.frame.hide()
+        placeholder = getattr(self.window, "conversation_placeholder", None)
+        if placeholder is not None:
+            placeholder.show()
         self._render()
 
     def _append(
@@ -150,6 +157,9 @@ class ClientExperienceV2:
         card: ClientResultCard | None,
     ) -> None:
         self._messages.append((author, text, card))
+        placeholder = getattr(self.window, "conversation_placeholder", None)
+        if placeholder is not None:
+            placeholder.hide()
         self.frame.show()
         self._render()
 

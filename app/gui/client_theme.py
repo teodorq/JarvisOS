@@ -52,20 +52,19 @@ class ClientTheme:
         QPushButton#ClientSecondary:hover {
             border-color: #50D9FF; background-color: rgba(8, 48, 73, 188);
         }
-        QFrame#HudRail {
-            background-color: rgba(2, 14, 24, 112);
-            border-left: 1px solid rgba(65, 199, 244, 82);
-            border-right: 1px solid rgba(65, 199, 244, 26);
+        QFrame#HudCornerColumn { background: transparent; border: 0; }
+        QFrame#HudCornerPanel, QFrame#HudChatDock {
+            background-color: rgba(2, 14, 24, 154); border: 1px solid rgba(65, 199, 244, 72); border-radius: 5px;
         }
-        QLabel#HudRailTitle { color: #EAF9FF; font-size: 14px; font-weight: 700; letter-spacing: 3px; }
-        QLabel#HudRailStatus { color: #4ED7C1; font-size: 10px; letter-spacing: 1px; }
-        QLabel#HudRailHint { color: #507D91; font-size: 10px; }
-        QPushButton#HudAction {
-            text-align: left; color: #BDEBFA; background: transparent;
-            border: 0; border-bottom: 1px solid rgba(52, 170, 214, 52);
-            padding: 11px 6px; font-size: 12px; letter-spacing: 2px;
+        QFrame#HudChatDock { min-height: 260px; }
+        QLabel#HudCornerTitle { color: #DFF8FF; font-size: 11px; font-weight: 800; letter-spacing: 3px; }
+        QLabel#HudStatusLine { color: #55D8C1; font-size: 10px; letter-spacing: 1px; padding: 2px 0; }
+        QLabel#HudCornerHint { color: #567F92; font-size: 9px; padding-top: 5px; }
+        QLabel#HudChatPlaceholder { color: #567F92; font-size: 11px; padding: 10px 2px; }
+        QPushButton#HudMenuAction {
+            text-align: left; color: #BDEBFA; background: transparent; border: 0; border-bottom: 1px solid rgba(52, 170, 214, 52); padding: 9px 4px; font-size: 11px; letter-spacing: 2px;
         }
-        QPushButton#HudAction:hover { color: #FFFFFF; border-bottom-color: #51D9FF; }
+        QPushButton#HudMenuAction:hover { color: #FFFFFF; border-bottom-color: #51D9FF; }
         QPushButton#ClientConfirm { background-color: #126D50; color: #EDFFF8; border: 1px solid #35C78F; }
         QPushButton#ClientCancel { background-color: #672D3B; color: #FFECEF; border: 1px solid #B8576D; }
         QProgressBar#ClientProgress {

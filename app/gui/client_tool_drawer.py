@@ -139,4 +139,7 @@ class ClientToolDrawer(QFrame):
     def _sync_button(self) -> None:
         button = getattr(self.window, "tools_button", None)
         if button is not None:
+            if button.objectName() == "HudMenuAction":
+                button.setText("ZAMKNIJ MENU" if self.isVisible() else "NARZĘDZIA")
+                return
             button.setText("MNIEJ" if self.isVisible() else "WIĘCEJ")
