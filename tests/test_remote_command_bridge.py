@@ -3,7 +3,9 @@ from __future__ import annotations
 import http.client
 import json
 import os
+import sys
 import threading
+import types
 import unittest
 import urllib.error
 import urllib.request
@@ -374,19 +376,34 @@ class RemoteCommandBridgeTests(unittest.TestCase):
     def test_queue_client_uses_entra_credential(self) -> None:
         credential = object()
         queue = FakeQueueClient()
+        calls: list[tuple[str, object]] = []
+
+        class FakeQueueFactory:
+            @staticmethod
+            def from_queue_url(url: str, *, credential: object):
+                calls.append((url, credential))
+                return queue
+
+        azure = types.ModuleType("azure")
+        azure.__path__ = []
+        storage = types.ModuleType("azure.storage")
+        storage.__path__ = []
+        queue_module = types.ModuleType("azure.storage.queue")
+        queue_module.QueueClient = FakeQueueFactory
         client = CloudPlannerClient(
             self._settings(queue_url=self.queue_url),
             queue_credential=credential,
         )
-        with patch(
-            "azure.storage.queue.QueueClient.from_queue_url",
-            return_value=queue,
-        ) as factory:
+        with patch.dict(
+            sys.modules,
+            {
+                "azure": azure,
+                "azure.storage": storage,
+                "azure.storage.queue": queue_module,
+            },
+        ):
             self.assertIs(client._queue_client_instance(), queue)
-        factory.assert_called_once_with(
-            self.queue_url,
-            credential=credential,
-        )
+        self.assertEqual(calls, [(self.queue_url, credential)])
 
     def test_wrong_phone_token_is_rejected(self) -> None:
         status, payload = self._phone_request(
