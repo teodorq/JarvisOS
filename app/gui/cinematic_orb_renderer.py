@@ -19,13 +19,14 @@ class _Particle:
     x: float
     y: float
     z: float
-    shimmer: float
+    phase_sin: float
+    phase_cos: float
 
 
 class CinematicOrbRenderer:
     """Gęsta, przestrzenna kula cząsteczkowa inspirowana filmowym JARVISEM."""
 
-    PARTICLE_COUNT = 1800
+    PARTICLE_COUNT = 10_000
 
     def __init__(self) -> None:
         self._particles = self._build_particles(self.PARTICLE_COUNT)
@@ -103,15 +104,39 @@ class CinematicOrbRenderer:
             else:
                 shell = 0.38 + (distribution ** 0.42) * 0.58
             scale = shell * jitter
+            x = math.cos(theta) * radius * scale
+            scaled_y = y * scale
+            z = math.sin(theta) * radius * scale
+            shimmer = (math.sin(index * 7.417) + 1.0) / 2.0
+            particle_phase = shimmer * math.tau
             particles.append(
                 _Particle(
-                    x=math.cos(theta) * radius * scale,
-                    y=y * scale,
-                    z=math.sin(theta) * radius * scale,
-                    shimmer=(math.sin(index * 7.417) + 1.0) / 2.0,
+                    x=x,
+                    y=scaled_y,
+                    z=z,
+                    phase_sin=math.sin(particle_phase),
+                    phase_cos=math.cos(particle_phase),
                 )
             )
         return tuple(particles)
+
+    @staticmethod
+    def _spectral(
+        color: QColor,
+        hue_shift: int,
+        saturation_scale: float,
+        value_scale: float,
+        alpha: int,
+    ) -> QColor:
+        hue = color.hsvHue()
+        hue = (hue if hue >= 0 else 200) + hue_shift
+        saturation = max(
+            0, min(255, int(color.hsvSaturation() * saturation_scale))
+        )
+        value = max(0, min(255, int(color.value() * value_scale)))
+        return QColor.fromHsv(
+            hue % 360, saturation, value, max(0, min(255, alpha))
+        )
 
     @staticmethod
     def _draw_ambient_glow(
@@ -125,18 +150,22 @@ class CinematicOrbRenderer:
         radius = size * (0.48 + pulse * 0.015)
         glow = QRadialGradient(center, radius)
         alpha = int(100 * intensity)
-        glow.setColorAt(0.0, QColor(225, 250, 255, min(190, alpha + 60)))
-        glow.setColorAt(
-            0.12,
-            QColor(color.red(), color.green(), color.blue(), alpha),
+        electric = CinematicOrbRenderer._spectral(
+            color, -8, 0.82, 1.28, min(210, alpha + 72)
         )
-        glow.setColorAt(
-            0.48,
-            QColor(color.red(), color.green(), color.blue(), alpha // 3),
+        deep = CinematicOrbRenderer._spectral(
+            color, 30, 1.12, 0.72, alpha // 2
         )
+        glow.setColorAt(0.0, QColor(238, 253, 255, min(225, alpha + 105)))
+        glow.setColorAt(0.08, electric)
         glow.setColorAt(
-            0.78,
-            QColor(color.red(), color.green(), color.blue(), alpha // 9),
+            0.22,
+            QColor(color.red(), color.green(), color.blue(), int(alpha * 0.82)),
+        )
+        glow.setColorAt(0.48, deep)
+        glow.setColorAt(
+            0.8,
+            QColor(color.red(), color.green(), color.blue(), alpha // 12),
         )
         glow.setColorAt(1.0, QColor(0, 0, 0, 0))
         painter.setPen(Qt.NoPen)
@@ -173,8 +202,14 @@ class CinematicOrbRenderer:
                     path.moveTo(point)
                 else:
                     path.lineTo(point)
-            wisp = QColor(color)
-            wisp.setAlpha(int((18 + (arm % 3) * 9) * intensity))
+            shift = (30, -12, 14)[arm % 3]
+            wisp = CinematicOrbRenderer._spectral(
+                color,
+                shift,
+                1.08,
+                1.18,
+                int((22 + (arm % 3) * 11) * intensity),
+            )
             painter.setPen(
                 QPen(
                     wisp,
@@ -252,16 +287,19 @@ class CinematicOrbRenderer:
         intensity: float,
     ) -> None:
         radius = size * (0.326 + 0.006 * pulse)
+        surface = CinematicOrbRenderer._spectral(
+            color, -10, 0.86, 1.22, int(72 * intensity)
+        )
+        shadow = CinematicOrbRenderer._spectral(
+            color, 32, 1.18, 0.52, int(105 * intensity)
+        )
         sphere = QRadialGradient(
             QPointF(center.x() - radius * 0.18, center.y() - radius * 0.22),
             radius * 1.18,
         )
-        sphere.setColorAt(0.0, QColor(135, 234, 255, int(74 * intensity)))
-        sphere.setColorAt(
-            0.3,
-            QColor(color.red(), color.green(), color.blue(), int(52 * intensity)),
-        )
-        sphere.setColorAt(0.72, QColor(2, 24, 52, int(92 * intensity)))
+        sphere.setColorAt(0.0, QColor(196, 247, 255, int(92 * intensity)))
+        sphere.setColorAt(0.24, surface)
+        sphere.setColorAt(0.68, shadow)
         sphere.setColorAt(1.0, QColor(0, 4, 13, 8))
         painter.setPen(Qt.NoPen)
         painter.setBrush(sphere)
@@ -290,39 +328,27 @@ class CinematicOrbRenderer:
         corona: list[QPointF] = []
         energy = 1.12 if state in {"listening", "thinking", "acting"} else 1.0
         flow_phase = math.radians(angle * 0.045) + pulse_phase * 0.19
+        spark_phase = flow_phase * 0.61
+        spark_sin, spark_cos = math.sin(spark_phase), math.cos(spark_phase)
 
         for index in range(0, len(self._particles), stride):
             particle = self._particles[index]
-            organic = 0.018 * math.sin(
-                flow_phase
-                + particle.shimmer * math.tau
-                + particle.y * 3.6
-                + particle.z * 1.8
-            )
-            lateral = 0.012 * math.sin(
-                flow_phase * 0.73 + particle.shimmer * 9.0 + particle.x * 2.4
-            )
-            radial = 1.0 + organic
-            px = particle.x * radial + lateral * particle.z
-            py = particle.y * (1.0 + organic * 0.58)
-            pz = particle.z * radial - lateral * particle.x
-            x1 = px * cy + pz * sy
-            z1 = -px * sy + pz * cy
-            y2 = py * cp - z1 * sp
-            z2 = py * sp + z1 * cp
+            x1 = particle.x * cy + particle.z * sy
+            z1 = -particle.x * sy + particle.z * cy
+            y2 = particle.y * cp - z1 * sp
+            z2 = particle.y * sp + z1 * cp
             perspective = 0.91 + z2 * 0.085
             point = QPointF(
                 center.x() + x1 * radius * perspective,
                 center.y() + y2 * radius * perspective,
             )
-            twinkle = 0.13 * math.sin(
-                pulse_phase * 1.35 + particle.shimmer * math.tau
-            )
-            tone = max(0.0, min(0.999, (z2 + 1.0) * 0.5 + twinkle))
+            shimmer = particle.phase_sin * 0.09
+            tone = max(0.0, min(0.999, (z2 + 1.0) * 0.5 + shimmer))
             batches[min(3, int(tone * 4.0))].append(point)
             if index % 29 == 0 and z2 > -0.4:
-                halo_scale = 1.12 + 0.075 * math.sin(
-                    flow_phase * 0.61 + particle.shimmer * math.tau
+                halo_scale = 1.12 + 0.075 * (
+                    spark_sin * particle.phase_cos
+                    + spark_cos * particle.phase_sin
                 )
                 corona.append(
                     QPointF(
@@ -332,16 +358,28 @@ class CinematicOrbRenderer:
                 )
 
         base_width = max(0.65, min(1.45, size / 530.0))
-        alpha_values = (42, 76, 132, 224)
+        alpha_values = (46, 82, 148, 238)
         width_values = (0.72, 0.95, 1.28, 1.85)
-        for points, alpha, width_factor in zip(
-            batches, alpha_values, width_values, strict=True
+        hue_shifts = (34, 18, -8, -15)
+        saturation_scales = (1.18, 1.12, 0.92, 0.28)
+        value_scales = (0.62, 0.9, 1.18, 1.3)
+        for points, alpha, width_factor, shift, saturation, value in zip(
+            batches,
+            alpha_values,
+            width_values,
+            hue_shifts,
+            saturation_scales,
+            value_scales,
+            strict=True,
         ):
             if not points:
                 continue
-            particle_color = QColor(color)
-            particle_color.setAlpha(
-                min(255, int(alpha * intensity * energy))
+            particle_color = self._spectral(
+                color,
+                shift,
+                saturation,
+                value,
+                min(255, int(alpha * intensity * energy)),
             )
             painter.setPen(
                 QPen(
@@ -353,7 +391,9 @@ class CinematicOrbRenderer:
             )
             painter.drawPoints(QPolygonF(points))
         if corona:
-            spark = QColor(190, 242, 255, int(118 * intensity))
+            spark = self._spectral(
+                color, -22, 0.42, 1.35, int(145 * intensity)
+            )
             painter.setPen(
                 QPen(spark, max(0.7, size / 520.0), Qt.SolidLine, Qt.RoundCap)
             )
@@ -400,8 +440,13 @@ class CinematicOrbRenderer:
                     first = False
                 else:
                     path.lineTo(point)
-            filament = QColor(color)
-            filament.setAlpha(int((32 + band * 7) * intensity))
+            filament = self._spectral(
+                color,
+                -16 + band * 11,
+                1.02,
+                1.16,
+                int((35 + band * 8) * intensity),
+            )
             painter.setBrush(Qt.NoBrush)
             painter.setPen(
                 QPen(
@@ -518,13 +563,16 @@ class CinematicOrbRenderer:
         intensity: float,
     ) -> None:
         radius = size * (0.068 + 0.006 * pulse)
+        electric = CinematicOrbRenderer._spectral(
+            color, -12, 0.72, 1.3, int(232 * intensity)
+        )
+        halo_tone = CinematicOrbRenderer._spectral(
+            color, 24, 1.08, 1.05, int(82 * intensity)
+        )
         core = QRadialGradient(center, radius)
         core.setColorAt(0.0, QColor(255, 255, 255, 252))
         core.setColorAt(0.16, QColor(206, 248, 255, 245))
-        core.setColorAt(
-            0.45,
-            QColor(color.red(), color.green(), color.blue(), int(218 * intensity)),
-        )
+        core.setColorAt(0.45, electric)
         core.setColorAt(
             0.82,
             QColor(color.red(), color.green(), color.blue(), int(62 * intensity)),
@@ -536,10 +584,7 @@ class CinematicOrbRenderer:
         halo_radius = radius * (1.55 + pulse * 0.08)
         core_halo = QRadialGradient(center, halo_radius)
         core_halo.setColorAt(0.0, QColor(255, 255, 255, 88))
-        core_halo.setColorAt(
-            0.42,
-            QColor(color.red(), color.green(), color.blue(), int(72 * intensity)),
-        )
+        core_halo.setColorAt(0.42, halo_tone)
         core_halo.setColorAt(1.0, QColor(0, 0, 0, 0))
         painter.setBrush(core_halo)
         painter.drawEllipse(center, halo_radius, halo_radius)

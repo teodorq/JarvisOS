@@ -60,6 +60,15 @@ class HaloIdlePerformanceTests(unittest.TestCase):
             halo.set_animation_active(False)
             halo.deleteLater()
 
+    def test_cinematic_orb_contains_ten_thousand_particles(self) -> None:
+        halo = HaloWidget()
+        try:
+            self.assertEqual(halo._renderer.PARTICLE_COUNT, 10_000)  # noqa: SLF001
+            self.assertEqual(len(halo._renderer._particles), 10_000)  # noqa: SLF001
+        finally:
+            halo.set_animation_active(False)
+            halo.deleteLater()
+
 
 if __name__ == "__main__":
     unittest.main()
