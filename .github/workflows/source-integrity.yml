@@ -14,7 +14,7 @@ on:
       - infra/**
       - main.py
       - pytest.ini
-      - .github/workflows/source-integrity.yml
+      - .github/workflows/**
   pull_request:
     paths:
       - app/**
@@ -26,7 +26,7 @@ on:
       - infra/**
       - main.py
       - pytest.ini
-      - .github/workflows/source-integrity.yml
+      - .github/workflows/**
   workflow_dispatch:
 
 permissions:

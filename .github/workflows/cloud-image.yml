@@ -23,8 +23,8 @@ permissions:
   id-token: write
 
 concurrency:
-  group: jarvis-os-cloud-image-${{ github.ref }}
-  cancel-in-progress: true
+  group: jarvis-os-cloud-production
+  cancel-in-progress: false
 
 jobs:
   test-and-publish:
@@ -189,7 +189,7 @@ jobs:
           expected_sha="${{ github.sha }}"
           for attempt in $(seq 1 12); do
             response="$(curl --fail --silent --show-error --max-time 20 "${health_url}" || true)"
-            if python -c 'import json,sys; data=json.loads(sys.argv[1]); raise SystemExit(0 if data.get("status") == "ok" and data.get("service") == "jarvis-os-cloud-planner" and data.get("build_sha") == sys.argv[2] else 1)' "${response}" "${expected_sha}"; then
+            if python -c 'import json,sys; data=json.loads(sys.argv[1]); raise SystemExit(0 if data.get("status") == "ok" and data.get("service") == "jarvis-os-cloud-planner" and data.get("build_sha") == sys.argv[2] and data.get("remote_access_verified") is True else 1)' "${response}" "${expected_sha}"; then
               echo "JARVIS OS revision ${expected_sha} is healthy at ${health_url}."
               exit 0
             fi
@@ -207,7 +207,7 @@ jobs:
             --resource-group rg-jarvis-os-cloud \
             --query properties.configuration.ingress.fqdn \
             --output tsv)"
-          for path in /mobile-start /phone /phone.webmanifest; do
+          for path in /mobile-start /mobile-logout /mobile-diagnostics /phone /phone.webmanifest; do
             curl --fail --silent --show-error --max-time 20 \
               "https://${fqdn}${path}" > /dev/null
             echo "Public route ${path} is available."

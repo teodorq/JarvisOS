@@ -1,0 +1,36 @@
+name: Monitor JARVIS OS cloud
+
+on:
+  schedule:
+    - cron: "17 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Sign in to Azure with GitHub OIDC
+        uses: azure/login@v2
+        with:
+          client-id: 553e8a79-9004-49d5-b996-bc8f3768ffce
+          tenant-id: 1f218598-c698-404f-908f-025fe1b55870
+          subscription-id: c7cac745-0964-425d-97b4-61d19e4cef65
+
+      - name: Verify service and managed-identity storage access
+        shell: bash
+        run: |
+          az config set extension.use_dynamic_install=yes_without_prompt
+          fqdn="$(az containerapp show \
+            --name jarvis-os-planner \
+            --resource-group rg-jarvis-os-cloud \
+            --query properties.configuration.ingress.fqdn \
+            --output tsv)"
+          response="$(curl --fail --silent --show-error --max-time 30 \
+            "https://${fqdn}/health")"
+          python -c 'import json,re,sys; data=json.loads(sys.argv[1]); valid=data.get("status") == "ok" and data.get("service") == "jarvis-os-cloud-planner" and data.get("remote_configured") is True and data.get("remote_transport") == "azure_queue" and data.get("remote_access_verified") is True and re.fullmatch(r"[a-f0-9]{40}", str(data.get("build_sha", ""))); raise SystemExit(0 if valid else 1)' "${response}"
+          echo "JARVIS OS cloud and managed-identity relay are healthy."

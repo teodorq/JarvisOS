@@ -110,7 +110,14 @@ class CloudMigrationTests(unittest.TestCase):
         self.assertIn(
             'data.get("build_sha") == sys.argv[2]', workflow
         )
-        for path in ("/mobile-start", "/phone", "/phone.webmanifest"):
+        self.assertIn('data.get("remote_access_verified") is True', workflow)
+        for path in (
+            "/mobile-start",
+            "/mobile-logout",
+            "/mobile-diagnostics",
+            "/phone",
+            "/phone.webmanifest",
+        ):
             self.assertIn(path, workflow)
         self.assertIn("/.auth/login/aad", workflow)
 

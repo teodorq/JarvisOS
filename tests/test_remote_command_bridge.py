@@ -171,6 +171,16 @@ class RemoteCommandBridgeTests(unittest.TestCase):
         ) as response:
             page = response.read().decode("utf-8")
             self.assertEqual(response.headers["X-Frame-Options"], "DENY")
+            self.assertEqual(
+                response.headers["Content-Disposition"], "inline"
+            )
+            self.assertRegex(
+                response.headers["X-JARVIS-REQUEST-ID"], r"^[a-f0-9]{32}$"
+            )
+            self.assertIn(
+                "script-src 'unsafe-inline'",
+                response.headers["Content-Security-Policy"],
+            )
         self.assertIn("JARVIS OS", page)
         self.assertIn("KOMPUTER ONLINE", page)
         self.assertIn("sessionStorage", page)
@@ -180,7 +190,7 @@ class RemoteCommandBridgeTests(unittest.TestCase):
         self.assertIn("phone.webmanifest", page)
         self.assertIn("beforeinstallprompt", page)
         self.assertIn("jarvisLastCommand", page)
-        self.assertIn("/mobile-start", page)
+        self.assertIn("/mobile-logout", page)
         self.assertNotIn("Kod parowania", page)
         self.assertNotIn(self.desktop_token, page)
         self.assertNotIn(self.phone_token, page)
@@ -209,11 +219,53 @@ class RemoteCommandBridgeTests(unittest.TestCase):
             self.base_url + "/mobile-start", timeout=2
         ) as response:
             recovery = response.read().decode("utf-8")
-        self.assertIn("Połączenie z Azure działa", recovery)
-        self.assertIn("ikonę kompasu", recovery)
+            self.assertEqual(
+                response.headers["Content-Disposition"], "inline"
+            )
+            self.assertIn(
+                "script-src 'none'",
+                response.headers["Content-Security-Policy"],
+            )
+        self.assertIn('data-page="mobile-start-v3"', recovery)
+        self.assertIn("Otw&oacute;rz w Safari", recovery)
         self.assertIn("/.auth/login/aad", recovery)
+        self.assertIn("/mobile-diagnostics", recovery)
+        self.assertIn("/mobile-logout", recovery)
         self.assertNotIn("<script", recovery)
         self.assertNotIn("serviceWorker", recovery)
+
+        with urllib.request.urlopen(
+            self.base_url + "/mobile-logout", timeout=2
+        ) as response:
+            logout_page = response.read().decode("utf-8")
+            self.assertIn(
+                "script-src 'none'",
+                response.headers["Content-Security-Policy"],
+            )
+        self.assertIn('data-page="mobile-logout-v1"', logout_page)
+        self.assertIn(
+            "/.auth/logout?post_logout_redirect_uri=%2Fmobile-start",
+            logout_page,
+        )
+        self.assertNotIn("<script", logout_page)
+        self.assertNotIn("fetch(", logout_page)
+
+    def test_mobile_diagnostics_is_static_correlated_and_private(self) -> None:
+        with urllib.request.urlopen(
+            self.base_url + "/mobile-diagnostics", timeout=2
+        ) as response:
+            page = response.read().decode("utf-8")
+            trace_id = response.headers["X-JARVIS-REQUEST-ID"]
+            self.assertIn(
+                "script-src 'none'",
+                response.headers["Content-Security-Policy"],
+            )
+        self.assertIn('data-page="mobile-diagnostics-v1"', page)
+        self.assertIn(trace_id, page)
+        self.assertIn("Przeka&#378;nik polece&#324; skonfigurowany", page)
+        self.assertIn("UWAGA", page)
+        self.assertNotIn(self.desktop_token, page)
+        self.assertNotIn(self.phone_token, page)
 
     def test_end_to_end_command_lifecycle_with_http_fallback(self) -> None:
         status, submitted = self._phone_request(
@@ -486,6 +538,16 @@ class RemoteCommandBridgeTests(unittest.TestCase):
             with urllib.request.urlopen(request, timeout=2) as response:
                 page = response.read().decode("utf-8")
             self.assertIn("SESJA AKTYWNA", page)
+            self.assertIn("/mobile-logout", page)
+
+            request = urllib.request.Request(
+                base_url + "/mobile-diagnostics", headers=owner_headers
+            )
+            with urllib.request.urlopen(request, timeout=2) as response:
+                diagnostics = response.read().decode("utf-8")
+            self.assertIn("Konto w&#322;a&#347;ciciela JARVIS OS", diagnostics)
+            self.assertNotIn(owner, diagnostics)
+            self.assertNotIn("Kacper Zakrzewski", diagnostics)
 
             request = urllib.request.Request(
                 base_url + "/v1/phone/me", headers=owner_headers
@@ -573,6 +635,8 @@ class RemoteCommandBridgeTests(unittest.TestCase):
             payload = json.loads(response.read().decode("utf-8"))
         self.assertTrue(payload["remote_configured"])
         self.assertEqual(payload["remote_transport"], "https_poll")
+        self.assertFalse(payload["remote_access_verified"])
+        self.assertRegex(payload["trace_id"], r"^[a-f0-9]{32}$")
         serialized = json.dumps(payload)
         self.assertNotIn(self.desktop_token, serialized)
         self.assertNotIn(self.phone_token, serialized)
@@ -612,6 +676,7 @@ class AzureRemoteStoreIdempotencyTests(unittest.TestCase):
 
         store.verify_access()
 
+        self.assertTrue(store.access_verified)
         self.assertEqual(store.table.list_calls, 1)
         self.assertEqual(store.queue.peek_calls, 1)
         self.assertEqual(store.table.records, {})
@@ -624,11 +689,13 @@ class AzureRemoteStoreIdempotencyTests(unittest.TestCase):
             PermissionError("forbidden")
         )
         store.queue = FakeAzureSendQueue()
+        store.access_verified = True
 
         with self.assertRaisesRegex(
             RemoteStoreError, "data access verification failed"
         ):
             store.verify_access()
+        self.assertFalse(store.access_verified)
 
     def test_retry_sends_only_one_azure_queue_message(self) -> None:
         store = object.__new__(AzureTableRemoteCommandStore)

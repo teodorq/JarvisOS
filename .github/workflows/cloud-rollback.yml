@@ -1,0 +1,86 @@
+name: Roll back JARVIS OS cloud
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_sha:
+        description: Full 40-character Git commit SHA to restore
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: jarvis-os-cloud-production
+  cancel-in-progress: false
+
+jobs:
+  rollback:
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Validate immutable image SHA
+        shell: bash
+        env:
+          TARGET_SHA: ${{ inputs.image_sha }}
+        run: |
+          if [[ ! "${TARGET_SHA}" =~ ^[a-f0-9]{40}$ ]]; then
+            echo "image_sha must be a lowercase full Git SHA."
+            exit 1
+          fi
+          git cat-file -e "${TARGET_SHA}^{commit}"
+
+      - name: Sign in to Azure with GitHub OIDC
+        uses: azure/login@v2
+        with:
+          client-id: 553e8a79-9004-49d5-b996-bc8f3768ffce
+          tenant-id: 1f218598-c698-404f-908f-025fe1b55870
+          subscription-id: c7cac745-0964-425d-97b4-61d19e4cef65
+
+      - name: Restore immutable revision
+        shell: bash
+        env:
+          TARGET_SHA: ${{ inputs.image_sha }}
+        run: |
+          az config set extension.use_dynamic_install=yes_without_prompt
+          az containerapp update \
+            --name jarvis-os-planner \
+            --resource-group rg-jarvis-os-cloud \
+            --image "ghcr.io/${{ github.repository_owner }}/jarvis-os-cloud:sha-${TARGET_SHA}" \
+            --set-env-vars "JARVIS_OS_BUILD_SHA=${TARGET_SHA}" \
+            --only-show-errors \
+            --output none
+
+      - name: Verify restored revision
+        shell: bash
+        env:
+          TARGET_SHA: ${{ inputs.image_sha }}
+        run: |
+          fqdn="$(az containerapp show \
+            --name jarvis-os-planner \
+            --resource-group rg-jarvis-os-cloud \
+            --query properties.configuration.ingress.fqdn \
+            --output tsv)"
+          for attempt in $(seq 1 12); do
+            response="$(curl --fail --silent --show-error --max-time 20 \
+              "https://${fqdn}/health" || true)"
+            if python -c 'import json,sys; data=json.loads(sys.argv[1]); valid=data.get("status") == "ok" and data.get("service") == "jarvis-os-cloud-planner" and data.get("build_sha") == sys.argv[2] and data.get("remote_access_verified") is True; raise SystemExit(0 if valid else 1)' "${response}" "${TARGET_SHA}"; then
+              for path in /mobile-start /mobile-logout /mobile-diagnostics /phone /phone.webmanifest; do
+                curl --fail --silent --show-error --max-time 20 \
+                  "https://${fqdn}${path}" > /dev/null
+              done
+              echo "Restored and verified JARVIS OS revision ${TARGET_SHA}."
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Restored revision did not become healthy."
+          exit 1

@@ -25,11 +25,13 @@ from cloud_service.phone_ui import (
     PHONE_FORBIDDEN_PAGE,
     PHONE_ICON,
     PHONE_LOGIN_PAGE,
+    PHONE_LOGOUT_PAGE,
     PHONE_MANIFEST,
     PHONE_OFFLINE_PAGE,
     PHONE_PAGE,
-    PHONE_RECOVERY_PAGE,
     PHONE_SERVICE_WORKER,
+    PHONE_START_PAGE,
+    phone_diagnostics_page,
 )
 from cloud_service.remote_store import (
     RemoteCommandStore,
@@ -42,7 +44,7 @@ from cloud_service.remote_store import (
 
 
 SERVICE_NAME = "jarvis-os-cloud-planner"
-SERVICE_VERSION = "0.8.8"
+SERVICE_VERSION = "0.9.0"
 MAX_BODY_BYTES = 16_384
 
 
@@ -156,6 +158,7 @@ class JarvisOSCloudHandler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
     def do_GET(self) -> None:
+        self._begin_request()
         parsed = urlsplit(self.path)
         if parsed.path == "/health":
             self._json(HTTPStatus.OK, {
@@ -167,6 +170,7 @@ class JarvisOSCloudHandler(BaseHTTPRequestHandler):
                 "auth_configured": bool(self.server.config.api_token),
                 "remote_configured": self._remote_ready(),
                 "remote_transport": self._remote_transport(),
+                "remote_access_verified": self._remote_access_verified(),
             })
             return
         if parsed.path == "/phone":
@@ -188,10 +192,16 @@ class JarvisOSCloudHandler(BaseHTTPRequestHandler):
             self._asset(PHONE_ICON, "image/svg+xml; charset=utf-8")
             return
         if parsed.path == "/phone-offline":
-            self._html(PHONE_OFFLINE_PAGE)
+            self._html(PHONE_OFFLINE_PAGE, allow_script=True)
             return
         if parsed.path in {"/phone-recover", "/mobile-start"}:
-            self._html(PHONE_RECOVERY_PAGE)
+            self._html(PHONE_START_PAGE)
+            return
+        if parsed.path == "/mobile-logout":
+            self._html(PHONE_LOGOUT_PAGE)
+            return
+        if parsed.path == "/mobile-diagnostics":
+            self._handle_phone_diagnostics()
             return
         if parsed.path == "/v1/phone/me":
             self._handle_phone_identity()
@@ -206,6 +216,7 @@ class JarvisOSCloudHandler(BaseHTTPRequestHandler):
         self._json(HTTPStatus.NOT_FOUND, {"error": "not_found"})
 
     def do_POST(self) -> None:
+        self._begin_request()
         parsed = urlsplit(self.path)
         if parsed.path == "/v1/plan":
             self._handle_plan()
@@ -428,6 +439,14 @@ class JarvisOSCloudHandler(BaseHTTPRequestHandler):
             return "azure_queue"
         return "https_poll"
 
+    def _remote_access_verified(self) -> bool:
+        return bool(
+            self.server.remote_store
+            and getattr(
+                self.server.remote_store, "access_verified", False
+            )
+        )
+
     def _phone_authorized(self) -> bool:
         if self._phone_identity_authorized():
             return True
@@ -458,7 +477,13 @@ class JarvisOSCloudHandler(BaseHTTPRequestHandler):
 
     def _handle_phone_page(self) -> None:
         if not self.server.config.phone_principal_id:
-            self._html(PHONE_PAGE)
+            self._html(
+                PHONE_PAGE.replace(
+                    'href="/mobile-start">WYLOGUJ TEN TELEFON',
+                    'href="/mobile-logout">WYLOGUJ TEN TELEFON',
+                ),
+                allow_script=True,
+            )
             return
         principal_id = self.headers.get(
             "X-MS-CLIENT-PRINCIPAL-ID", ""
@@ -468,10 +493,37 @@ class JarvisOSCloudHandler(BaseHTTPRequestHandler):
             return
         if not self._phone_identity_authorized():
             self._html(
-                PHONE_FORBIDDEN_PAGE, status=HTTPStatus.FORBIDDEN
+                PHONE_FORBIDDEN_PAGE.replace(
+                    'href="/mobile-start"', 'href="/mobile-logout"'
+                ),
+                status=HTTPStatus.FORBIDDEN,
             )
             return
-        self._html(PHONE_PAGE)
+        self._html(
+            PHONE_PAGE.replace(
+                'href="/mobile-start">WYLOGUJ TEN TELEFON',
+                'href="/mobile-logout">WYLOGUJ TEN TELEFON',
+            ),
+            allow_script=True,
+        )
+
+    def _handle_phone_diagnostics(self) -> None:
+        principal_id = self.headers.get(
+            "X-MS-CLIENT-PRINCIPAL-ID", ""
+        ).strip()
+        provider = self.headers.get(
+            "X-MS-CLIENT-PRINCIPAL-IDP", ""
+        ).strip().lower()
+        self._html(phone_diagnostics_page(
+            identity_present=bool(principal_id),
+            provider_valid=provider == "aad",
+            owner_authorized=self._phone_identity_authorized(),
+            remote_configured=self._remote_ready(),
+            storage_verified=self._remote_access_verified(),
+            request_id=self._trace_id(),
+            version=SERVICE_VERSION,
+            build_sha=self.server.config.build_sha,
+        ))
 
     def _handle_phone_identity(self) -> None:
         if not self._phone_identity_authorized():
@@ -528,12 +580,15 @@ class JarvisOSCloudHandler(BaseHTTPRequestHandler):
         *,
         headers: dict[str, str] | None = None,
     ) -> None:
+        payload = dict(payload)
+        payload.setdefault("trace_id", self._trace_id())
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(int(status))
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-JARVIS-REQUEST-ID", self._trace_id())
         self.send_header("Connection", "close")
         self.close_connection = True
         for name, value in (headers or {}).items():
@@ -545,23 +600,31 @@ class JarvisOSCloudHandler(BaseHTTPRequestHandler):
         self.send_response(int(status))
         self.send_header("Content-Length", "0")
         self.send_header("Cache-Control", "no-store")
+        self.send_header("X-JARVIS-REQUEST-ID", self._trace_id())
         self.end_headers()
 
     def _html(
-        self, value: str, *, status: HTTPStatus = HTTPStatus.OK
+        self,
+        value: str,
+        *,
+        status: HTTPStatus = HTTPStatus.OK,
+        allow_script: bool = False,
     ) -> None:
         body = value.encode("utf-8")
         self.send_response(int(status))
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Disposition", "inline")
         self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-JARVIS-REQUEST-ID", self._trace_id())
         self.send_header("X-Frame-Options", "DENY")
         self.send_header("Referrer-Policy", "no-referrer")
+        script_policy = "'unsafe-inline'" if allow_script else "'none'"
         self.send_header(
             "Content-Security-Policy",
             "default-src 'none'; style-src 'unsafe-inline'; "
-            "script-src 'unsafe-inline'; connect-src 'self'; "
+            f"script-src {script_policy}; connect-src 'self'; "
             "img-src 'self'; manifest-src 'self'; worker-src 'self'; "
             "base-uri 'none'; frame-ancestors 'none'",
         )
@@ -580,15 +643,31 @@ class JarvisOSCloudHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "public, max-age=3600")
+        self.send_header("Content-Disposition", "inline")
         self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-JARVIS-REQUEST-ID", self._trace_id())
         for name, header_value in (headers or {}).items():
             self.send_header(name, header_value)
         self.end_headers()
         self.wfile.write(body)
 
+    def _begin_request(self) -> None:
+        self._jarvis_trace_id = uuid.uuid4().hex
+
+    def _trace_id(self) -> str:
+        trace_id = getattr(self, "_jarvis_trace_id", "")
+        if not trace_id:
+            trace_id = uuid.uuid4().hex
+            self._jarvis_trace_id = trace_id
+        return trace_id
+
     def log_message(self, format: str, *args: Any) -> None:
         # Never log request bodies, tokens, or user commands.
-        print(f"{self.client_address[0]} - {format % args}", flush=True)
+        print(
+            f"{self.client_address[0]} [{self._trace_id()}] - "
+            f"{format % args}",
+            flush=True,
+        )
 
 
 def build_server(

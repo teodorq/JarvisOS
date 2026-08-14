@@ -29,6 +29,7 @@ class RemoteStoreConflict(RemoteStoreError):
 
 class RemoteCommandStore(Protocol):
     direct_queue_enabled: bool
+    access_verified: bool
 
     def create(
         self,
@@ -90,6 +91,7 @@ def _queued_message(kind: str) -> str:
 
 class MemoryRemoteCommandStore:
     direct_queue_enabled = False
+    access_verified = False
 
     def __init__(self, clock=time.time) -> None:
         self.clock = clock
@@ -223,6 +225,7 @@ class AzureTableRemoteCommandStore:
         table_name: str = "commands",
         queue_name: str = "",
     ) -> None:
+        self.access_verified = False
         try:
             from azure.core.exceptions import ResourceExistsError, ResourceNotFoundError
             from azure.data.tables import TableServiceClient, UpdateMode
@@ -258,6 +261,7 @@ class AzureTableRemoteCommandStore:
 
     def verify_access(self) -> None:
         """Verify managed-identity data access without changing relay state."""
+        self.access_verified = False
         try:
             next(iter(self.table.list_entities(results_per_page=1)), None)
             if self.queue is not None:
@@ -266,6 +270,7 @@ class AzureTableRemoteCommandStore:
             raise RemoteStoreError(
                 "Azure Storage data access verification failed"
             ) from error
+        self.access_verified = True
 
     @staticmethod
     def _public(entity: dict[str, Any]) -> dict[str, Any]:

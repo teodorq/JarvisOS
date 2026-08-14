@@ -113,3 +113,11 @@ runtime declaration verifies that the managed identity is present and that no
 Storage connection-string secret returns. Container startup also performs a
 non-destructive Table entity read and Queue message peek, so a missing data
 role or unavailable relay prevents a falsely healthy deployment.
+
+`cloud-health-monitor.yml` performs one scheduled health check each day and
+fails if the immutable build, Azure Queue relay, or managed-identity Storage
+access is unavailable. `cloud-rollback.yml` is a manual, serialized recovery
+workflow: provide a full 40-character commit SHA whose immutable image was
+already published. It restores that exact image and accepts success only after
+the same health and public-route checks pass. Deployment and rollback share one
+production lock, so they cannot modify the Container App concurrently.

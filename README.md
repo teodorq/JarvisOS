@@ -65,6 +65,13 @@ short-lived request identifier. Azure returns the original command instead of
 placing a duplicate in the desktop queue; command text is not persisted in
 browser storage.
 
+For a reliable iPhone start, open `/mobile-start` in full Safari (not the
+embedded browser of another app). It is a static page outside the phone Service
+Worker and never redirects or signs out automatically. `/mobile-logout` exposes
+an explicit Azure sign-out button, while `/mobile-diagnostics` shows only safe
+connection checks and a request identifier that can be matched with server
+logs. It never displays the owner's account identifier.
+
 ## Optional Windows autostart
 
 The phone bridge can receive commands only while the desktop application is
