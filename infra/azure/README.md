@@ -25,7 +25,8 @@ paid service.
 - Commands containing likely credentials never leave the desktop; the cloud
   service rejects them as a second line of defense.
 - The subscription has a 4.60 EUR monthly budget with alerts at 50%, 80%,
-  and 100%. It is an alerting guardrail, not a custom hard spending cap.
+  and 100%. `budget.bicep` declares this guardrail without publishing the
+  private alert address. It is an alert, not a custom hard spending cap.
 
 ## Local smoke test
 
@@ -62,8 +63,8 @@ automatically uses the local planner.
 4. Register the phone page in Microsoft Entra with the Container Apps callback
    URL, create a client secret, and note the owner's Entra object ID.
 5. Deploy subscription.bicep with the image, desktop API token, Entra client
-   ID and secret, and owner object ID passed as secure parameters. Never store
-   the desktop token or Entra secret in a file or Git.
+   ID and secret, owner object ID, and `budgetAlertEmail` passed as secure
+   parameters. Never store those private values in a file or Git.
 6. Check the returned /health URL before configuring JARVIS_OS_CLOUD_URL and
    JARVIS_OS_CLOUD_API_TOKEN on the desktop.
 

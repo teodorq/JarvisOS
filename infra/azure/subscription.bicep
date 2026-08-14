@@ -26,6 +26,18 @@ param phoneEntraClientSecret string
 @description('Microsoft Entra object ID of the only account allowed to use the phone page.')
 param phoneOwnerPrincipalId string
 
+@secure()
+@description('Private recipient for the 4.60 EUR Azure budget alerts.')
+param budgetAlertEmail string
+
+module costGuardrail './budget.bicep' = {
+  name: '${namePrefix}-cost-guardrail'
+  params: {
+    budgetName: namePrefix
+    budgetAlertEmail: budgetAlertEmail
+  }
+}
+
 resource resourceGroup 'Microsoft.Resources/resourceGroups@2024-03-01' = {
   name: 'rg-${namePrefix}-cloud'
   location: location
@@ -55,3 +67,4 @@ output endpoint string = cloudPlanner.outputs.endpoint
 output healthUrl string = cloudPlanner.outputs.healthUrl
 output phoneUrl string = cloudPlanner.outputs.phoneUrl
 output remoteStorageAccountName string = cloudPlanner.outputs.remoteStorageAccountName
+output budgetResourceId string = costGuardrail.outputs.budgetResourceId
