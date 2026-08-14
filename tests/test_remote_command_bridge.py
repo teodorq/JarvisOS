@@ -21,6 +21,7 @@ from cloud_service.remote_store import (
     AzureTableRemoteCommandStore,
     MemoryRemoteCommandStore,
     RemoteStoreConflict,
+    RemoteStoreError,
     remote_store_from_environment,
 )
 
@@ -61,6 +62,11 @@ class FakeResourceExistsError(Exception):
 class FakeAzureTable:
     def __init__(self) -> None:
         self.records: dict[tuple[str, str], dict] = {}
+        self.list_calls = 0
+
+    def list_entities(self, **_options):
+        self.list_calls += 1
+        return [dict(record) for record in self.records.values()]
 
     def create_entity(self, entity: dict) -> None:
         key = (entity["PartitionKey"], entity["RowKey"])
@@ -81,6 +87,11 @@ class FakeAzureTable:
 class FakeAzureSendQueue:
     def __init__(self) -> None:
         self.sent: list[tuple[str, int]] = []
+        self.peek_calls = 0
+
+    def peek_messages(self, **_options):
+        self.peek_calls += 1
+        return []
 
     def send_message(self, message: str, *, time_to_live: int) -> None:
         self.sent.append((message, time_to_live))
@@ -592,6 +603,32 @@ class AzureRemoteStoreIdempotencyTests(unittest.TestCase):
             "commands",
             "commands",
         )
+        factory.return_value.verify_access.assert_called_once_with()
+
+    def test_managed_identity_access_probe_is_non_destructive(self) -> None:
+        store = object.__new__(AzureTableRemoteCommandStore)
+        store.table = FakeAzureTable()
+        store.queue = FakeAzureSendQueue()
+
+        store.verify_access()
+
+        self.assertEqual(store.table.list_calls, 1)
+        self.assertEqual(store.queue.peek_calls, 1)
+        self.assertEqual(store.table.records, {})
+        self.assertEqual(store.queue.sent, [])
+
+    def test_managed_identity_access_probe_fails_closed(self) -> None:
+        store = object.__new__(AzureTableRemoteCommandStore)
+        store.table = FakeAzureTable()
+        store.table.list_entities = lambda **_options: (_ for _ in ()).throw(
+            PermissionError("forbidden")
+        )
+        store.queue = FakeAzureSendQueue()
+
+        with self.assertRaisesRegex(
+            RemoteStoreError, "data access verification failed"
+        ):
+            store.verify_access()
 
     def test_retry_sends_only_one_azure_queue_message(self) -> None:
         store = object.__new__(AzureTableRemoteCommandStore)

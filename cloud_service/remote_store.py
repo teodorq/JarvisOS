@@ -256,6 +256,17 @@ class AzureTableRemoteCommandStore:
     def direct_queue_enabled(self) -> bool:
         return self.queue is not None
 
+    def verify_access(self) -> None:
+        """Verify managed-identity data access without changing relay state."""
+        try:
+            next(iter(self.table.list_entities(results_per_page=1)), None)
+            if self.queue is not None:
+                list(self.queue.peek_messages(max_messages=1))
+        except Exception as error:
+            raise RemoteStoreError(
+                "Azure Storage data access verification failed"
+            ) from error
+
     @staticmethod
     def _public(entity: dict[str, Any]) -> dict[str, Any]:
         return {
@@ -438,9 +449,11 @@ def remote_store_from_environment() -> RemoteCommandStore | None:
         or "commands"
     )
     queue_name = os.getenv("JARVIS_OS_REMOTE_QUEUE", "").strip()
-    return AzureTableRemoteCommandStore(
+    store = AzureTableRemoteCommandStore(
         account_name,
         _managed_identity_credential(),
         table_name,
         queue_name,
     )
+    store.verify_access()
+    return store

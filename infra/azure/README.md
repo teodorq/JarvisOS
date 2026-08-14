@@ -110,4 +110,6 @@ The federated identity accepts tokens only from this repository's `develop`
 branch and has Container Apps Contributor access only to the planner resource.
 Storage-account and identity changes remain deliberate Bicep deployments. The
 runtime declaration verifies that the managed identity is present and that no
-Storage connection-string secret returns.
+Storage connection-string secret returns. Container startup also performs a
+non-destructive Table entity read and Queue message peek, so a missing data
+role or unavailable relay prevents a falsely healthy deployment.
