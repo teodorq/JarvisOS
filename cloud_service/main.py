@@ -44,7 +44,7 @@ from cloud_service.remote_store import (
 
 
 SERVICE_NAME = "jarvis-os-cloud-planner"
-SERVICE_VERSION = "0.9.0"
+SERVICE_VERSION = "0.9.1"
 MAX_BODY_BYTES = 16_384
 
 
@@ -619,7 +619,10 @@ class JarvisOSCloudHandler(BaseHTTPRequestHandler):
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-JARVIS-REQUEST-ID", self._trace_id())
         self.send_header("X-Frame-Options", "DENY")
-        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header(
+            "Referrer-Policy",
+            "same-origin" if allow_script else "no-referrer",
+        )
         script_policy = "'unsafe-inline'" if allow_script else "'none'"
         self.send_header(
             "Content-Security-Policy",

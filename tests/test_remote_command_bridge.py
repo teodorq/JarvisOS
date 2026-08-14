@@ -181,6 +181,9 @@ class RemoteCommandBridgeTests(unittest.TestCase):
                 "script-src 'unsafe-inline'",
                 response.headers["Content-Security-Policy"],
             )
+            self.assertEqual(
+                response.headers["Referrer-Policy"], "same-origin"
+            )
         self.assertIn("JARVIS OS", page)
         self.assertIn("KOMPUTER ONLINE", page)
         self.assertIn("sessionStorage", page)
@@ -225,6 +228,9 @@ class RemoteCommandBridgeTests(unittest.TestCase):
             self.assertIn(
                 "script-src 'none'",
                 response.headers["Content-Security-Policy"],
+            )
+            self.assertEqual(
+                response.headers["Referrer-Policy"], "no-referrer"
             )
         self.assertIn('data-page="mobile-start-v3"', recovery)
         self.assertIn("Otw&oacute;rz w Safari", recovery)
