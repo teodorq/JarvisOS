@@ -72,7 +72,7 @@ def _menu_panel(window: Any, *, show_tools: bool = False) -> QFrame:
         window.tools_button = tools
         layout.addWidget(tools)
     settings = _menu_button("USTAWIENIA")
-    settings.clicked.connect(lambda: _open_owner_settings(window))
+    settings.clicked.connect(lambda: _open_client_settings(window))
     window.settings_button = settings
     layout.addWidget(settings)
     leave = _menu_button("WYJDŹ")
@@ -97,16 +97,54 @@ def _menu_button(label: str) -> QPushButton:
     return button
 
 
-def _open_owner_settings(window: Any) -> None:
-    access = getattr(window, "owner_access", None)
-    if access is None:
+def _open_client_settings(window: Any) -> None:
+    setup_page = getattr(window, "setup_page", None)
+    stack = getattr(window, "stack", None)
+    if setup_page is None or stack is None:
         return
-    was_visible = window.isVisible()
-    access.request_unlock()
-    owner = getattr(window, "owner_window", None)
-    show_page = getattr(owner, "_show_page", None)
-    if was_visible and not window.isVisible() and callable(show_page):
-        show_page("settings")
+    tools = getattr(getattr(window, "experience_v2", None), "tools", None)
+    hide_tools = getattr(tools, "hide_tools", None)
+    if callable(hide_tools):
+        hide_tools()
+    title = next(
+        (label for label in setup_page.findChildren(QLabel)
+         if label.objectName() == "ClientState"),
+        None,
+    )
+    subtitle = next(
+        (label for label in setup_page.findChildren(QLabel)
+         if label.objectName() == "ClientMessage"),
+        None,
+    )
+    start = next(
+        (button for button in setup_page.findChildren(QPushButton)
+         if button.objectName() == "ClientPrimary"),
+        None,
+    )
+    if title is not None:
+        title.setText("USTAWIENIA JARVIS OS")
+    if subtitle is not None:
+        subtitle.setText("Zmień imię, obsługę głosową lub sposób rozmowy.")
+    if start is not None:
+        start.setText("ZAPISZ USTAWIENIA")
+        if getattr(window, "client_settings_back", None) is None:
+            back = _menu_button("WRÓĆ")
+            back.setObjectName("ClientSecondary")
+            back.clicked.connect(
+                lambda: stack.setCurrentWidget(window.client_page)
+            )
+            start.parentWidget().layout().insertWidget(
+                start.parentWidget().layout().indexOf(start) + 1,
+                back,
+            )
+            window.client_settings_back = back
+    feedback = getattr(window, "setup_feedback", None)
+    if feedback is not None:
+        feedback.clear()
+    stack.setCurrentWidget(setup_page)
+    name_entry = getattr(window, "name_entry", None)
+    if name_entry is not None:
+        name_entry.setFocus(Qt.OtherFocusReason)
 
 
 def _right_column(window: Any) -> QFrame:
