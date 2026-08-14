@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import math
-
 from PySide6.QtCore import QSize, QTimer
 from PySide6.QtGui import QPainter
 from PySide6.QtWidgets import QWidget
@@ -132,9 +130,7 @@ class HaloWidget(QWidget):
     def _tick(self) -> None:
         speed = self.SPEEDS[self._state]
         self._angle += speed
-        self._pulse = (
-            self._pulse + 0.038 * max(speed, 0.65)
-        ) % (math.pi * 2)
+        self._pulse += 0.038 * max(speed, 0.65)
         self._scan += 1.8 * max(speed, 0.65)
         self._intensity += (
             self._target_intensity - self._intensity

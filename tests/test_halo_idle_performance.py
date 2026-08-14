@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import os
 import unittest
 
@@ -50,11 +51,13 @@ class HaloIdlePerformanceTests(unittest.TestCase):
         halo = HaloWidget()
         try:
             halo._angle = 359.9  # noqa: SLF001 - boundary regression check
+            halo._pulse = math.tau - 0.001  # noqa: SLF001
             halo._scan = 359.9  # noqa: SLF001 - boundary regression check
 
             halo._tick()  # noqa: SLF001 - drive exactly one animation frame
 
             self.assertGreater(halo._angle, 360.0)  # noqa: SLF001
+            self.assertGreater(halo._pulse, math.tau)  # noqa: SLF001
             self.assertGreater(halo._scan, 360.0)  # noqa: SLF001
         finally:
             halo.set_animation_active(False)
