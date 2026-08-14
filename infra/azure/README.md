@@ -18,9 +18,10 @@ paid service.
 - 0.25 vCPU and 0.5 GiB RAM.
 - At most 30 authenticated planning requests per minute and source.
 - A failed cloud call opens a 60-second local fallback circuit on the desktop.
-- One Standard_LRS Table Storage account keeps short-lived relay records for
-  24 hours. There is no Azure Container Registry, private network, or paid Log
-  Analytics workspace in this stage.
+- One Standard_LRS Storage account keeps short-lived relay records and queue
+  messages. Shared Key authorization is disabled. The Container App uses its
+  managed identity, while the owner receives message-processing access only to
+  the `commands` queue.
 - Commands containing likely credentials never leave the desktop; the cloud
   service rejects them as a second line of defense.
 - The subscription has a 4.60 EUR monthly budget with alerts at 50%, 80%,
@@ -102,8 +103,10 @@ runtime contract after deployment. A mismatched image, build SHA, cost limit,
 probe, secret reference, Entra owner, audience, issuer, or login policy fails
 the workflow instead of silently accepting configuration drift.
 
-No Azure password, desktop token, or Entra client secret is stored in GitHub.
+No Azure password, Storage key, desktop token, or Entra client secret is
+stored in GitHub or passed to the Container App.
 The federated identity accepts tokens only from this repository's `develop`
 branch and has Container Apps Contributor access only to the planner resource.
-Storage-account and identity changes remain deliberate Bicep deployments until
-the relay moves from a shared storage key to managed identity and RBAC.
+Storage-account and identity changes remain deliberate Bicep deployments. The
+runtime declaration verifies that the managed identity is present and that no
+Storage connection-string secret returns.

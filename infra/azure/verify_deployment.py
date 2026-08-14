@@ -16,6 +16,7 @@ UUID_PATTERN = re.compile(
     r"[0-9a-f]{4}-[0-9a-f]{12}",
     re.IGNORECASE,
 )
+STORAGE_ACCOUNT_PATTERN = re.compile(r"[a-z0-9]{3,24}")
 
 
 def _require(errors: list[str], condition: bool, message: str) -> None:
@@ -77,6 +78,7 @@ def verify_deployment(
     *,
     expected_image: str,
     expected_build_sha: str,
+    expected_storage_account: str,
     expected_tenant_id: str,
 ) -> list[str]:
     """Return human-readable drift failures without exposing secret values."""
@@ -119,6 +121,21 @@ def verify_deployment(
         tags.get("costProfile") == "4-60-eur-budget-alert",
         "cost profile tag drift",
     )
+    identity = app.get("identity") or {}
+    _require(
+        errors,
+        identity.get("type") == "SystemAssigned",
+        "system-assigned managed identity is missing",
+    )
+    _require(
+        errors,
+        bool(
+            UUID_PATTERN.fullmatch(
+                str(identity.get("principalId", ""))
+            )
+        ),
+        "managed identity principal is invalid",
+    )
 
     _require(
         errors,
@@ -155,7 +172,6 @@ def verify_deployment(
         == {
             "api-token",
             "phone-entra-client-secret",
-            "remote-storage-connection",
         },
         "Container App secret references drifted",
     )
@@ -182,6 +198,7 @@ def verify_deployment(
     expected_values = {
         "JARVIS_OS_CLOUD_ENVIRONMENT": "production",
         "JARVIS_OS_BUILD_SHA": expected_build_sha,
+        "JARVIS_OS_REMOTE_STORAGE_ACCOUNT": expected_storage_account,
         "JARVIS_OS_REMOTE_TABLE": "commands",
         "JARVIS_OS_REMOTE_QUEUE": "commands",
         "JARVIS_OS_CLOUD_REQUESTS_PER_MINUTE": "30",
@@ -195,7 +212,6 @@ def verify_deployment(
         )
     expected_secrets = {
         "JARVIS_OS_CLOUD_API_TOKEN": "api-token",
-        "JARVIS_OS_REMOTE_STORAGE_CONNECTION": "remote-storage-connection",
     }
     for name, secret_ref in expected_secrets.items():
         _require(
@@ -203,6 +219,16 @@ def verify_deployment(
             env.get(name, {}).get("secretRef") == secret_ref,
             f"{name} secret reference drift",
         )
+    _require(
+        errors,
+        "JARVIS_OS_REMOTE_STORAGE_CONNECTION" not in env,
+        "Storage connection string returned",
+    )
+    _require(
+        errors,
+        bool(STORAGE_ACCOUNT_PATTERN.fullmatch(expected_storage_account)),
+        "expected Storage account name is invalid",
+    )
     _require(
         errors,
         not any(name.startswith("JARVIS_CLOUD_") for name in env),
@@ -365,6 +391,7 @@ def main() -> int:
     parser.add_argument("--auth-json", required=True)
     parser.add_argument("--expected-image", required=True)
     parser.add_argument("--expected-build-sha", required=True)
+    parser.add_argument("--expected-storage-account", required=True)
     parser.add_argument("--expected-tenant-id", required=True)
     arguments = parser.parse_args()
     try:
@@ -373,6 +400,7 @@ def main() -> int:
             _read_json(arguments.auth_json),
             expected_image=arguments.expected_image,
             expected_build_sha=arguments.expected_build_sha.lower(),
+            expected_storage_account=arguments.expected_storage_account.lower(),
             expected_tenant_id=arguments.expected_tenant_id.lower(),
         )
     except (OSError, ValueError, json.JSONDecodeError) as error:

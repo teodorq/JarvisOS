@@ -19,4 +19,5 @@ idna
 urllib3
 PyGetWindow
 pywin32
+azure-identity
 azure-storage-queue

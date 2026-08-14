@@ -44,7 +44,7 @@ resource remoteStorage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   kind: 'StorageV2'
   properties: {
     allowBlobPublicAccess: false
-    allowSharedKeyAccess: true
+    allowSharedKeyAccess: false
     minimumTlsVersion: 'TLS1_2'
     supportsHttpsTrafficOnly: true
     publicNetworkAccess: 'Enabled'
@@ -71,9 +71,6 @@ resource commandsQueue 'Microsoft.Storage/storageAccounts/queueServices/queues@2
   name: 'commands'
 }
 
-var storageKey = remoteStorage.listKeys().keys[0].value
-var storageConnection = 'DefaultEndpointsProtocol=https;AccountName=${remoteStorage.name};AccountKey=${storageKey};EndpointSuffix=${environment().suffixes.storage}'
-
 resource managedEnvironment 'Microsoft.App/managedEnvironments@2024-03-01' = {
   name: '${namePrefix}-env'
   location: location
@@ -85,6 +82,9 @@ resource plannerApp 'Microsoft.App/containerApps@2024-03-01' = {
   name: '${namePrefix}-planner'
   location: location
   tags: tags
+  identity: {
+    type: 'SystemAssigned'
+  }
   properties: {
     managedEnvironmentId: managedEnvironment.id
     configuration: {
@@ -103,10 +103,6 @@ resource plannerApp 'Microsoft.App/containerApps@2024-03-01' = {
         {
           name: 'phone-entra-client-secret'
           value: phoneEntraClientSecret
-        }
-        {
-          name: 'remote-storage-connection'
-          value: storageConnection
         }
       ]
     }
@@ -133,8 +129,8 @@ resource plannerApp 'Microsoft.App/containerApps@2024-03-01' = {
               value: phoneOwnerPrincipalId
             }
             {
-              name: 'JARVIS_OS_REMOTE_STORAGE_CONNECTION'
-              secretRef: 'remote-storage-connection'
+              name: 'JARVIS_OS_REMOTE_STORAGE_ACCOUNT'
+              value: remoteStorage.name
             }
             {
               name: 'JARVIS_OS_REMOTE_TABLE'
@@ -205,6 +201,49 @@ resource plannerApp 'Microsoft.App/containerApps@2024-03-01' = {
         maxReplicas: 1
       }
     }
+  }
+}
+
+var storageTableDataContributorRoleId = subscriptionResourceId(
+  'Microsoft.Authorization/roleDefinitions',
+  '0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3'
+)
+var storageQueueDataContributorRoleId = subscriptionResourceId(
+  'Microsoft.Authorization/roleDefinitions',
+  '974c5e8b-45b9-4653-ba55-5f855dd0fb88'
+)
+var storageQueueMessageProcessorRoleId = subscriptionResourceId(
+  'Microsoft.Authorization/roleDefinitions',
+  '8a0f0c08-91a1-4084-bc3d-661d67233fed'
+)
+
+resource plannerTableAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(commandsTable.id, plannerApp.id, storageTableDataContributorRoleId)
+  scope: commandsTable
+  properties: {
+    principalId: plannerApp.identity.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: storageTableDataContributorRoleId
+  }
+}
+
+resource plannerQueueAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(commandsQueue.id, plannerApp.id, storageQueueDataContributorRoleId)
+  scope: commandsQueue
+  properties: {
+    principalId: plannerApp.identity.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: storageQueueDataContributorRoleId
+  }
+}
+
+resource ownerQueueAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(commandsQueue.id, phoneOwnerPrincipalId, storageQueueMessageProcessorRoleId)
+  scope: commandsQueue
+  properties: {
+    principalId: phoneOwnerPrincipalId
+    principalType: 'User'
+    roleDefinitionId: storageQueueMessageProcessorRoleId
   }
 }
 

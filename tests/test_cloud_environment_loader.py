@@ -23,8 +23,7 @@ class CloudEnvironmentLoaderTests(unittest.TestCase):
                 "JARVIS_OS_CLOUD_URL=https://cloud.example\n"
                 "JARVIS_OS_CLOUD_API_TOKEN='token-with=padding'\n"
                 "JARVIS_OS_REMOTE_QUEUE_URL="
-                "https://account.queue.core.windows.net/commands"
-                "?sp=p&sig=signature==\n"
+                "https://account.queue.core.windows.net/commands\n"
                 "UNRELATED_SECRET=must-not-load\n",
             )
             with patch.dict(os.environ, {}, clear=True):
@@ -43,8 +42,7 @@ class CloudEnvironmentLoaderTests(unittest.TestCase):
                 )
                 self.assertEqual(
                     os.environ["JARVIS_OS_REMOTE_QUEUE_URL"],
-                    "https://account.queue.core.windows.net/commands"
-                    "?sp=p&sig=signature==",
+                    "https://account.queue.core.windows.net/commands",
                 )
                 self.assertNotIn("UNRELATED_SECRET", os.environ)
 

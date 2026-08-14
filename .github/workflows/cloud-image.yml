@@ -105,15 +105,30 @@ jobs:
               --memory 0.5Gi \
               --min-replicas 0 \
               --max-replicas 1 \
+              --remove-env-vars \
+                "JARVIS_OS_REMOTE_STORAGE_CONNECTION" \
               --set-env-vars \
                 "JARVIS_OS_BUILD_SHA=${{ github.sha }}" \
                 "JARVIS_OS_CLOUD_ENVIRONMENT=production" \
+                "JARVIS_OS_REMOTE_STORAGE_ACCOUNT=jaroswfl24enbycwtyrelay" \
                 "JARVIS_OS_REMOTE_TABLE=commands" \
                 "JARVIS_OS_REMOTE_QUEUE=commands" \
                 "JARVIS_OS_CLOUD_REQUESTS_PER_MINUTE=30" \
                 "PORT=8000" \
               --only-show-errors \
               --output none; then
+              if az containerapp secret list \
+                --name jarvis-os-planner \
+                --resource-group rg-jarvis-os-cloud \
+                --query "[?name=='remote-storage-connection'].name" \
+                --output tsv | grep -qx "remote-storage-connection"; then
+                az containerapp secret remove \
+                  --name jarvis-os-planner \
+                  --resource-group rg-jarvis-os-cloud \
+                  --secret-names remote-storage-connection \
+                  --only-show-errors \
+                  --output none
+              fi
               exit 0
             fi
             echo "Azure update ${attempt}/5 failed; retrying after 15 seconds."
@@ -142,6 +157,7 @@ jobs:
               --auth-json "${auth_json}" \
               --expected-image "${expected_image}" \
               --expected-build-sha "${{ github.sha }}" \
+              --expected-storage-account "jaroswfl24enbycwtyrelay" \
               --expected-tenant-id "1f218598-c698-404f-908f-025fe1b55870"; then
               exit 0
             fi

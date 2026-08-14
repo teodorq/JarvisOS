@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import http.client
 import json
+import os
 import threading
 import unittest
 import urllib.error
 import urllib.request
+from unittest.mock import patch
 
 from app.cloud.client import (
     CloudPlannerClient,
@@ -17,6 +19,7 @@ from cloud_service.remote_store import (
     AzureTableRemoteCommandStore,
     MemoryRemoteCommandStore,
     RemoteStoreConflict,
+    remote_store_from_environment,
 )
 
 
@@ -85,10 +88,7 @@ class RemoteCommandBridgeTests(unittest.TestCase):
     desktop_token = "desktop-token-with-enough-entropy"
     phone_token = "phone-token-with-enough-entropy"
     device_id = "desktop-main"
-    queue_url = (
-        "https://jarvis.queue.core.windows.net/commands"
-        "?sv=2025-01-05&se=2030-01-01T00%3A00Z&sp=p&sig=test"
-    )
+    queue_url = "https://jarvis.queue.core.windows.net/commands"
 
     def setUp(self) -> None:
         self.store = MemoryRemoteCommandStore()
@@ -354,13 +354,39 @@ class RemoteCommandBridgeTests(unittest.TestCase):
             self._settings(
                 queue_url=(
                     "https://evil.example/commands"
-                    "?sv=x&se=x&sp=p&sr=q&sig=x"
                 )
             ),
             queue_client=FakeQueueClient(),
         )
         with self.assertRaises(CloudPlannerUnavailable):
             client.claim_remote_command()
+
+    def test_sas_queue_url_is_rejected_before_access(self) -> None:
+        client = CloudPlannerClient(
+            self._settings(
+                queue_url=self.queue_url + "?sv=x&sp=p&sig=secret"
+            ),
+            queue_client=FakeQueueClient(),
+        )
+        with self.assertRaises(CloudPlannerUnavailable):
+            client.claim_remote_command()
+
+    def test_queue_client_uses_entra_credential(self) -> None:
+        credential = object()
+        queue = FakeQueueClient()
+        client = CloudPlannerClient(
+            self._settings(queue_url=self.queue_url),
+            queue_credential=credential,
+        )
+        with patch(
+            "azure.storage.queue.QueueClient.from_queue_url",
+            return_value=queue,
+        ) as factory:
+            self.assertIs(client._queue_client_instance(), queue)
+        factory.assert_called_once_with(
+            self.queue_url,
+            credential=credential,
+        )
 
     def test_wrong_phone_token_is_rejected(self) -> None:
         status, payload = self._phone_request(
@@ -525,6 +551,31 @@ class RemoteCommandBridgeTests(unittest.TestCase):
 
 
 class AzureRemoteStoreIdempotencyTests(unittest.TestCase):
+    def test_environment_uses_managed_identity_and_account_name(self) -> None:
+        credential = object()
+        environment = {
+            "JARVIS_OS_REMOTE_STORAGE_ACCOUNT": "jarvisrelaytest",
+            "JARVIS_OS_REMOTE_TABLE": "commands",
+            "JARVIS_OS_REMOTE_QUEUE": "commands",
+        }
+        with (
+            patch.dict(os.environ, environment, clear=True),
+            patch(
+                "cloud_service.remote_store._managed_identity_credential",
+                return_value=credential,
+            ),
+            patch(
+                "cloud_service.remote_store.AzureTableRemoteCommandStore"
+            ) as factory,
+        ):
+            remote_store_from_environment()
+        factory.assert_called_once_with(
+            "jarvisrelaytest",
+            credential,
+            "commands",
+            "commands",
+        )
+
     def test_retry_sends_only_one_azure_queue_message(self) -> None:
         store = object.__new__(AzureTableRemoteCommandStore)
         store._exists = FakeResourceExistsError

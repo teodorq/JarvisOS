@@ -11,6 +11,7 @@ IMAGE = f"ghcr.io/teodorq/jarvis-os-cloud:sha-{SHA}"
 TENANT = "11111111-2222-3333-4444-555555555555"
 OWNER = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 CLIENT = "12345678-1234-1234-1234-123456789abc"
+STORAGE = "jarvisrelaytest"
 
 
 def _probe(
@@ -41,6 +42,10 @@ def _app() -> dict:
             "component": "cloud-planner",
             "costProfile": "4-60-eur-budget-alert",
         },
+        "identity": {
+            "type": "SystemAssigned",
+            "principalId": "99999999-aaaa-bbbb-cccc-dddddddddddd",
+        },
         "properties": {
             "provisioningState": "Succeeded",
             "runningStatus": "Running",
@@ -62,7 +67,6 @@ def _app() -> dict:
                 "secrets": [
                     {"name": "api-token"},
                     {"name": "phone-entra-client-secret"},
-                    {"name": "remote-storage-connection"},
                 ],
             },
             "template": {
@@ -87,8 +91,8 @@ def _app() -> dict:
                                 "value": OWNER,
                             },
                             {
-                                "name": "JARVIS_OS_REMOTE_STORAGE_CONNECTION",
-                                "secretRef": "remote-storage-connection",
+                                "name": "JARVIS_OS_REMOTE_STORAGE_ACCOUNT",
+                                "value": STORAGE,
                             },
                             {
                                 "name": "JARVIS_OS_REMOTE_TABLE",
@@ -178,6 +182,7 @@ def _verify(app: dict, auth: dict) -> list[str]:
         auth,
         expected_image=IMAGE,
         expected_build_sha=SHA,
+        expected_storage_account=STORAGE,
         expected_tenant_id=TENANT,
     )
 
@@ -205,6 +210,10 @@ class CloudInfrastructureTests(unittest.TestCase):
                     "containers"
                 ][0]["env"][1].update({"value": "b" * 40}),
                 "JARVIS_OS_BUILD_SHA drift",
+            ),
+            "identity": (
+                lambda app, _auth: app.update({"identity": {"type": "None"}}),
+                "system-assigned managed identity is missing",
             ),
         }
         for name, (mutate, expected) in cases.items():
@@ -243,6 +252,8 @@ class CloudInfrastructureTests(unittest.TestCase):
             "--max-replicas 1",
             "verify_deployment.py",
             "az containerapp auth show",
+            "--remove-env-vars",
+            "JARVIS_OS_REMOTE_STORAGE_ACCOUNT",
         ):
             self.assertIn(expected, workflow)
 
@@ -255,6 +266,17 @@ class CloudInfrastructureTests(unittest.TestCase):
         self.assertIn("param buildSha string", main_bicep)
         self.assertIn("name: 'JARVIS_OS_BUILD_SHA'", main_bicep)
         self.assertIn("buildSha: buildSha", subscription_bicep)
+        self.assertIn("allowSharedKeyAccess: false", main_bicep)
+        self.assertIn("type: 'SystemAssigned'", main_bicep)
+        self.assertNotIn(".listKeys()", main_bicep)
+        self.assertIn(
+            "0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3",
+            main_bicep,
+        )
+        self.assertIn(
+            "974c5e8b-45b9-4653-ba55-5f855dd0fb88",
+            main_bicep,
+        )
 
     def test_drift_checks_do_not_embed_live_owner_identifiers(self) -> None:
         live_owner = "-".join(

@@ -16,6 +16,7 @@ ALLOWED_EVENT_STATUSES = frozenset(
 )
 _DEVICE_ID = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$")
 _COMMAND_ID = re.compile(r"^[a-f0-9]{32}$")
+_STORAGE_ACCOUNT = re.compile(r"^[a-z0-9]{3,24}$")
 
 
 class RemoteStoreError(RuntimeError):
@@ -217,7 +218,8 @@ class MemoryRemoteCommandStore:
 class AzureTableRemoteCommandStore:
     def __init__(
         self,
-        connection_string: str,
+        account_name: str,
+        credential: Any,
         table_name: str = "commands",
         queue_name: str = "",
     ) -> None:
@@ -229,9 +231,14 @@ class AzureTableRemoteCommandStore:
         self._exists = ResourceExistsError
         self._not_found = ResourceNotFoundError
         self._update_mode = UpdateMode.REPLACE
-        self.table = TableServiceClient.from_connection_string(
-            connection_string
-        ).create_table_if_not_exists(table_name)
+        account_name = str(account_name).strip().lower()
+        if not _STORAGE_ACCOUNT.fullmatch(account_name):
+            raise RemoteStoreError("invalid Azure Storage account name")
+        table_service = TableServiceClient(
+            endpoint=f"https://{account_name}.table.core.windows.net",
+            credential=credential,
+        )
+        self.table = table_service.get_table_client(table_name)
         self.queue = None
         if queue_name:
             try:
@@ -240,13 +247,10 @@ class AzureTableRemoteCommandStore:
                 raise RemoteStoreError(
                     "azure-storage-queue is not installed"
                 ) from error
-            self.queue = QueueClient.from_connection_string(
-                connection_string, queue_name
+            self.queue = QueueClient.from_queue_url(
+                f"https://{account_name}.queue.core.windows.net/{queue_name}",
+                credential=credential,
             )
-            try:
-                self.queue.create_queue()
-            except ResourceExistsError:
-                pass
 
     @property
     def direct_queue_enabled(self) -> bool:
@@ -415,15 +419,28 @@ class AzureTableRemoteCommandStore:
                 )
 
 
+def _managed_identity_credential() -> Any:
+    try:
+        from azure.identity import ManagedIdentityCredential
+    except ImportError as error:
+        raise RemoteStoreError("azure-identity is not installed") from error
+    return ManagedIdentityCredential()
+
+
 def remote_store_from_environment() -> RemoteCommandStore | None:
-    connection = os.getenv(
-        "JARVIS_OS_REMOTE_STORAGE_CONNECTION", ""
+    account_name = os.getenv(
+        "JARVIS_OS_REMOTE_STORAGE_ACCOUNT", ""
     ).strip()
-    if not connection:
+    if not account_name:
         return None
     table_name = (
         os.getenv("JARVIS_OS_REMOTE_TABLE", "commands").strip()
         or "commands"
     )
     queue_name = os.getenv("JARVIS_OS_REMOTE_QUEUE", "").strip()
-    return AzureTableRemoteCommandStore(connection, table_name, queue_name)
+    return AzureTableRemoteCommandStore(
+        account_name,
+        _managed_identity_credential(),
+        table_name,
+        queue_name,
+    )

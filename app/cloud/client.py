@@ -73,9 +73,11 @@ class CloudPlannerClient:
         settings: CloudPlannerSettings | None = None,
         *,
         queue_client: Any | None = None,
+        queue_credential: Any | None = None,
     ) -> None:
         self.settings = settings or CloudPlannerSettings.from_environment()
         self._queue_client = queue_client
+        self._queue_credential = queue_credential
         self._queue_receipts: dict[str, tuple[str, str]] = {}
 
     @property
@@ -177,8 +179,17 @@ class CloudPlannerClient:
                     "Azure Queue support is not installed"
                 ) from error
             try:
+                credential = self._queue_credential
+                if credential is None:
+                    from azure.identity import DefaultAzureCredential
+
+                    credential = DefaultAzureCredential(
+                        exclude_managed_identity_credential=True,
+                        exclude_workload_identity_credential=True,
+                    )
                 self._queue_client = QueueClient.from_queue_url(
-                    self.settings.remote_queue_url
+                    self.settings.remote_queue_url,
+                    credential=credential,
                 )
             except Exception as error:
                 raise CloudPlannerUnavailable(
@@ -343,8 +354,6 @@ class CloudPlannerClient:
 
     def _validate_queue_endpoint(self) -> None:
         parsed = urllib.parse.urlsplit(self.settings.remote_queue_url)
-        query = urllib.parse.parse_qs(parsed.query, keep_blank_values=True)
-        required = {"se", "sig", "sp", "sv"}
         valid_host = bool(
             parsed.hostname
             and parsed.hostname.endswith(".queue.core.windows.net")
@@ -356,12 +365,12 @@ class CloudPlannerClient:
             or not valid_path
             or parsed.username
             or parsed.password
+            or parsed.query
             or parsed.fragment
-            or not required.issubset(query)
-            or "p" not in query.get("sp", [""])[0]
-            or ("sr" in query and query.get("sr", [""])[0] != "q")
         ):
-            raise CloudPlannerUnavailable("invalid remote queue URL")
+            raise CloudPlannerUnavailable(
+                "remote queue requires an HTTPS Azure URL without SAS"
+            )
 
     def _validate_endpoint(self) -> None:
         parsed = urllib.parse.urlsplit(self.settings.base_url)
