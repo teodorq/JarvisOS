@@ -59,3 +59,15 @@ class CloudEnvironmentLoaderTests(unittest.TestCase):
                     os.environ["JARVIS_OS_CLOUD_API_TOKEN"],
                     "environment-token",
                 )
+
+    def test_removed_legacy_names_are_not_loaded(self) -> None:
+        with tempfile.TemporaryDirectory() as root:
+            self._write(
+                root,
+                "JARVIS_CLOUD_URL=https://legacy.example\n"
+                "JARVIS_REMOTE_DEVICE_ID=legacy-desktop\n",
+            )
+            with patch.dict(os.environ, {}, clear=True):
+                self.assertEqual(load_cloud_environment(root), ())
+                self.assertNotIn("JARVIS_CLOUD_URL", os.environ)
+                self.assertNotIn("JARVIS_REMOTE_DEVICE_ID", os.environ)

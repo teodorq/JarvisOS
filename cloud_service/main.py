@@ -42,7 +42,7 @@ from cloud_service.remote_store import (
 
 
 SERVICE_NAME = "jarvis-os-cloud-planner"
-SERVICE_VERSION = "0.8.6"
+SERVICE_VERSION = "0.8.7"
 MAX_BODY_BYTES = 16_384
 
 
@@ -58,10 +58,9 @@ class ServiceConfig:
     @classmethod
     def from_environment(cls) -> "ServiceConfig":
         return cls(
-            api_token=(
-                os.getenv("JARVIS_OS_CLOUD_API_TOKEN", "").strip()
-                or os.getenv("JARVIS_CLOUD_API_TOKEN", "").strip()
-            ),
+            api_token=os.getenv(
+                "JARVIS_OS_CLOUD_API_TOKEN", ""
+            ).strip(),
             environment=(
                 os.getenv("JARVIS_OS_CLOUD_ENVIRONMENT", "").strip()
                 or os.getenv("JARVIS_ENV", "production").strip()
@@ -81,10 +80,9 @@ class ServiceConfig:
         )
 
 def _requests_per_minute_from_environment() -> int:
-    value = (
-        os.getenv("JARVIS_OS_CLOUD_REQUESTS_PER_MINUTE", "").strip()
-        or os.getenv("JARVIS_CLOUD_REQUESTS_PER_MINUTE", "30").strip()
-    )
+    value = os.getenv(
+        "JARVIS_OS_CLOUD_REQUESTS_PER_MINUTE", "30"
+    ).strip()
     try:
         limit = int(value)
     except ValueError:

@@ -67,8 +67,8 @@ automatically uses the local planner.
 6. Check the returned /health URL before configuring JARVIS_OS_CLOUD_URL and
    JARVIS_OS_CLOUD_API_TOKEN on the desktop.
 
-The previous JARVIS_CLOUD_* names remain accepted temporarily as migration
-aliases, but all new configuration should use JARVIS_OS_CLOUD_*.
+Only the JARVIS_OS_CLOUD_* names are accepted. The temporary JARVIS_CLOUD_*
+migration aliases were removed after the live deployment moved to JARVIS OS.
 
 ## Private phone command page
 

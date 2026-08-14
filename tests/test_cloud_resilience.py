@@ -169,7 +169,6 @@ class CloudRateLimitTests(unittest.TestCase):
     def test_new_rate_limit_environment_name_is_bounded(self) -> None:
         values = {
             "JARVIS_OS_CLOUD_REQUESTS_PER_MINUTE": "500",
-            "JARVIS_CLOUD_REQUESTS_PER_MINUTE": "2",
         }
         with patch.dict(os.environ, values, clear=True):
             config = ServiceConfig.from_environment()

@@ -73,10 +73,9 @@ class HybridPlanner:
 
 
 def _cooldown_from_environment() -> float:
-    value = (
-        os.getenv("JARVIS_OS_CLOUD_FAILURE_COOLDOWN_SECONDS", "").strip()
-        or os.getenv("JARVIS_CLOUD_FAILURE_COOLDOWN_SECONDS", "60").strip()
-    )
+    value = os.getenv(
+        "JARVIS_OS_CLOUD_FAILURE_COOLDOWN_SECONDS", "60"
+    ).strip()
     try:
         return float(value)
     except ValueError:

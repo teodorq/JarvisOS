@@ -34,37 +34,26 @@ class CloudPlannerSettings:
 
     @classmethod
     def from_environment(cls) -> "CloudPlannerSettings":
-        timeout_text = _environment_value(
-            "JARVIS_OS_CLOUD_TIMEOUT_SECONDS",
-            "JARVIS_CLOUD_TIMEOUT_SECONDS",
-            default="30",
-        )
+        timeout_text = os.getenv(
+            "JARVIS_OS_CLOUD_TIMEOUT_SECONDS", "30"
+        ).strip()
         try:
             timeout = min(max(float(timeout_text), 1.0), 120.0)
         except ValueError:
             timeout = 30.0
         return cls(
-            base_url=_environment_value(
-                "JARVIS_OS_CLOUD_URL", "JARVIS_CLOUD_URL"
-            ).rstrip("/"),
-            api_token=_environment_value(
-                "JARVIS_OS_CLOUD_API_TOKEN", "JARVIS_CLOUD_API_TOKEN"
-            ),
+            base_url=os.getenv("JARVIS_OS_CLOUD_URL", "").strip().rstrip("/"),
+            api_token=os.getenv(
+                "JARVIS_OS_CLOUD_API_TOKEN", ""
+            ).strip(),
             timeout_seconds=timeout,
-            remote_device_id=_environment_value(
-                "JARVIS_OS_REMOTE_DEVICE_ID", "JARVIS_REMOTE_DEVICE_ID"
-            ).lower(),
+            remote_device_id=os.getenv(
+                "JARVIS_OS_REMOTE_DEVICE_ID", ""
+            ).strip().lower(),
             remote_queue_url=os.getenv(
                 "JARVIS_OS_REMOTE_QUEUE_URL", ""
             ).strip(),
         )
-
-
-def _environment_value(primary: str, legacy: str, *, default: str = "") -> str:
-    return (
-        os.getenv(primary, "").strip()
-        or os.getenv(legacy, default).strip()
-    )
 
 
 class CloudPlannerClient:
