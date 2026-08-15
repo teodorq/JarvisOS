@@ -44,7 +44,7 @@ from cloud_service.remote_store import (
 
 
 SERVICE_NAME = "jarvis-os-cloud-planner"
-SERVICE_VERSION = "0.9.1"
+SERVICE_VERSION = "0.9.2"
 MAX_BODY_BYTES = 16_384
 
 
@@ -235,18 +235,28 @@ class JarvisOSCloudHandler(BaseHTTPRequestHandler):
         ):
             self._handle_remote_event(parsed, parts[3])
             return
-        self._json(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+        self._reject_json(HTTPStatus.NOT_FOUND, {"error": "not_found"})
 
     def _handle_plan(self) -> None:
         if not self.server.config.api_token:
-            self._json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "service_not_configured"})
+            self._reject_json(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"error": "service_not_configured"},
+            )
             return
         if not self._authorized():
-            self._json(HTTPStatus.UNAUTHORIZED, {"error": "unauthorized"})
+            self._reject_json(
+                HTTPStatus.UNAUTHORIZED,
+                {"error": "unauthorized"},
+            )
             return
         allowed, retry_after = self.server.rate_limiter.allow(self.client_address[0])
         if not allowed:
-            self._json(HTTPStatus.TOO_MANY_REQUESTS, {"error": "rate_limited"}, headers={"Retry-After": str(retry_after)})
+            self._reject_json(
+                HTTPStatus.TOO_MANY_REQUESTS,
+                {"error": "rate_limited"},
+                headers={"Retry-After": str(retry_after)},
+            )
             return
         try:
             payload = self._read_payload()
@@ -266,14 +276,24 @@ class JarvisOSCloudHandler(BaseHTTPRequestHandler):
 
     def _handle_remote_submit(self) -> None:
         if not self._remote_ready():
-            self._json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "remote_not_configured"})
+            self._reject_json(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"error": "remote_not_configured"},
+            )
             return
         if not self._phone_authorized():
-            self._json(HTTPStatus.UNAUTHORIZED, {"error": "unauthorized"})
+            self._reject_json(
+                HTTPStatus.UNAUTHORIZED,
+                {"error": "unauthorized"},
+            )
             return
         allowed, retry_after = self.server.rate_limiter.allow("phone:" + self.client_address[0])
         if not allowed:
-            self._json(HTTPStatus.TOO_MANY_REQUESTS, {"error": "rate_limited"}, headers={"Retry-After": str(retry_after)})
+            self._reject_json(
+                HTTPStatus.TOO_MANY_REQUESTS,
+                {"error": "rate_limited"},
+                headers={"Retry-After": str(retry_after)},
+            )
             return
         try:
             payload = self._read_payload()
@@ -308,19 +328,22 @@ class JarvisOSCloudHandler(BaseHTTPRequestHandler):
 
     def _handle_remote_probe(self) -> None:
         if not self._remote_ready():
-            self._json(
+            self._reject_json(
                 HTTPStatus.SERVICE_UNAVAILABLE,
                 {"error": "remote_not_configured"},
             )
             return
         if not self._phone_authorized():
-            self._json(HTTPStatus.UNAUTHORIZED, {"error": "unauthorized"})
+            self._reject_json(
+                HTTPStatus.UNAUTHORIZED,
+                {"error": "unauthorized"},
+            )
             return
         allowed, retry_after = self.server.rate_limiter.allow(
             "phone:" + self.client_address[0]
         )
         if not allowed:
-            self._json(
+            self._reject_json(
                 HTTPStatus.TOO_MANY_REQUESTS,
                 {"error": "rate_limited"},
                 headers={"Retry-After": str(retry_after)},
@@ -395,10 +418,16 @@ class JarvisOSCloudHandler(BaseHTTPRequestHandler):
 
     def _handle_remote_event(self, parsed, raw_command_id: str) -> None:
         if not self._remote_ready():
-            self._json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "remote_not_configured"})
+            self._reject_json(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"error": "remote_not_configured"},
+            )
             return
         if not self._authorized():
-            self._json(HTTPStatus.UNAUTHORIZED, {"error": "unauthorized"})
+            self._reject_json(
+                HTTPStatus.UNAUTHORIZED,
+                {"error": "unauthorized"},
+            )
             return
         try:
             device_id = self._device_from_query(parsed)
@@ -595,6 +624,42 @@ class JarvisOSCloudHandler(BaseHTTPRequestHandler):
             self.send_header(name, value)
         self.end_headers()
         self.wfile.write(body)
+
+    def _reject_json(
+        self,
+        status: HTTPStatus,
+        payload: dict[str, Any],
+        *,
+        headers: dict[str, str] | None = None,
+    ) -> None:
+        self._discard_small_request_body()
+        self._json(status, payload, headers=headers)
+
+    def _discard_small_request_body(self) -> None:
+        if self.command != "POST":
+            return
+        try:
+            length = int(self.headers.get("Content-Length", ""))
+        except ValueError:
+            return
+        if length <= 0 or length > MAX_BODY_BYTES:
+            return
+        previous_timeout = self.connection.gettimeout()
+        try:
+            self.connection.settimeout(0.25)
+            remaining = length
+            while remaining:
+                chunk = self.rfile.read(min(remaining, 4_096))
+                if not chunk:
+                    break
+                remaining -= len(chunk)
+        except OSError:
+            return
+        finally:
+            try:
+                self.connection.settimeout(previous_timeout)
+            except OSError:
+                pass
 
     def _empty(self, status: HTTPStatus) -> None:
         self.send_response(int(status))

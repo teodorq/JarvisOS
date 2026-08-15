@@ -475,34 +475,36 @@ class RemoteCommandBridgeTests(unittest.TestCase):
         self.assertEqual(calls, [(self.queue_url, credential)])
 
     def test_wrong_phone_token_is_rejected(self) -> None:
-        status, payload = self._phone_request(
-            "/v1/remote/commands",
-            method="POST",
-            payload={
-                "device_id": self.device_id,
-                "command": "status systemu",
-            },
-            token="wrong-token",
-        )
-        self.assertEqual(status, 401)
-        self.assertEqual(payload["error"], "unauthorized")
+        for _attempt in range(10):
+            status, payload = self._phone_request(
+                "/v1/remote/commands",
+                method="POST",
+                payload={
+                    "device_id": self.device_id,
+                    "command": "status systemu",
+                },
+                token="wrong-token",
+            )
+            self.assertEqual(status, 401)
+            self.assertEqual(payload["error"], "unauthorized")
 
-    def test_rejected_post_closes_connection_before_unread_body(self) -> None:
+    def test_rejected_post_discards_body_and_closes_connection(self) -> None:
         host, port = self.server.server_address
         connection = http.client.HTTPConnection(host, port, timeout=2)
         try:
             connection.request(
                 "POST",
                 "/v1/remote/commands",
-                body=b"{}",
+                body=b'{"malformed":',
                 headers={
                     "Authorization": "Bearer wrong-token",
                     "Content-Type": "application/json",
                 },
             )
             response = connection.getresponse()
-            response.read()
+            payload = json.loads(response.read().decode("utf-8"))
             self.assertEqual(response.status, 401)
+            self.assertEqual(payload["error"], "unauthorized")
             self.assertEqual(response.getheader("Connection"), "close")
             self.assertTrue(response.will_close)
         finally:
