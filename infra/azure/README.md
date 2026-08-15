@@ -98,7 +98,10 @@ Changes to the cloud boundary on `develop` are tested and published as an
 immutable `sha-<commit>` image by GitHub Actions. The workflow then signs in
 to Azure through OpenID Connect, reapplies the declared CPU, memory, replica,
 environment and image settings to `jarvis-os-planner`, and waits for the
-public health check. It compiles `subscription.bicep` before publishing and
+public health check. Before an image can be published, the exact commit must
+pass the complete Windows source-integrity regression; failed, cancelled, or
+timed-out regressions cannot reach production. The workflow compiles
+`subscription.bicep` before publishing and
 compares the live Container App and EasyAuth configuration with the checked-in
 runtime contract after deployment. A mismatched image, build SHA, cost limit,
 probe, secret reference, Entra owner, audience, issuer, or login policy fails

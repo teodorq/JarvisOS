@@ -18,6 +18,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
   packages: write
   id-token: write
@@ -29,9 +30,52 @@ concurrency:
 jobs:
   test-and-publish:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
+
+      - name: Require successful full source integrity
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const targetSha = context.sha;
+            const acceptedEvents = context.eventName === 'push'
+              ? new Set(['push'])
+              : new Set(['push', 'workflow_dispatch']);
+            for (let attempt = 1; attempt <= 120; attempt += 1) {
+              const { data } = await github.rest.actions.listWorkflowRuns({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: 'source-integrity.yml',
+                per_page: 100,
+              });
+              const run = data.workflow_runs.find(
+                item => item.head_sha === targetSha
+                  && acceptedEvents.has(item.event)
+              );
+              if (run && run.status === 'completed') {
+                if (run.conclusion !== 'success') {
+                  core.setFailed(
+                    'Full source integrity did not pass for '
+                      + targetSha + ': ' + run.conclusion
+                  );
+                  return;
+                }
+                core.notice(
+                  'Full source integrity passed for ' + targetSha + '.'
+                );
+                return;
+              }
+              core.info(
+                'Waiting for full source integrity for ' + targetSha
+                  + ' (' + attempt + '/120).'
+              );
+              await new Promise(resolve => setTimeout(resolve, 15000));
+            }
+            core.setFailed(
+              'Timed out waiting for full source integrity for ' + targetSha
+            );
 
       - name: Set up Python
         uses: actions/setup-python@v6

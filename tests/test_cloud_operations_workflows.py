@@ -47,3 +47,27 @@ class CloudOperationsWorkflowTests(unittest.TestCase):
         self.assertIn("cancel-in-progress: false", deploy)
         self.assertIn("jarvis-os-cloud-production", rollback)
         self.assertIn("cancel-in-progress: false", rollback)
+
+    def test_production_waits_for_full_source_integrity(self) -> None:
+        deploy = Path(".github/workflows/cloud-image.yml").read_text(
+            encoding="utf-8"
+        )
+        source = Path(
+            ".github/workflows/source-integrity.yml"
+        ).read_text(encoding="utf-8")
+        required = (
+            "actions: read",
+            "Require successful full source integrity",
+            "actions/github-script@v8",
+            "source-integrity.yml",
+            "item.head_sha === targetSha",
+            "run.conclusion !== 'success'",
+            "Timed out waiting for full source integrity",
+        )
+        for marker in required:
+            self.assertIn(marker, deploy)
+        self.assertLess(
+            deploy.index("Require successful full source integrity"),
+            deploy.index("Build and publish immutable image"),
+        )
+        self.assertIn("- .dockerignore", source)

@@ -14,6 +14,7 @@ on:
       - infra/**
       - main.py
       - pytest.ini
+      - .dockerignore
       - .github/workflows/**
   pull_request:
     paths:
@@ -26,6 +27,7 @@ on:
       - infra/**
       - main.py
       - pytest.ini
+      - .dockerignore
       - .github/workflows/**
   workflow_dispatch:
 
