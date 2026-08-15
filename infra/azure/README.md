@@ -107,7 +107,9 @@ the workflow instead of silently accepting configuration drift.
 No Azure password, Storage key, desktop token, or Entra client secret is
 stored in GitHub or passed to the Container App.
 The federated identity accepts tokens only from this repository's `develop`
-branch and has Container Apps Contributor access only to the planner resource.
+and `main` branches and has Container Apps Contributor access only to the
+planner resource. Develop publishes production images; main runs the scheduled
+health monitor and the manual rollback workflow.
 Storage-account and identity changes remain deliberate Bicep deployments. The
 runtime declaration verifies that the managed identity is present and that no
 Storage connection-string secret returns. Container startup also performs a
@@ -121,3 +123,16 @@ workflow: provide a full 40-character commit SHA whose immutable image was
 already published. It restores that exact image and accepts success only after
 the same health and public-route checks pass. Deployment and rollback share one
 production lock, so they cannot modify the Container App concurrently.
+
+## Local Azure guardrail audit
+
+The live authentication and budget documents stay on the owner's computer.
+`tools/audit_azure_guardrails.ps1` performs a read-only check of the active
+subscription, managed identity roles, Storage security, budget thresholds,
+GitHub federation, deployment permissions, and public cloud health. Its log
+contains only a safe OK/FAILED summary and never includes the private alert
+address, tokens, secrets, or Azure object identifiers.
+
+`tools/install_azure_guardrail_audit.ps1` installs the audit as a hidden
+Windows task for every Monday at 09:00 and runs it once immediately. Results
+are written under `runtime/`, which is excluded from Git.
