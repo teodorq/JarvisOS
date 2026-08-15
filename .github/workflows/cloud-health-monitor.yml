@@ -6,14 +6,50 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
   id-token: write
+
+concurrency:
+  group: jarvis-os-cloud-production
+  cancel-in-progress: false
 
 jobs:
   health:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Resolve latest successful production SHA
+        id: expected
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const { data } = await github.rest.actions.listWorkflowRuns({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'cloud-image.yml',
+              branch: 'develop',
+              status: 'success',
+              per_page: 20,
+            });
+            const run = data.workflow_runs.find(
+              item => item.head_branch === 'develop'
+                && item.conclusion === 'success'
+            );
+            if (!run || !/^[a-f0-9]{40}$/.test(run.head_sha)) {
+              core.setFailed(
+                'No successful immutable develop deployment was found.'
+              );
+              return;
+            }
+            core.setOutput('sha', run.head_sha);
+            core.notice(
+              'Expected production revision is ' + run.head_sha + '.'
+            );
+
       - name: Sign in to Azure with GitHub OIDC
         uses: azure/login@v2
         with:
@@ -21,10 +57,30 @@ jobs:
           tenant-id: 1f218598-c698-404f-908f-025fe1b55870
           subscription-id: c7cac745-0964-425d-97b4-61d19e4cef65
 
-      - name: Verify service and managed-identity storage access
+      - name: Verify declared configuration and live service
         shell: bash
+        env:
+          EXPECTED_SHA: ${{ steps.expected.outputs.sha }}
         run: |
           az config set extension.use_dynamic_install=yes_without_prompt
+          app_json="${RUNNER_TEMP}/jarvis-os-monitor-app.json"
+          auth_json="${RUNNER_TEMP}/jarvis-os-monitor-auth.json"
+          expected_image="ghcr.io/${{ github.repository_owner }}/jarvis-os-cloud:sha-${EXPECTED_SHA}"
+          az containerapp show \
+            --name jarvis-os-planner \
+            --resource-group rg-jarvis-os-cloud \
+            --output json > "${app_json}"
+          az containerapp auth show \
+            --name jarvis-os-planner \
+            --resource-group rg-jarvis-os-cloud \
+            --output json > "${auth_json}"
+          python infra/azure/verify_deployment.py \
+            --app-json "${app_json}" \
+            --auth-json "${auth_json}" \
+            --expected-image "${expected_image}" \
+            --expected-build-sha "${EXPECTED_SHA}" \
+            --expected-storage-account "jaroswfl24enbycwtyrelay" \
+            --expected-tenant-id "1f218598-c698-404f-908f-025fe1b55870"
           fqdn="$(az containerapp show \
             --name jarvis-os-planner \
             --resource-group rg-jarvis-os-cloud \
@@ -32,5 +88,5 @@ jobs:
             --output tsv)"
           response="$(curl --fail --silent --show-error --max-time 30 \
             "https://${fqdn}/health")"
-          python -c 'import json,re,sys; data=json.loads(sys.argv[1]); valid=data.get("status") == "ok" and data.get("service") == "jarvis-os-cloud-planner" and data.get("remote_configured") is True and data.get("remote_transport") == "azure_queue" and data.get("remote_access_verified") is True and re.fullmatch(r"[a-f0-9]{40}", str(data.get("build_sha", ""))); raise SystemExit(0 if valid else 1)' "${response}"
-          echo "JARVIS OS cloud and managed-identity relay are healthy."
+          python -c 'import json,sys; data=json.loads(sys.argv[1]); valid=data.get("status") == "ok" and data.get("service") == "jarvis-os-cloud-planner" and data.get("remote_configured") is True and data.get("remote_transport") == "azure_queue" and data.get("remote_access_verified") is True and data.get("build_sha") == sys.argv[2]; raise SystemExit(0 if valid else 1)' "${response}" "${EXPECTED_SHA}"
+          echo "JARVIS OS production matches ${EXPECTED_SHA} and is healthy."

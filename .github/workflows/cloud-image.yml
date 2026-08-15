@@ -29,6 +29,7 @@ concurrency:
 
 jobs:
   test-and-publish:
+    if: github.ref == 'refs/heads/develop'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:

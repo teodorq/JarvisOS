@@ -10,8 +10,19 @@ class CloudOperationsWorkflowTests(unittest.TestCase):
         self.assertIn("schedule:", workflow)
         self.assertIn("workflow_dispatch:", workflow)
         self.assertIn("jarvis-os-planner", workflow)
+        self.assertIn("actions: read", workflow)
+        self.assertIn("jarvis-os-cloud-production", workflow)
+        self.assertIn("Resolve latest successful production SHA", workflow)
+        self.assertIn("actions/github-script@v8", workflow)
+        self.assertIn("cloud-image.yml", workflow)
+        self.assertIn("branch: 'develop'", workflow)
+        self.assertIn("status: 'success'", workflow)
+        self.assertIn("infra/azure/verify_deployment.py", workflow)
         self.assertIn(
             "extension.use_dynamic_install=yes_without_prompt", workflow
+        )
+        self.assertIn(
+            'data.get("build_sha") == sys.argv[2]', workflow
         )
         self.assertIn(
             'data.get("remote_access_verified") is True', workflow
@@ -66,6 +77,9 @@ class CloudOperationsWorkflowTests(unittest.TestCase):
         )
         for marker in required:
             self.assertIn(marker, deploy)
+        self.assertIn(
+            "if: github.ref == 'refs/heads/develop'", deploy
+        )
         self.assertLess(
             deploy.index("Require successful full source integrity"),
             deploy.index("Build and publish immutable image"),
