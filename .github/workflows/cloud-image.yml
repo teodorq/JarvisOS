@@ -122,6 +122,7 @@ jobs:
     name: Deploy immutable image to Azure
     needs: test-and-publish
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
       id-token: write
@@ -135,6 +136,49 @@ jobs:
           client-id: 553e8a79-9004-49d5-b996-bc8f3768ffce
           tenant-id: 1f218598-c698-404f-908f-025fe1b55870
           subscription-id: c7cac745-0964-425d-97b4-61d19e4cef65
+
+      - name: Capture previous healthy revision
+        id: previous
+        shell: bash
+        run: |
+          az config set extension.use_dynamic_install=yes_without_prompt
+          previous_image="$(az containerapp show \
+            --name jarvis-os-planner \
+            --resource-group rg-jarvis-os-cloud \
+            --query properties.template.containers[0].image \
+            --output tsv)"
+          previous_sha="$(az containerapp show \
+            --name jarvis-os-planner \
+            --resource-group rg-jarvis-os-cloud \
+            --query "properties.template.containers[0].env[?name=='JARVIS_OS_BUILD_SHA'].value | [0]" \
+            --output tsv)"
+          fqdn="$(az containerapp show \
+            --name jarvis-os-planner \
+            --resource-group rg-jarvis-os-cloud \
+            --query properties.configuration.ingress.fqdn \
+            --output tsv)"
+          if [[ ! "${previous_sha}" =~ ^[a-f0-9]{40}$ ]]; then
+            echo "The current production build SHA is not immutable."
+            exit 1
+          fi
+          if [[ "${previous_image}" != ghcr.io/*/jarvis-os-cloud:sha-"${previous_sha}" ]]; then
+            echo "The current production image does not match its build SHA."
+            exit 1
+          fi
+          for attempt in $(seq 1 12); do
+            response="$(curl --fail --silent --show-error --max-time 20 \
+              "https://${fqdn}/health" || true)"
+            if python -c 'import json,sys; data=json.loads(sys.argv[1]); valid=data.get("status") == "ok" and data.get("service") == "jarvis-os-cloud-planner" and data.get("build_sha") == sys.argv[2] and data.get("remote_access_verified") is True; raise SystemExit(0 if valid else 1)' "${response}" "${previous_sha}"; then
+              echo "Current production revision ${previous_sha} is a healthy rollback target."
+              echo "image=${previous_image}" >> "${GITHUB_OUTPUT}"
+              echo "sha=${previous_sha}" >> "${GITHUB_OUTPUT}"
+              exit 0
+            fi
+            echo "Rollback target check ${attempt}/12 is not ready yet."
+            sleep 5
+          done
+          echo "Deployment stopped because the existing production revision is not healthy."
+          exit 1
 
       - name: Deploy the verified image
         shell: bash
@@ -268,3 +312,46 @@ jobs:
               exit 1
               ;;
           esac
+
+      - name: Restore previous healthy image after failure
+        if: ${{ failure() && steps.previous.outputs.image != '' }}
+        shell: bash
+        env:
+          PREVIOUS_IMAGE: ${{ steps.previous.outputs.image }}
+          PREVIOUS_SHA: ${{ steps.previous.outputs.sha }}
+        run: |
+          echo "Deployment failed; restoring the previous healthy immutable image."
+          for attempt in $(seq 1 5); do
+            if az containerapp update \
+              --name jarvis-os-planner \
+              --resource-group rg-jarvis-os-cloud \
+              --image "${PREVIOUS_IMAGE}" \
+              --set-env-vars "JARVIS_OS_BUILD_SHA=${PREVIOUS_SHA}" \
+              --only-show-errors \
+              --output none; then
+              break
+            fi
+            if [ "${attempt}" -eq 5 ]; then
+              echo "Automatic rollback could not restore the previous image."
+              exit 1
+            fi
+            echo "Rollback update ${attempt}/5 failed; retrying after 15 seconds."
+            sleep 15
+          done
+          fqdn="$(az containerapp show \
+            --name jarvis-os-planner \
+            --resource-group rg-jarvis-os-cloud \
+            --query properties.configuration.ingress.fqdn \
+            --output tsv)"
+          for attempt in $(seq 1 12); do
+            response="$(curl --fail --silent --show-error --max-time 20 \
+              "https://${fqdn}/health" || true)"
+            if python -c 'import json,sys; data=json.loads(sys.argv[1]); valid=data.get("status") == "ok" and data.get("service") == "jarvis-os-cloud-planner" and data.get("build_sha") == sys.argv[2] and data.get("remote_access_verified") is True; raise SystemExit(0 if valid else 1)' "${response}" "${PREVIOUS_SHA}"; then
+              echo "Automatic rollback restored healthy revision ${PREVIOUS_SHA}."
+              exit 0
+            fi
+            echo "Rollback verification ${attempt}/12 is not ready yet."
+            sleep 5
+          done
+          echo "Automatic rollback did not become healthy."
+          exit 1

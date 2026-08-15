@@ -127,6 +127,14 @@ already published. It restores that exact image and accepts success only after
 the same health and public-route checks pass. Deployment and rollback share one
 production lock, so they cannot modify the Container App concurrently.
 
+Before an automatic deployment changes production, it records the current
+immutable image only after that revision passes the health and managed-identity
+Storage checks. If the Azure update, declared-configuration verification,
+revision health check, or public-route smoke test then fails, the workflow
+automatically reapplies that previous healthy image and verifies its exact SHA.
+The workflow remains failed after a successful automatic rollback so the
+incident is visible, while production is returned to the known-good version.
+
 ## Local Azure guardrail audit
 
 The live authentication and budget documents stay on the owner's computer.

@@ -71,3 +71,31 @@ class CloudOperationsWorkflowTests(unittest.TestCase):
             deploy.index("Build and publish immutable image"),
         )
         self.assertIn("- .dockerignore", source)
+
+    def test_failed_deploy_restores_previous_healthy_image(self) -> None:
+        deploy = Path(".github/workflows/cloud-image.yml").read_text(
+            encoding="utf-8"
+        )
+        required = (
+            "Capture previous healthy revision",
+            "id: previous",
+            "Current production revision ${previous_sha} is a healthy",
+            "Restore previous healthy image after failure",
+            "failure() && steps.previous.outputs.image != ''",
+            "PREVIOUS_IMAGE: ${{ steps.previous.outputs.image }}",
+            "PREVIOUS_SHA: ${{ steps.previous.outputs.sha }}",
+            '--image "${PREVIOUS_IMAGE}"',
+            '"JARVIS_OS_BUILD_SHA=${PREVIOUS_SHA}"',
+            'data.get("build_sha") == sys.argv[2]',
+        )
+        for marker in required:
+            self.assertIn(marker, deploy)
+        self.assertLess(
+            deploy.index("Capture previous healthy revision"),
+            deploy.index("Deploy the verified image"),
+        )
+        self.assertGreater(
+            deploy.index("Restore previous healthy image after failure"),
+            deploy.index("Smoke-test public routes"),
+        )
+        self.assertNotIn(":latest", deploy)
