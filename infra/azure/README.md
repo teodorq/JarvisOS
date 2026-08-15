@@ -139,6 +139,13 @@ automatically reapplies that previous healthy image and verifies its exact SHA.
 The workflow remains failed after a successful automatic rollback so the
 incident is visible, while production is returned to the known-good version.
 
+All external GitHub Actions used by source validation, image publication,
+monitoring, deployment, and rollback are pinned to exact 40-character commits.
+The adjacent version comments remain human-readable, while Dependabot checks
+weekly for reviewed updates. A source-integrity test rejects any newly added
+external action that uses a movable tag or branch instead of an immutable
+commit.
+
 ## Local Azure guardrail audit
 
 The live authentication and budget documents stay on the owner's computer.

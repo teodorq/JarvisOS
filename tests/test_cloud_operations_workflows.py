@@ -13,7 +13,7 @@ class CloudOperationsWorkflowTests(unittest.TestCase):
         self.assertIn("actions: read", workflow)
         self.assertIn("jarvis-os-cloud-production", workflow)
         self.assertIn("Resolve latest successful production SHA", workflow)
-        self.assertIn("actions/github-script@v8", workflow)
+        self.assertIn("actions/github-script@", workflow)
         self.assertIn("cloud-image.yml", workflow)
         self.assertIn("branch: 'develop'", workflow)
         self.assertIn("status: 'success'", workflow)
@@ -69,7 +69,7 @@ class CloudOperationsWorkflowTests(unittest.TestCase):
         required = (
             "actions: read",
             "Require successful full source integrity",
-            "actions/github-script@v8",
+            "actions/github-script@",
             "source-integrity.yml",
             "item.head_sha === targetSha",
             "run.conclusion !== 'success'",
