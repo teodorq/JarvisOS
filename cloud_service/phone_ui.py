@@ -18,7 +18,7 @@ PHONE_MANIFEST = r'''{
 PHONE_ICON = r'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="108" fill="#020b13"/><circle cx="256" cy="256" r="182" fill="none" stroke="#31cce9" stroke-width="18"/><path d="M164 352 227 156h58l63 196h-48l-13-45h-65l-13 45zm70-86h41l-20-70z" fill="#dff7ff"/><circle cx="256" cy="256" r="222" fill="none" stroke="#0e6281" stroke-width="8" stroke-dasharray="12 24"/></svg>'''
 
 PHONE_SERVICE_WORKER = r'''"use strict";
-const CACHE="jarvis-os-phone-v3",OFFLINE="/phone-offline";
+const CACHE="jarvis-os-phone-v4",OFFLINE="/phone-offline";
 self.addEventListener("install",event=>{event.waitUntil(caches.open(CACHE).then(cache=>cache.add(OFFLINE)));self.skipWaiting()});
 self.addEventListener("activate",event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key!==CACHE).map(key=>caches.delete(key)))).then(()=>self.clients.claim())));
 self.addEventListener("fetch",event=>{const url=new URL(event.request.url);if(event.request.mode==="navigate"&&url.origin===location.origin&&url.pathname==="/phone"){event.respondWith(fetch(event.request).catch(()=>caches.match(OFFLINE)))}});
@@ -38,6 +38,52 @@ PHONE_START_PAGE = r'''<!doctype html>
 
 PHONE_LOGOUT_PAGE = r'''<!doctype html>
 <html lang="pl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#03121f"><title>JARVIS OS &mdash; wylogowanie</title><style>:root{color-scheme:dark;font-family:Inter,Segoe UI,sans-serif}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:20px;background:#020b13;color:#dff7ff}main{width:min(520px,100%);border:1px solid #8a3443;border-radius:20px;padding:26px;background:#160b11;text-align:center}p{color:#c9aab1;line-height:1.55}a{display:block;margin:13px 0;border:1px solid #9f4b5a;border-radius:12px;padding:14px;color:#fff;background:#551d29;text-decoration:none;font-weight:700}.secondary{border-color:#176d88;background:#082739}</style></head><body data-page="mobile-logout-v1"><main><h1>Wylogowanie JARVIS OS</h1><p>Azure wyloguje sesj&#281; dopiero po naci&#347;ni&#281;ciu poni&#380;szego przycisku. Strona niczego nie uruchamia automatycznie i nie u&#380;ywa ukrytego zapytania.</p><a target="_top" href="/.auth/logout?post_logout_redirect_uri=%2Fmobile-start">WYLOGUJ SESJ&#280; MICROSOFT</a><a class="secondary" href="/mobile-start">ANULUJ I WR&Oacute;&#262;</a></main></body></html>'''
+
+
+def phone_login_complete_page(
+    *,
+    identity_present: bool,
+    provider_valid: bool,
+    owner_authorized: bool,
+    request_id: str,
+) -> str:
+    if owner_authorized:
+        state_class = "ok"
+        heading = "SESJA GOTOWA"
+        message = (
+            "Microsoft potwierdzi&#322; konto w&#322;a&#347;ciciela. "
+            "Panel otworzy si&#281; dopiero po dotkni&#281;ciu przycisku."
+        )
+        primary = '<a class="button" href="/phone">OTW&Oacute;RZ JARVIS OS</a>'
+    elif identity_present:
+        state_class = "bad"
+        heading = "KONTO ODRZUCONE"
+        message = (
+            "Sesja dotar&#322;a do aplikacji, ale konto lub dostawca nie "
+            "spe&#322;nia regu&#322; w&#322;a&#347;ciciela."
+        )
+        primary = (
+            '<a class="button danger" href="/mobile-logout">'
+            "WYLOGUJ I ZMIE&#323; KONTO</a>"
+        )
+    else:
+        state_class = "warn"
+        heading = "SESJA NIEZAKO&#323;CZONA"
+        message = (
+            "Azure nie przekaza&#322; jeszcze sesji do aplikacji. "
+            "Wr&oacute;&#263; do bezpiecznego startu i wykonaj logowanie "
+            "w pe&#322;nym Safari."
+        )
+        primary = (
+            '<a class="button" href="/mobile-start">'
+            "WR&Oacute;&#262; DO BEZPIECZNEGO STARTU</a>"
+        )
+    provider_state = "OK" if provider_valid else "BRAK"
+    safe_request_id = escape(request_id)
+    return f'''<!doctype html>
+<html lang="pl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#03121f"><title>JARVIS OS &mdash; potwierdzenie sesji</title>
+<style>:root{{color-scheme:dark;font-family:Inter,Segoe UI,sans-serif}}*{{box-sizing:border-box}}body{{margin:0;min-height:100vh;display:grid;place-items:center;padding:20px;color:#dff7ff;background:#020b13}}main{{width:min(560px,100%);background:#03131f;border:1px solid #176d88;border-radius:22px;padding:26px;text-align:center}}.state{{margin:18px 0;border:1px solid currentColor;border-radius:12px;padding:13px;font-weight:800;letter-spacing:.08em}}.ok{{color:#67f7c7}}.warn{{color:#ffd77a}}.bad{{color:#ff8c9d}}p{{color:#a5c8d3;line-height:1.55}}.button{{display:block;margin:13px 0;border:1px solid #31cce9;border-radius:12px;padding:14px;color:#fff;background:#0b4866;text-decoration:none;font-weight:700}}.danger{{border-color:#9f4b5a;background:#551d29}}.secondary{{background:#082739}}code{{color:#83d5ed;overflow-wrap:anywhere}}</style></head>
+<body data-page="mobile-complete-v1"><main><h1>JARVIS OS</h1><div class="state {state_class}">{heading}</div><p>{message}</p>{primary}<a class="button secondary" href="/mobile-diagnostics">SPRAWD&#377; DIAGNOSTYK&#280;</a><p>Dostawca Entra: <strong>{provider_state}</strong><br>Identyfikator sprawdzenia: <code>{safe_request_id}</code></p><p>Ten ekran nie u&#380;ywa JavaScript, nie przekierowuje automatycznie i nie ujawnia identyfikatora konta.</p></main></body></html>'''
 
 
 def phone_diagnostics_page(

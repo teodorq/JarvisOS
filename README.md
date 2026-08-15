@@ -12,6 +12,7 @@ User memory, command history, Google tokens, voice models, logs, generated backu
 - Python 3.13 (the checkpoint was verified with Python 3.13.7)
 - A microphone is optional
 - Azure and Google integrations are optional
+- Cartesia and ElevenLabs text-to-speech are optional
 
 ## Fresh installation
 
@@ -52,6 +53,19 @@ Copy `config/cloud.env.example` to `config/cloud.env` and provide:
 
 The desktop validates every cloud plan. Windows actions, confirmations and private memory remain local, and the local planner is used automatically if Azure is unavailable.
 
+## Optional Cartesia or ElevenLabs voice
+
+The existing local voice remains the default and needs no external account.
+To opt in to a cloud voice, copy `config/voice.env.example` to the ignored
+`config/voice.env` file and configure exactly one provider, its API key and a
+voice ID. Use `JARVIS_OS_VOICE_PROVIDER=CARTESIA` or
+`JARVIS_OS_VOICE_PROVIDER=ELEVENLABS`. API keys are never committed or shown in
+voice status. Spoken text is sent to the selected provider only while it is
+explicitly enabled. If credentials are absent, the request fails, the provider
+times out or returns invalid audio, JARVIS OS repeats the same response using a
+local Windows voice. Cloud audio is cached only under the ignored local
+`runtime/voice_output/cloud_cache` directory.
+
 The Azure deployment also exposes a private, installable `/phone` app. Access
 uses the owner's Microsoft account and a fixed 60-minute Azure session instead
 of a pairing code. Signing out invalidates the current session; the Microsoft
@@ -71,6 +85,10 @@ Worker and never redirects or signs out automatically. `/mobile-logout` exposes
 an explicit Azure sign-out button, while `/mobile-diagnostics` shows only safe
 connection checks and a request identifier that can be matched with server
 logs. It never displays the owner's account identifier.
+Microsoft returns an authorization code through the callback query instead of
+a fragment that depends on callback JavaScript. Successful login stops at the
+script-free `/mobile-complete` page so the owner can verify the session before
+opening the panel with a normal tap.
 
 ## Optional Windows autostart
 

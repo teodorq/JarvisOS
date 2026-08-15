@@ -150,6 +150,13 @@ def _auth() -> dict:
         },
         "identityProviders": {
             "azureActiveDirectory": {
+                "login": {
+                    "loginParameters": [
+                        "response_type=code",
+                        "response_mode=query",
+                        "scope=openid profile email",
+                    ]
+                },
                 "registration": {
                     "clientId": CLIENT,
                     "clientSecretSettingName": "phone-entra-client-secret",
@@ -239,6 +246,19 @@ class CloudInfrastructureTests(unittest.TestCase):
             _verify(_app(), missing_route),
         )
 
+        fragment_flow = _auth()
+        fragment_flow["identityProviders"]["azureActiveDirectory"]["login"][
+            "loginParameters"
+        ] = [
+            "response_type=code id_token",
+            "response_mode=fragment",
+            "scope=openid profile email",
+        ]
+        self.assertIn(
+            "Entra authorization-code login parameters drift",
+            _verify(_app(), fragment_flow),
+        )
+
     def test_workflow_compiles_bicep_and_checks_live_configuration(self) -> None:
         workflow = Path(".github/workflows/cloud-image.yml").read_text(
             encoding="utf-8"
@@ -278,6 +298,8 @@ class CloudInfrastructureTests(unittest.TestCase):
             "974c5e8b-45b9-4653-ba55-5f855dd0fb88",
             main_bicep,
         )
+        self.assertIn("'response_type=code'", main_bicep)
+        self.assertIn("'response_mode=query'", main_bicep)
 
     def test_drift_checks_do_not_embed_live_owner_identifiers(self) -> None:
         live_owner = "-".join(

@@ -71,3 +71,26 @@ class CloudEnvironmentLoaderTests(unittest.TestCase):
                 self.assertEqual(load_cloud_environment(root), ())
                 self.assertNotIn("JARVIS_CLOUD_URL", os.environ)
                 self.assertNotIn("JARVIS_REMOTE_DEVICE_ID", os.environ)
+
+    def test_loads_only_allowlisted_external_integration_settings(self) -> None:
+        with tempfile.TemporaryDirectory() as root:
+            self._write(
+                root,
+                "JARVIS_OS_REVENUECAT_MCP_ENABLED=false\n"
+                "JARVIS_OS_META_ADS_MCP_ALLOWED_HOSTS=reviewed.example\n"
+                "JARVIS_OS_CLAUDE_MODEL=claude-sonnet-4-6\n"
+                "ANTHROPIC_API_KEY=local-secret\n"
+                "JARVIS_OS_UNKNOWN_CONNECTOR_TOKEN=must-not-load\n",
+            )
+            with patch.dict(os.environ, {}, clear=True):
+                loaded = load_cloud_environment(root)
+                self.assertEqual(
+                    loaded,
+                    (
+                        "JARVIS_OS_REVENUECAT_MCP_ENABLED",
+                        "JARVIS_OS_META_ADS_MCP_ALLOWED_HOSTS",
+                        "JARVIS_OS_CLAUDE_MODEL",
+                        "ANTHROPIC_API_KEY",
+                    ),
+                )
+                self.assertNotIn("JARVIS_OS_UNKNOWN_CONNECTOR_TOKEN", os.environ)

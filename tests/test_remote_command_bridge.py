@@ -218,6 +218,9 @@ class RemoteCommandBridgeTests(unittest.TestCase):
                 response.headers["Service-Worker-Allowed"], "/phone"
             )
         self.assertIn("phone-offline", service_worker)
+        self.assertNotIn("/.auth/", service_worker)
+        self.assertNotIn("/mobile-start", service_worker)
+        self.assertNotIn("/mobile-complete", service_worker)
         with urllib.request.urlopen(
             self.base_url + "/mobile-start", timeout=2
         ) as response:
@@ -235,6 +238,14 @@ class RemoteCommandBridgeTests(unittest.TestCase):
         self.assertIn('data-page="mobile-start-v3"', recovery)
         self.assertIn("Otw&oacute;rz w Safari", recovery)
         self.assertIn("/.auth/login/aad", recovery)
+        self.assertIn(
+            "post_login_redirect_uri=%2Fmobile-complete",
+            recovery,
+        )
+        self.assertNotIn(
+            "post_login_redirect_uri=%2Fphone",
+            recovery,
+        )
         self.assertIn("/mobile-diagnostics", recovery)
         self.assertIn("/mobile-logout", recovery)
         self.assertNotIn("<script", recovery)
@@ -255,6 +266,34 @@ class RemoteCommandBridgeTests(unittest.TestCase):
         )
         self.assertNotIn("<script", logout_page)
         self.assertNotIn("fetch(", logout_page)
+
+    def test_mobile_login_completion_is_static_and_requires_a_tap(self) -> None:
+        with urllib.request.urlopen(
+            self.base_url + "/mobile-complete", timeout=2
+        ) as response:
+            page = response.read().decode("utf-8")
+            trace_id = response.headers["X-JARVIS-REQUEST-ID"]
+            self.assertEqual(
+                response.headers["Content-Disposition"], "inline"
+            )
+            self.assertIn(
+                "script-src 'none'",
+                response.headers["Content-Security-Policy"],
+            )
+            self.assertEqual(
+                response.headers["Referrer-Policy"], "no-referrer"
+            )
+        self.assertIn('data-page="mobile-complete-v1"', page)
+        self.assertIn("SESJA NIEZAKO&#323;CZONA", page)
+        self.assertIn("/mobile-start", page)
+        self.assertIn("/mobile-diagnostics", page)
+        self.assertIn(trace_id, page)
+        self.assertNotIn("<script", page)
+        self.assertNotIn("fetch(", page)
+        self.assertNotIn("location.", page)
+        self.assertNotIn("http-equiv", page)
+        self.assertNotIn(self.desktop_token, page)
+        self.assertNotIn(self.phone_token, page)
 
     def test_mobile_diagnostics_is_static_correlated_and_private(self) -> None:
         with urllib.request.urlopen(
@@ -539,6 +578,10 @@ class RemoteCommandBridgeTests(unittest.TestCase):
             ) as response:
                 login_page = response.read().decode("utf-8")
             self.assertIn("ZALOGUJ PRZEZ MICROSOFT", login_page)
+            self.assertIn(
+                "post_login_redirect_uri=%2Fmobile-complete",
+                login_page,
+            )
 
             request = urllib.request.Request(
                 base_url + "/phone", headers=owner_headers
@@ -547,6 +590,17 @@ class RemoteCommandBridgeTests(unittest.TestCase):
                 page = response.read().decode("utf-8")
             self.assertIn("SESJA AKTYWNA", page)
             self.assertIn("/mobile-logout", page)
+
+            request = urllib.request.Request(
+                base_url + "/mobile-complete", headers=owner_headers
+            )
+            with urllib.request.urlopen(request, timeout=2) as response:
+                completed_login = response.read().decode("utf-8")
+            self.assertIn("SESJA GOTOWA", completed_login)
+            self.assertIn('href="/phone"', completed_login)
+            self.assertNotIn(owner, completed_login)
+            self.assertNotIn("Kacper Zakrzewski", completed_login)
+            self.assertNotIn("<script", completed_login)
 
             request = urllib.request.Request(
                 base_url + "/mobile-diagnostics", headers=owner_headers

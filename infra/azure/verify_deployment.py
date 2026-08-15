@@ -321,6 +321,19 @@ def verify_deployment(
     aad = auth_properties.get("identityProviders", {}).get(
         "azureActiveDirectory", {}
     )
+    login_parameters = (aad.get("login") or {}).get("loginParameters")
+    _require(
+        errors,
+        isinstance(login_parameters, list)
+        and len(login_parameters) == 3
+        and set(login_parameters)
+        == {
+            "response_type=code",
+            "response_mode=query",
+            "scope=openid profile email",
+        },
+        "Entra authorization-code login parameters drift",
+    )
     registration = aad.get("registration") or {}
     client_id = str(registration.get("clientId", "")).lower()
     _require(

@@ -83,6 +83,14 @@ results. The desktop must remain running to receive commands. The phone cannot
 approve actions: anything protected by the normal confirmation policy still
 waits for local confirmation on the computer.
 
+The Entra sign-in uses the confidential authorization-code flow and returns
+the code in the callback query, not a browser fragment. This avoids the
+JavaScript fragment-completion page that embedded iOS browsers can download or
+leave blank. After sign-in, `/mobile-complete` shows whether EasyAuth delivered
+the owner session and waits for an explicit tap before opening `/phone`.
+`/mobile-start`, `/mobile-complete`, and `/mobile-logout` are script-free,
+outside the phone Service Worker, and never redirect or sign out automatically.
+
 Each phone submission carries a random idempotency key. A retry with the same
 device, command, and key returns the existing 24-hour record and does not send
 a second Azure Queue message. Reusing the key for different content is rejected

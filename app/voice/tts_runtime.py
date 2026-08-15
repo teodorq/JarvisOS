@@ -28,6 +28,17 @@ def _default_engine_factory(
         return pyttsx3.init()
     if selected == "PYTTSX3":
         return pyttsx3.init()
+    try:
+        from app.voice.cloud_voice_engine import (
+            CloudVoiceEngine,
+            requested_cloud_provider,
+        )
+
+        provider = requested_cloud_provider(selected)
+        if provider and CloudVoiceEngine.is_available(provider):
+            return CloudVoiceEngine.from_environment(provider)
+    except Exception:
+        pass
     if neural_enabled:
         try:
             from app.voice.neural_engine import LocalNeuralVoiceEngine
@@ -295,10 +306,15 @@ class SerializedTTS:
         try:
             from app.voice.onecore_engine import WindowsOneCoreEngine
 
-            if not WindowsOneCoreEngine.is_available():
-                return None
+            if WindowsOneCoreEngine.is_available():
+                return self._configure_engine(
+                    WindowsOneCoreEngine(), preserve_system_default=False
+                )
+        except Exception as error:
+            self._report_error(error)
+        try:
             return self._configure_engine(
-                WindowsOneCoreEngine(), preserve_system_default=False
+                pyttsx3.init(), preserve_system_default=False
             )
         except Exception as error:
             self._report_error(error)

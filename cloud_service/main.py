@@ -32,6 +32,7 @@ from cloud_service.phone_ui import (
     PHONE_SERVICE_WORKER,
     PHONE_START_PAGE,
     phone_diagnostics_page,
+    phone_login_complete_page,
 )
 from cloud_service.remote_store import (
     RemoteCommandStore,
@@ -44,7 +45,7 @@ from cloud_service.remote_store import (
 
 
 SERVICE_NAME = "jarvis-os-cloud-planner"
-SERVICE_VERSION = "0.9.2"
+SERVICE_VERSION = "0.9.3"
 MAX_BODY_BYTES = 16_384
 
 
@@ -195,10 +196,17 @@ class JarvisOSCloudHandler(BaseHTTPRequestHandler):
             self._html(PHONE_OFFLINE_PAGE, allow_script=True)
             return
         if parsed.path in {"/phone-recover", "/mobile-start"}:
-            self._html(PHONE_START_PAGE)
+            self._html(
+                PHONE_START_PAGE.replace(
+                    "%2Fphone", "%2Fmobile-complete"
+                )
+            )
             return
         if parsed.path == "/mobile-logout":
             self._html(PHONE_LOGOUT_PAGE)
+            return
+        if parsed.path == "/mobile-complete":
+            self._handle_phone_login_complete()
             return
         if parsed.path == "/mobile-diagnostics":
             self._handle_phone_diagnostics()
@@ -518,7 +526,11 @@ class JarvisOSCloudHandler(BaseHTTPRequestHandler):
             "X-MS-CLIENT-PRINCIPAL-ID", ""
         ).strip()
         if not principal_id:
-            self._html(PHONE_LOGIN_PAGE)
+            self._html(
+                PHONE_LOGIN_PAGE.replace(
+                    "%2Fphone", "%2Fmobile-complete"
+                )
+            )
             return
         if not self._phone_identity_authorized():
             self._html(
@@ -535,6 +547,20 @@ class JarvisOSCloudHandler(BaseHTTPRequestHandler):
             ),
             allow_script=True,
         )
+
+    def _handle_phone_login_complete(self) -> None:
+        principal_id = self.headers.get(
+            "X-MS-CLIENT-PRINCIPAL-ID", ""
+        ).strip()
+        provider = self.headers.get(
+            "X-MS-CLIENT-PRINCIPAL-IDP", ""
+        ).strip().lower()
+        self._html(phone_login_complete_page(
+            identity_present=bool(principal_id),
+            provider_valid=provider == "aad",
+            owner_authorized=self._phone_identity_authorized(),
+            request_id=self._trace_id(),
+        ))
 
     def _handle_phone_diagnostics(self) -> None:
         principal_id = self.headers.get(

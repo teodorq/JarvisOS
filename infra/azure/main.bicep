@@ -267,6 +267,13 @@ resource phoneAuth 'Microsoft.App/containerApps/authConfigs@2025-01-01' = {
       azureActiveDirectory: {
         enabled: true
         isAutoProvisioned: false
+        login: {
+          loginParameters: [
+            'response_type=code'
+            'response_mode=query'
+            'scope=openid profile email'
+          ]
+        }
         registration: {
           clientId: phoneEntraClientId
           clientSecretSettingName: 'phone-entra-client-secret'
