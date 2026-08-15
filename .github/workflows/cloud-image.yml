@@ -19,6 +19,8 @@ on:
 
 permissions:
   actions: read
+  artifact-metadata: write
+  attestations: write
   contents: read
   packages: write
   id-token: write
@@ -108,6 +110,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and publish immutable image
+        id: publish
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
@@ -118,6 +121,13 @@ jobs:
           labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Attest published image provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ghcr.io/${{ github.repository_owner }}/jarvis-os-cloud
+          subject-digest: ${{ steps.publish.outputs.digest }}
+          push-to-registry: true
 
   deploy:
     name: Deploy immutable image to Azure

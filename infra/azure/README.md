@@ -146,6 +146,12 @@ weekly for reviewed updates. A source-integrity test rejects any newly added
 external action that uses a movable tag or branch instead of an immutable
 commit.
 
+Every published container image also receives a signed SLSA provenance
+attestation before deployment can begin. GitHub signs it through Sigstore,
+stores the attestation with the public repository, and attaches it to the exact
+GHCR image digest. This provides an independently verifiable link between the
+container, this repository, and the workflow that built it.
+
 ## Local Azure guardrail audit
 
 The live authentication and budget documents stay on the owner's computer.

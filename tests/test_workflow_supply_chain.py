@@ -36,6 +36,32 @@ class WorkflowSupplyChainTests(unittest.TestCase):
         self.assertIn("interval: weekly", config)
         self.assertIn("verified-github-actions", config)
 
+    def test_published_cloud_image_has_signed_provenance(self) -> None:
+        workflow = Path(".github/workflows/cloud-image.yml").read_text(
+            encoding="utf-8"
+        )
+        required = (
+            "artifact-metadata: write",
+            "attestations: write",
+            "id: publish",
+            "Attest published image provenance",
+            "actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6",
+            "subject-name: ghcr.io/${{ github.repository_owner }}"
+            "/jarvis-os-cloud",
+            "subject-digest: ${{ steps.publish.outputs.digest }}",
+            "push-to-registry: true",
+        )
+        for marker in required:
+            self.assertIn(marker, workflow)
+        self.assertLess(
+            workflow.index("Build and publish immutable image"),
+            workflow.index("Attest published image provenance"),
+        )
+        self.assertLess(
+            workflow.index("Attest published image provenance"),
+            workflow.index("Deploy immutable image to Azure"),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
