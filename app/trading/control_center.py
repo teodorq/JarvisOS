@@ -9,6 +9,7 @@ from app.market_data.forex_environment import ForexDataSettings
 from app.trading.backtest import HistoricalPaperBacktester
 from app.trading.forex_coordinator import ForexPaperCoordinator
 from app.trading.forex_models import MAJOR_FOREX_PAIRS
+from app.trading.forex_observation import ForexObservationJournal
 from app.trading.forex_risk import ForexPaperPolicy
 from app.trading.forex_scanner import ForexMarketScanner
 from app.trading.paper_broker import PaperTradingEngine
@@ -28,10 +29,12 @@ class TradingControlCenter:
         self.forex_scanner = ForexMarketScanner()
         self.forex = ForexPaperCoordinator(self.forex_policy)
         self.forex_data = ForexDataSettings.from_environment()
+        self.forex_observations = ForexObservationJournal(project_root)
 
     def status(self) -> dict[str, Any]:
         account = self.engine.status()
         data_readiness = self.forex_data.readiness()
+        observations = self.forex_observations.summary()
         return {
             "status": "PAPER_FOUNDATION_READY",
             "mode": "PAPER_ONLY",
@@ -50,6 +53,7 @@ class TradingControlCenter:
                 "forex_read_only_data_adapters": True,
                 "forex_cross_source_gate": True,
                 "forex_event_risk_gate": True,
+                "forex_tamper_evident_observation": observations["audit_chain_valid"],
                 "kill_switch": True,
                 "forex_data_configuration_complete": data_readiness["complete"],
                 "external_market_data": False,
@@ -68,6 +72,7 @@ class TradingControlCenter:
                 "opening_gate_ready": False,
                 "data_configuration_complete": data_readiness["complete"],
                 "data_configuration": data_readiness,
+                "observation": observations,
             },
             "account": account,
             "limits": self.policy.status(),

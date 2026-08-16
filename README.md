@@ -64,6 +64,16 @@ weekly Forex Factory export supplies the economic calendar. Configuration is
 absent by default, so the opening gate remains closed. No broker order route or
 continuous background feed is exposed.
 
+Before PAPER execution is enabled, use the observation-only cycle. It reads all
+configured sources, calculates the same assessment and proposed plan, then stops
+before the execution boundary. Evidence is kept in the ignored, tamper-evident
+`data/trading/forex_observations.json` journal and never promotes itself:
+
+```powershell
+.\.venv\Scripts\python.exe .\tools\run_forex_observation.py
+.\.venv\Scripts\python.exe .\tools\run_forex_observation.py --status
+```
+
 ## Optional Forex PAPER data
 
 For OANDA TMS in Poland, install its Windows MetaTrader 5, sign the terminal in
