@@ -100,12 +100,40 @@ Powtórzenie identycznego identyfikatora cyklu nie tworzy drugiej pozycji.
 Kill switch blokuje nowe wejścia, ale nie usuwa możliwości bezpiecznego
 zamknięcia istniejącej pozycji. Sygnały LONG i SHORT są wyłącznie symulowane.
 
-Autopilot nie działa jeszcze w tle, ponieważ nie podłączono bieżących źródeł
-cen, kalendarza gospodarczego ani rachunku demonstracyjnego. Brak któregokolwiek
-z obowiązkowych źródeł kończy cykl bez otwarcia. Spot Forex nie ma jednego
-centralnego wolumenu całego rynku, dlatego tick volume nie może być jedyną
-podstawą decyzji.
+Warstwa danych tylko do odczytu jest przygotowana, lecz domyślnie wyłączona.
+Obejmuje cztery rozdzielone role:
 
-Przyszły adapter brokera musi korzystać wyłącznie z wydzielonego środowiska
-demonstracyjnego. Przykładem takiego rozdzielenia jest oficjalnie opisane
-środowisko `practice` w [OANDA REST-V20](https://developer.oanda.com/rest-live-v20/introduction/).
+- OANDA REST-V20 `practice` — główne kwotowania i zamknięte świece M15;
+- Twelve Data — niezależny kurs średni do wykrywania rozbieżności;
+- NBP Web API — publiczny dzienny kurs referencyjny USD/PLN;
+- FMP Stable Economic Calendar — zaplanowane wydarzenia gospodarcze.
+
+Każdy adres HTTPS i ścieżka są ustalone w kodzie. OANDA ma wyłącznie host
+`api-fxpractice.oanda.com`; nie istnieje host live ani ścieżka składania zleceń.
+Klucze są pobierane z ignorowanego `config/forex.env`, przekazywane w nagłówkach
+i ukryte w reprezentacji obiektów oraz statusie.
+
+Przed każdym wejściem bramka wymaga dwóch świeżych, zgodnych źródeł ceny.
+Rozbieżność większa niż 0,2%, brak jednej z siedmiu par, stary kalendarz,
+wydarzenie wysokiej ważności w oknie 30 minut, zamknięty rynek albo kurs NBP
+starszy niż cztery dni blokują nowe pozycje. Dane NBP są referencją księgową dla
+PAPER, a nie drugim źródłem ceny wykonania. Spot Forex nie ma jednego centralnego
+wolumenu całego rynku, dlatego tick volume pozostaje tylko jednym z filtrów.
+
+## Uruchomienie danych demonstracyjnych — kolejność
+
+1. Utworzyć osobny rachunek OANDA fxTrade Practice i token API. Dostępność
+   REST-V20 zależy od oddziału OANDA.
+2. Utworzyć bezpłatny klucz Twelve Data i sprawdzić limit bieżącego planu.
+3. Utworzyć klucz FMP oraz potwierdzić dostęp do `stable/economic-calendar`.
+4. Skopiować `config/forex.env.example` do lokalnego `config/forex.env`, wkleić
+   klucze i ustawić `JARVIS_OS_FOREX_DATA_ENABLED=true`.
+5. Wykonać serię cykli obserwacyjnych bez pozycji i sprawdzić świeżość,
+   rozbieżności, weekend oraz blokady wydarzeń.
+6. Dopiero po zielonej serii uruchomić autonomiczne pozycje PAPER. Rachunek
+   prawdziwy, dźwignia i zlecenia live pozostają poza zakresem.
+
+Dokumentacja źródeł: [OANDA REST-V20](https://developer.oanda.com/rest-live-v20/development-guide/),
+[Twelve Data](https://twelvedata.com/docs/currencies),
+[NBP Web API](https://api.nbp.pl/) i
+[FMP Economic Calendar](https://site.financialmodelingprep.com/developer/docs/stable/economics-calendar).

@@ -10,12 +10,14 @@ from PySide6.QtWidgets import QApplication, QSplashScreen
 from app.business.business_config import BusinessConfigStore
 from app.cloud.environment import load_cloud_environment
 from app.core.project_paths import resolve_project_root
+from app.market_data.forex_environment import load_forex_environment
 from app.voice.environment import load_voice_environment
 
 
 def main() -> int:
     project_root = resolve_project_root()
     load_cloud_environment(project_root)
+    load_forex_environment(project_root)
     load_voice_environment(project_root)
     from app.gui.main_window import MainWindow
 

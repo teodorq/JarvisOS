@@ -59,6 +59,7 @@ token*.json
 .env.*
 !.env.example
 config/cloud.env
+config/forex.env
 config/voice.env
 .azure/
 infra/azure/*.local.json

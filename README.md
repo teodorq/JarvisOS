@@ -55,9 +55,27 @@ investment advice.
 The Forex PAPER layer scans seven major currency pairs, ranks deterministic
 signals and applies portfolio-wide currency exposure limits. A local autonomous
 cycle can open or close simulated positions, recheck risk at execution time,
-persist an audit trail and reject duplicate cycles. It remains dormant until
-fresh prices, a second source, an economic calendar and PLN conversion data are
-provided; no broker or continuous background feed is connected.
+persist an audit trail and reject duplicate cycles. Reviewed GET-only adapters
+now prepare OANDA Practice quotes and M15 candles, Twelve Data cross-checks,
+the public NBP USD/PLN reference and the FMP economic calendar. Credentials are
+still absent by default, so the opening gate remains closed. No live OANDA host,
+broker order route or continuous background feed is exposed.
+
+## Optional Forex PAPER data
+
+Copy `config/forex.env.example` to the ignored `config/forex.env`. Enable it
+only after creating separate demonstration/data accounts and fill in:
+
+- an OANDA fxTrade Practice account ID and practice token;
+- a Twelve Data API key for the independent price check;
+- an FMP API key for the economic-event calendar.
+
+NBP needs no key. Secrets are sent in HTTPS headers, are excluded from status
+and object representations, and are never committed. A cycle requires all
+seven primary quotes, 31 completed M15 candles per pair, matching fresh prices
+from the second source, a fresh calendar and a sufficiently recent NBP
+reference. Missing, stale or divergent data blocks new positions. The adapter
+does not contain a method for placing broker orders.
 
 ## Optional Google Workspace integration
 

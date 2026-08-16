@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from app.market_data.forex_environment import ForexDataSettings
 from app.trading.backtest import HistoricalPaperBacktester
 from app.trading.forex_coordinator import ForexPaperCoordinator
 from app.trading.forex_models import MAJOR_FOREX_PAIRS
@@ -26,9 +27,11 @@ class TradingControlCenter:
         self.forex_policy = ForexPaperPolicy()
         self.forex_scanner = ForexMarketScanner()
         self.forex = ForexPaperCoordinator(self.forex_policy)
+        self.forex_data = ForexDataSettings.from_environment()
 
     def status(self) -> dict[str, Any]:
         account = self.engine.status()
+        data_readiness = self.forex_data.readiness()
         return {
             "status": "PAPER_FOUNDATION_READY",
             "mode": "PAPER_ONLY",
@@ -44,7 +47,11 @@ class TradingControlCenter:
                 "forex_paper_decision_coordinator": True,
                 "forex_local_paper_autopilot": True,
                 "forex_execution_risk_recheck": True,
+                "forex_read_only_data_adapters": True,
+                "forex_cross_source_gate": True,
+                "forex_event_risk_gate": True,
                 "kill_switch": True,
+                "forex_data_configuration_complete": data_readiness["complete"],
                 "external_market_data": False,
                 "external_economic_calendar": False,
                 "independent_second_price_source": False,
@@ -59,6 +66,8 @@ class TradingControlCenter:
                 "automatic_paper_execution": True,
                 "continuous_runtime_active": False,
                 "opening_gate_ready": False,
+                "data_configuration_complete": data_readiness["complete"],
+                "data_configuration": data_readiness,
             },
             "account": account,
             "limits": self.policy.status(),
@@ -74,6 +83,7 @@ class TradingControlCenter:
     def format_status(self) -> str:
         snapshot = self.status()
         account = snapshot["account"]
+        data = snapshot["forex"]["data_configuration"]
         kill_switch = (
             "AKTYWNY — nowe symulowane zlecenia są zatrzymane"
             if account["kill_switch_active"]
@@ -93,14 +103,16 @@ class TradingControlCenter:
             f"• Konto demo: {account['equity']} {account['base_currency']}; "
             f"pozycje: {account['position_count']}; wypełnienia: {account['fill_count']}.\n"
             f"• Audyt: {audit}; wyłącznik awaryjny: {kill_switch}.\n"
-            "• Dwa źródła cen, kalendarz gospodarczy, przelicznik PLN i broker "
-            "demo: jeszcze niepodłączone; automatyczne wejścia pozostają zablokowane "
-            "do czasu dostarczenia kompletu tych danych.\n"
+            "• Dane Forex: bezpieczne adaptery OANDA Practice, Twelve Data, NBP i "
+            "kalendarza FMP oraz kontrola rozbieżności są gotowe.\n"
+            f"• Konfiguracja źródeł: {'kompletna' if data['complete'] else 'oczekuje na lokalne klucze kont demonstracyjnych'}; "
+            "automatyczne wejścia pozostają zablokowane do chwili poprawnej kontroli "
+            "wszystkich źródeł w bieżącym cyklu.\n"
             "• Sygnały LONG/SHORT istnieją tylko w planie PAPER. Prawdziwe "
             "zlecenia, dźwignia, sieć i dostęp do "
             "pieniędzy: twardo zablokowane.\n"
-            "Następny etap: podłączyć wyłącznie dane do odczytu i kalendarz, "
-            "potem uruchomić wykonanie na rachunku demonstracyjnym."
+            "Następny etap: skonfigurować bezpłatne klucze danych, wykonać serię "
+            "cykli obserwacyjnych i dopiero potem połączyć rachunek demonstracyjny."
         )
 
 
