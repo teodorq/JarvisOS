@@ -8,12 +8,14 @@ from app.integrations.external_services import (
     PreparedExternalRequest,
     SafeMcpAdapter,
 )
+from app.integrations.status import IntegrationStatusService
 
 __all__ = [
     "ClaudeMessagesAdapter",
     "ExternalIntegrationError",
     "ExternalIntegrationRegistry",
     "IntegrationSettings",
+    "IntegrationStatusService",
     "PreparedExternalRequest",
     "SafeMcpAdapter",
 ]

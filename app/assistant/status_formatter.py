@@ -16,6 +16,7 @@ class AssistantStatusFormatter:
             "memory_status": "sprawdzenie pamięci projektów",
             "voice_status": "sprawdzenie głosu",
             "daily_status": "sprawdzenie planu i codziennej pracy",
+            "integration_status": "sprawdzenie integracji",
             "gmail_search": "wyszukiwanie wiadomości Gmail",
             "natural_action": "wykonanie ostatniego polecenia",
         }

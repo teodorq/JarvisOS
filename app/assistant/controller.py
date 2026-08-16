@@ -21,6 +21,7 @@ from app.assistant_v12.controller import AssistantV12Controller
 from app.assistant_v12.conversation_engine import NaturalConversationEngineV3
 from app.online_assistant.controller import OnlineAssistantController
 from app.natural_actions import NaturalActionService
+from app.integrations import IntegrationStatusService
 class PersonalAssistantController:
     """B96-B130 cohesive assistant runtime without bypassing safety gates."""
     STAGES = {
@@ -59,6 +60,7 @@ class PersonalAssistantController:
             self.project_root, reminders=self.productivity.reminders
         )
         self.natural_actions = NaturalActionService(self.project_root, online=self.online)
+        self.integrations = IntegrationStatusService()
     @staticmethod
     def matches(command: object) -> bool:
         text = fold_text(command)
@@ -89,6 +91,15 @@ class PersonalAssistantController:
             "status glosu",
             "glos 2.0",
             "voice 2.0",
+            "status integracji",
+            "pokaz integracje",
+            "jakie integracje",
+            "polaczenia zewnetrzne",
+            "status revenuecat",
+            "status meta ads",
+            "status claude",
+            "status cartesia",
+            "status elevenlabs",
             "tryb ciagly glosu",
             "centrum codziennej pracy",
             "status codziennej pracy",
@@ -191,6 +202,7 @@ class PersonalAssistantController:
             "voice_status",
             "desktop_status",
             "daily_status",
+            "integration_status",
             "clarification",
         }
         return {
@@ -290,6 +302,7 @@ class PersonalAssistantController:
             "assistant_v12": self.assistant_v12.status(),
             "online": self.online.status(),
             "natural_actions": self.natural_actions.status(),
+            "integrations": self.integrations.status(),
             "safety": {
                 "auto_approve": False,
                 "max_active_executions": 1,
@@ -312,6 +325,8 @@ class PersonalAssistantController:
             return self._format_voice_status()
         if intent == "daily_status":
             return self._format_daily_status()
+        if intent == "integration_status":
+            return self.integrations.format_status()
         if intent == "remember_project":
             return self._remember_project(command)
         if intent == "activate_project":

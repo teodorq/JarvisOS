@@ -10,6 +10,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtWidgets import QApplication, QLabel, QLineEdit, QPushButton, QVBoxLayout, QWidget
 
 from app.assistant.controller import PersonalAssistantController
+from app.assistant.natural_language import NaturalLanguageService
 from app.gui.client_capability_policy import ClientCapabilityPolicy
 from app.gui.client_exit_intent import is_jarvis_exit_request
 from app.gui.client_external_activity import (
@@ -78,8 +79,13 @@ class ClientProductFunctionAuditTests(unittest.TestCase):
                     self.assertEqual(ClientCapabilityPolicy.denial_message(action.command), "")
                     if not action.guided:
                         intent, confidence = NaturalActionUnderstanding.classify(action.command)
-                        self.assertNotEqual(intent, "standard")
-                        self.assertGreaterEqual(confidence, 0.7)
+                        core_intent = NaturalLanguageService.classify(action.command)
+                        self.assertTrue(
+                            intent != "standard" or core_intent != "standard",
+                            f"Brak routingu dla działania: {action.label}",
+                        )
+                        if intent != "standard":
+                            self.assertGreaterEqual(confidence, 0.7)
 
     def test_owner_financial_tools_are_absent_and_blocked_in_client(self):
         labels = {action.label for _group, actions in SAFE_CLIENT_ACTIONS for action in actions}

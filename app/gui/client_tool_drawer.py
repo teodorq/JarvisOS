@@ -59,6 +59,7 @@ SAFE_CLIENT_ACTIONS: tuple[tuple[str, tuple[ClientToolAction, ...]], ...] = (
                 "NOWE PRZYPOMNIENIE", "Przypomnij mi ", True,
                 "Dopisz, co i kiedy mam Ci przypomnieć.",
             ),
+            ClientToolAction("INTEGRACJE", "Pokaż status integracji"),
         ),
     ),
 )

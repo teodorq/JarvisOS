@@ -219,6 +219,7 @@ class NaturalLanguageService:
         patterns = (
             ("clear_context", ("wyczysc kontekst rozmowy",)),
             ("current_time", ("ktora jest godzina", "jaka jest godzina", "podaj godzine", "powiedz mi godzine", "aktualna godzina")),
+            ("integration_status", ("status integracji", "pokaz integracje", "jakie integracje", "polaczenia zewnetrzne", "status revenuecat", "status meta ads", "status claude", "status cartesia", "status elevenlabs")),
             ("assistant_status", ("status asystenta", "status b96", "status b100")),
             ("conversation_status", ("status rozmowy", "kontekst rozmowy")),
             ("memory_status", ("status pamieci projektow", "pamiec projektow")),

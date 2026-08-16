@@ -66,6 +66,11 @@ times out or returns invalid audio, JARVIS OS repeats the same response using a
 local Windows voice. Cloud audio is cached only under the ignored local
 `runtime/voice_output/cloud_cache` directory.
 
+Say or type `Pokaż status integracji` (or use `INTEGRACJE` in the daily tools)
+to see the local configuration state of Azure, voice, RevenueCat, Meta Ads and
+Claude. This status check makes no external request and never displays API keys
+or private endpoint addresses.
+
 The Azure deployment also exposes a private, installable `/phone` app. Access
 uses the owner's Microsoft account and a fixed 60-minute Azure session instead
 of a pairing code. Signing out invalidates the current session; the Microsoft
