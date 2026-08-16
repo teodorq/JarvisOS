@@ -1,0 +1,2 @@
+# Optional Windows-only local market-data bridge for Forex PAPER mode.
+MetaTrader5==5.0.5735

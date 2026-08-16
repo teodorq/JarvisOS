@@ -103,15 +103,18 @@ zamknięcia istniejącej pozycji. Sygnały LONG i SHORT są wyłącznie symulowa
 Warstwa danych tylko do odczytu jest przygotowana, lecz domyślnie wyłączona.
 Obejmuje cztery rozdzielone role:
 
-- OANDA REST-V20 `practice` — główne kwotowania i zamknięte świece M15;
+- lokalny MetaTrader 5 połączony wyłącznie z rachunkiem DEMO — główne
+  kwotowania i zamknięte świece M15;
 - Twelve Data — niezależny kurs średni do wykrywania rozbieżności;
 - NBP Web API — publiczny dzienny kurs referencyjny USD/PLN;
 - FMP Stable Economic Calendar — zaplanowane wydarzenia gospodarcze.
 
-Każdy adres HTTPS i ścieżka są ustalone w kodzie. OANDA ma wyłącznie host
-`api-fxpractice.oanda.com`; nie istnieje host live ani ścieżka składania zleceń.
-Klucze są pobierane z ignorowanego `config/forex.env`, przekazywane w nagłówkach
-i ukryte w reprezentacji obiektów oraz statusie.
+Adapter MT5 przed pierwszym odczytem sprawdza połączenie i pole
+`ACCOUNT_TRADE_MODE_DEMO`. Rachunek realny oraz konkursowy są odrzucane, a kod
+nie zawiera funkcji wysyłania, zmiany ani zamykania zleceń. Alternatywny adapter
+OANDA REST-V20 `practice` pozostaje dostępny dla oddziałów obsługujących v20;
+OANDA TMS w Polsce korzysta z MT5. Klucze pozostałych źródeł są pobierane z
+ignorowanego `config/forex.env` i ukryte w reprezentacji obiektów oraz statusie.
 
 Przed każdym wejściem bramka wymaga dwóch świeżych, zgodnych źródeł ceny.
 Rozbieżność większa niż 0,2%, brak jednej z siedmiu par, stary kalendarz,
@@ -122,18 +125,20 @@ wolumenu całego rynku, dlatego tick volume pozostaje tylko jednym z filtrów.
 
 ## Uruchomienie danych demonstracyjnych — kolejność
 
-1. Utworzyć osobny rachunek OANDA fxTrade Practice i token API. Dostępność
-   REST-V20 zależy od oddziału OANDA.
-2. Utworzyć bezpłatny klucz Twelve Data i sprawdzić limit bieżącego planu.
-3. Utworzyć klucz FMP oraz potwierdzić dostęp do `stable/economic-calendar`.
-4. Skopiować `config/forex.env.example` do lokalnego `config/forex.env`, wkleić
+1. Utworzyć rachunek demonstracyjny OANDA TMS, zainstalować desktopowy MT5 i
+   zalogować terminal wyłącznie do rachunku DEMO. Nie wpłacać pieniędzy.
+2. Zainstalować oficjalny lokalny moduł z `requirements_trading_mt5.txt`.
+3. Utworzyć bezpłatny klucz Twelve Data i sprawdzić limit bieżącego planu.
+4. Utworzyć klucz FMP oraz potwierdzić dostęp do `stable/economic-calendar`.
+5. Skopiować `config/forex.env.example` do lokalnego `config/forex.env`, wkleić
    klucze i ustawić `JARVIS_OS_FOREX_DATA_ENABLED=true`.
-5. Wykonać serię cykli obserwacyjnych bez pozycji i sprawdzić świeżość,
+6. Wykonać serię cykli obserwacyjnych bez pozycji i sprawdzić świeżość,
    rozbieżności, weekend oraz blokady wydarzeń.
-6. Dopiero po zielonej serii uruchomić autonomiczne pozycje PAPER. Rachunek
+7. Dopiero po zielonej serii uruchomić autonomiczne pozycje PAPER. Rachunek
    prawdziwy, dźwignia i zlecenia live pozostają poza zakresem.
 
-Dokumentacja źródeł: [OANDA REST-V20](https://developer.oanda.com/rest-live-v20/development-guide/),
+Dokumentacja źródeł: [MetaTrader 5 Python](https://www.mql5.com/en/docs/python_metatrader5),
+[OANDA REST-V20](https://developer.oanda.com/rest-live-v20/development-guide/),
 [Twelve Data](https://twelvedata.com/docs/currencies),
 [NBP Web API](https://api.nbp.pl/) i
 [FMP Economic Calendar](https://site.financialmodelingprep.com/developer/docs/stable/economics-calendar).

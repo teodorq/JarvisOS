@@ -103,16 +103,16 @@ class TradingControlCenter:
             f"• Konto demo: {account['equity']} {account['base_currency']}; "
             f"pozycje: {account['position_count']}; wypełnienia: {account['fill_count']}.\n"
             f"• Audyt: {audit}; wyłącznik awaryjny: {kill_switch}.\n"
-            "• Dane Forex: bezpieczne adaptery OANDA Practice, Twelve Data, NBP i "
-            "kalendarza FMP oraz kontrola rozbieżności są gotowe.\n"
+            "• Dane Forex: lokalny adapter MT5 DEMO, opcjonalny OANDA Practice, "
+            "Twelve Data, NBP i kalendarz FMP oraz kontrola rozbieżności są gotowe.\n"
             f"• Konfiguracja źródeł: {'kompletna' if data['complete'] else 'oczekuje na lokalne klucze kont demonstracyjnych'}; "
             "automatyczne wejścia pozostają zablokowane do chwili poprawnej kontroli "
             "wszystkich źródeł w bieżącym cyklu.\n"
             "• Sygnały LONG/SHORT istnieją tylko w planie PAPER. Prawdziwe "
             "zlecenia, dźwignia, sieć i dostęp do "
             "pieniędzy: twardo zablokowane.\n"
-            "Następny etap: skonfigurować bezpłatne klucze danych, wykonać serię "
-            "cykli obserwacyjnych i dopiero potem połączyć rachunek demonstracyjny."
+            "Następny etap: połączyć lokalny MT5 wyłącznie z rachunkiem DEMO, "
+            "skonfigurować klucze danych i wykonać serię cykli obserwacyjnych."
         )
 
 

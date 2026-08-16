@@ -7,6 +7,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
+from types import SimpleNamespace
 from urllib.parse import parse_qs, urlsplit
 
 from app.market_data.forex_environment import ForexDataSettings, load_forex_environment
@@ -18,6 +19,7 @@ from app.market_data.forex_sources import (
     TwelveDataReadOnlySource,
 )
 from app.market_data.http_json import MarketDataTransportError, PreparedJsonRequest
+from app.market_data.mt5_demo import Mt5DemoReadOnlySource
 from app.trading.forex_autopilot import ForexPaperAutopilot
 from app.trading.forex_models import MAJOR_FOREX_PAIRS, major_pair
 from app.trading.models import TradingValidationError
@@ -133,11 +135,76 @@ class FakeForexTransport:
 def ready_settings() -> ForexDataSettings:
     return ForexDataSettings(
         enabled=True,
+        primary_provider="OANDA_PRACTICE",
         oanda_practice_account_id="001-001-1234567-001",
         oanda_practice_token="practice-secret",
         twelve_data_api_key="twelve-secret",
         fmp_api_key="fmp-secret",
     )
+
+
+def mt5_settings() -> ForexDataSettings:
+    return ForexDataSettings(
+        enabled=True,
+        primary_provider="MT5_DEMO",
+        twelve_data_api_key="twelve-secret",
+        fmp_api_key="fmp-secret",
+    )
+
+
+class FakeMt5Module:
+    ACCOUNT_TRADE_MODE_DEMO = 0
+    ACCOUNT_TRADE_MODE_REAL = 2
+    TIMEFRAME_M15 = 15
+
+    def __init__(self, *, trade_mode: int = 0, connected: bool = True) -> None:
+        self.trade_mode = trade_mode
+        self.connected = connected
+        self.calls: list[tuple[object, ...]] = []
+
+    def initialize(self, *, timeout: int) -> bool:
+        self.calls.append(("initialize", timeout))
+        return True
+
+    def terminal_info(self) -> object:
+        self.calls.append(("terminal_info",))
+        return SimpleNamespace(connected=self.connected)
+
+    def account_info(self) -> object:
+        self.calls.append(("account_info",))
+        return SimpleNamespace(login=123456, trade_mode=self.trade_mode)
+
+    def symbol_select(self, symbol: str, selected: bool) -> bool:
+        self.calls.append(("symbol_select", symbol, selected))
+        return True
+
+    def symbol_info_tick(self, symbol: str) -> object:
+        self.calls.append(("symbol_info_tick", symbol))
+        pair = next(pair for pair in MAJOR_FOREX_PAIRS if pair.symbol.replace("_", "") == symbol)
+        price = PRICES[pair.symbol]
+        return SimpleNamespace(
+            bid=float(price - pair.pip_size / Decimal("2")),
+            ask=float(price + pair.pip_size / Decimal("2")),
+            time_msc=int(NOW.timestamp() * 1000),
+        )
+
+    def copy_rates_from_pos(
+        self, symbol: str, timeframe: int, start_pos: int, count: int
+    ) -> list[dict[str, object]]:
+        self.calls.append(("copy_rates_from_pos", symbol, timeframe, start_pos, count))
+        pair = next(pair for pair in MAJOR_FOREX_PAIRS if pair.symbol.replace("_", "") == symbol)
+        price = PRICES[pair.symbol]
+        return [{
+            "time": int((NOW - timedelta(minutes=(count - index) * 15)).timestamp()),
+            "open": float(price),
+            "high": float(price + pair.pip_size),
+            "low": float(price - pair.pip_size),
+            "close": float(price),
+            "tick_volume": 100,
+        } for index in range(count)]
+
+    def shutdown(self) -> None:
+        self.calls.append(("shutdown",))
 
 
 class RequestBoundaryTests(unittest.TestCase):
@@ -192,6 +259,35 @@ class RequestBoundaryTests(unittest.TestCase):
 
 
 class ProviderParserTests(unittest.TestCase):
+    def test_mt5_demo_reads_quotes_and_only_closed_m15_bars(self) -> None:
+        fake = FakeMt5Module()
+        quotes, bars = Mt5DemoReadOnlySource(module=fake).fetch_market(MAJOR_FOREX_PAIRS)
+        self.assertEqual(len(quotes), 7)
+        self.assertEqual(len(bars), 7)
+        self.assertTrue(all(len(series) == 31 for series in bars.values()))
+        rate_calls = [call for call in fake.calls if call[0] == "copy_rates_from_pos"]
+        self.assertTrue(all(call[2:] == (15, 1, 31) for call in rate_calls))
+        self.assertEqual(fake.calls[:3], [
+            ("initialize", 10_000),
+            ("terminal_info",),
+            ("account_info",),
+        ])
+        self.assertEqual(fake.calls[-1], ("shutdown",))
+
+    def test_mt5_blocks_real_account_before_any_market_read(self) -> None:
+        fake = FakeMt5Module(trade_mode=FakeMt5Module.ACCOUNT_TRADE_MODE_REAL)
+        with self.assertRaisesRegex(TradingValidationError, "non_demo_account_blocked"):
+            Mt5DemoReadOnlySource(module=fake).fetch_market((major_pair("EUR_USD"),))
+        self.assertFalse(any(call[0] == "symbol_info_tick" for call in fake.calls))
+        self.assertFalse(any(call[0] == "copy_rates_from_pos" for call in fake.calls))
+        self.assertEqual(fake.calls[-1], ("shutdown",))
+
+    def test_mt5_blocks_disconnected_terminal_and_always_shuts_down(self) -> None:
+        fake = FakeMt5Module(connected=False)
+        with self.assertRaisesRegex(TradingValidationError, "terminal_disconnected"):
+            Mt5DemoReadOnlySource(module=fake).fetch_market((major_pair("EUR_USD"),))
+        self.assertEqual(fake.calls[-1], ("shutdown",))
+
     def test_oanda_practice_quotes_and_complete_candles(self) -> None:
         fake = FakeForexTransport()
         source = OandaPracticeReadOnlySource(
@@ -224,6 +320,17 @@ class ProviderParserTests(unittest.TestCase):
 
 
 class ForexDataGatewayTests(unittest.TestCase):
+    def test_mt5_demo_can_be_selected_as_primary_source(self) -> None:
+        fake_mt5 = FakeMt5Module()
+        bundle = ForexReadOnlyDataGateway(
+            mt5_settings(),
+            transport=FakeForexTransport(),
+            mt5_module=fake_mt5,
+        ).collect(now=NOW)
+        self.assertEqual(bundle.diagnostics["primary_provider"], "MT5_DEMO")
+        self.assertEqual(len(bundle.quotes), 7)
+        self.assertTrue(all(context.independent_source_count == 2 for context in bundle.contexts.values()))
+
     def test_complete_bundle_feeds_existing_paper_autopilot(self) -> None:
         fake = FakeForexTransport()
         bundle = ForexReadOnlyDataGateway(ready_settings(), transport=fake).collect(now=NOW)
@@ -283,6 +390,12 @@ class ForexDataGatewayTests(unittest.TestCase):
         self.assertNotIn("api-fxtrade.oanda.com", source)
         self.assertNotIn("/orders", source)
         self.assertNotIn("post(", source)
+        mt5_source = (
+            Path(__file__).resolve().parents[1]
+            / "app" / "market_data" / "mt5_demo.py"
+        ).read_text(encoding="utf-8").casefold()
+        self.assertNotIn("order_send", mt5_source)
+        self.assertNotIn("positions_get", mt5_source)
 
 
 if __name__ == "__main__":

@@ -9,6 +9,7 @@ from typing import Iterable
 
 from app.market_data.forex_environment import ForexDataSettings
 from app.market_data.forex_models import EconomicCalendarSnapshot, ForexDataBundle, IndependentRate
+from app.market_data.mt5_demo import Mt5DemoReadOnlySource
 from app.market_data.forex_sources import (
     FmpEconomicCalendarReadOnlySource,
     JsonTransport,
@@ -63,6 +64,7 @@ class ForexReadOnlyDataGateway:
         transport: JsonTransport | None = None,
         policy: ForexDataGatePolicy | None = None,
         universe: Iterable[ForexPair] = MAJOR_FOREX_PAIRS,
+        mt5_module: object | None = None,
     ) -> None:
         self.settings = settings
         self.policy = policy or ForexDataGatePolicy()
@@ -70,13 +72,14 @@ class ForexReadOnlyDataGateway:
         if self.universe != MAJOR_FOREX_PAIRS:
             raise TradingValidationError("forex_data_gate: unsupported_universe")
         self._transport = transport
+        self._mt5_module = mt5_module
 
     def status(self) -> dict[str, object]:
         return {
             "mode": "READ_ONLY_PAPER_INPUT",
             "configured": self.settings.readiness(),
             "providers": {
-                "primary": "OANDA_PRACTICE",
+                "primary": self.settings.primary_provider,
                 "independent": "TWELVE_DATA",
                 "pln_reference": "NBP",
                 "economic_calendar": "FMP",
@@ -89,11 +92,6 @@ class ForexReadOnlyDataGateway:
         selected_now = aware_utc(now or datetime.now(timezone.utc), "now")
         if not self.settings.readiness()["complete"]:
             raise TradingValidationError("forex_data_gate: configuration_incomplete")
-        primary_source = OandaPracticeReadOnlySource(
-            account_id=self.settings.oanda_practice_account_id,
-            token=self.settings.oanda_practice_token,
-            transport=self._transport,
-        )
         independent_source = TwelveDataReadOnlySource(
             self.settings.twelve_data_api_key, self._transport
         )
@@ -102,11 +100,7 @@ class ForexReadOnlyDataGateway:
         )
         nbp_source = NbpPlnReadOnlySource(self._transport)
 
-        quotes = primary_source.fetch_quotes(self.universe)
-        bars = {
-            pair.symbol: primary_source.fetch_bars(pair)
-            for pair in self.universe
-        }
+        quotes, bars = self._primary_market()
         independent = independent_source.fetch_rates(self.universe)
         pln_reference = nbp_source.fetch_usd_pln(fetched_at=selected_now)
         calendar = calendar_source.fetch_calendar(now=selected_now)
@@ -150,6 +144,7 @@ class ForexReadOnlyDataGateway:
             conversion_quotes=conversion_quotes,
             diagnostics={
                 "mode": "READ_ONLY_PAPER_INPUT",
+                "primary_provider": self.settings.primary_provider,
                 "collected_at": selected_now.isoformat(),
                 "primary_pair_count": len(quotes),
                 "cross_checked_pairs": tuple(cross_checked),
@@ -162,6 +157,23 @@ class ForexReadOnlyDataGateway:
                 "live_orders_sent": False,
             },
         )
+
+    def _primary_market(
+        self,
+    ) -> tuple[dict[str, ForexQuote], dict[str, tuple[ForexBar, ...]]]:
+        if self.settings.primary_provider == "MT5_DEMO":
+            return Mt5DemoReadOnlySource(
+                symbol_suffix=self.settings.mt5_symbol_suffix,
+                module=self._mt5_module,
+            ).fetch_market(self.universe)
+        source = OandaPracticeReadOnlySource(
+            account_id=self.settings.oanda_practice_account_id,
+            token=self.settings.oanda_practice_token,
+            transport=self._transport,
+        )
+        quotes = source.fetch_quotes(self.universe)
+        bars = {pair.symbol: source.fetch_bars(pair) for pair in self.universe}
+        return quotes, bars
 
     def _sources_agree(
         self,

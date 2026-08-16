@@ -13,6 +13,7 @@ User memory, command history, Google tokens, voice models, logs, generated backu
 - A microphone is optional
 - Azure and Google integrations are optional
 - Cartesia and ElevenLabs text-to-speech are optional
+- MetaTrader 5 desktop and its official Python package are optional for Forex PAPER data
 
 ## Fresh installation
 
@@ -41,9 +42,9 @@ For a quick source check:
 JARVIS OS includes an owner-only, broker-neutral trading foundation for safe
 simulation and research. It provides strict market models, conservative
 pre-trade limits, an atomic local demo ledger, a tamper-evident audit chain, an
-emergency stop and next-bar historical backtesting. It intentionally has no
-market-data connection, broker connection, network transport, leverage, short
-selling or path to real-money orders.
+emergency stop and next-bar historical backtesting. Optional read-only market
+data can feed the simulator, but there is no broker order connection, leverage
+or path to real-money orders.
 
 Say or type `Status paper tradingu` in owner mode to see the local readiness
 snapshot. The feature is blocked in client mode. Detailed scope, limits and the
@@ -55,27 +56,41 @@ investment advice.
 The Forex PAPER layer scans seven major currency pairs, ranks deterministic
 signals and applies portfolio-wide currency exposure limits. A local autonomous
 cycle can open or close simulated positions, recheck risk at execution time,
-persist an audit trail and reject duplicate cycles. Reviewed GET-only adapters
-now prepare OANDA Practice quotes and M15 candles, Twelve Data cross-checks,
-the public NBP USD/PLN reference and the FMP economic calendar. Credentials are
-still absent by default, so the opening gate remains closed. No live OANDA host,
-broker order route or continuous background feed is exposed.
+persist an audit trail and reject duplicate cycles. The primary source can be a
+local MetaTrader 5 terminal logged into a DEMO account; an OANDA Practice REST
+adapter remains an alternative for regions where v20 is available. Twelve Data
+cross-checks prices, NBP supplies the public USD/PLN reference and FMP supplies
+the economic calendar. Configuration is absent by default, so the opening gate
+remains closed. No broker order route or continuous background feed is exposed.
 
 ## Optional Forex PAPER data
 
-Copy `config/forex.env.example` to the ignored `config/forex.env`. Enable it
-only after creating separate demonstration/data accounts and fill in:
+For OANDA TMS in Poland, install its Windows MetaTrader 5, sign the terminal in
+to a DEMO account and install the optional local package:
 
-- an OANDA fxTrade Practice account ID and practice token;
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements_trading_mt5.txt
+```
+
+JARVIS does not store the MT5 login or password. It uses the terminal's current
+session and rejects real and contest accounts before reading the first price.
+Then copy `config/forex.env.example` to the ignored `config/forex.env` and fill
+in:
+
 - a Twelve Data API key for the independent price check;
 - an FMP API key for the economic-event calendar.
+
+Keep `JARVIS_OS_FOREX_PRIMARY_PROVIDER=MT5_DEMO`. The optional
+`OANDA_PRACTICE` provider is retained for non-TMS divisions with REST-v20
+Practice access and requires its separate practice account ID and token.
 
 NBP needs no key. Secrets are sent in HTTPS headers, are excluded from status
 and object representations, and are never committed. A cycle requires all
 seven primary quotes, 31 completed M15 candles per pair, matching fresh prices
 from the second source, a fresh calendar and a sufficiently recent NBP
-reference. Missing, stale or divergent data blocks new positions. The adapter
-does not contain a method for placing broker orders.
+reference. Missing, stale or divergent data blocks new positions. The MT5
+adapter requests only current ticks and already-closed M15 bars; it contains no
+method for placing, changing or closing broker orders.
 
 ## Optional Google Workspace integration
 
