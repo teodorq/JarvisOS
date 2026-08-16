@@ -107,14 +107,15 @@ Obejmuje cztery rozdzielone role:
   kwotowania i zamknięte świece M15;
 - Twelve Data — niezależny kurs średni do wykrywania rozbieżności;
 - NBP Web API — publiczny dzienny kurs referencyjny USD/PLN;
-- FMP Stable Economic Calendar — zaplanowane wydarzenia gospodarcze.
+- publiczny tygodniowy eksport Forex Factory — zaplanowane wydarzenia
+  gospodarcze.
 
 Adapter MT5 przed pierwszym odczytem sprawdza połączenie i pole
 `ACCOUNT_TRADE_MODE_DEMO`. Rachunek realny oraz konkursowy są odrzucane, a kod
 nie zawiera funkcji wysyłania, zmiany ani zamykania zleceń. Alternatywny adapter
 OANDA REST-V20 `practice` pozostaje dostępny dla oddziałów obsługujących v20;
-OANDA TMS w Polsce korzysta z MT5. Klucze pozostałych źródeł są pobierane z
-ignorowanego `config/forex.env` i ukryte w reprezentacji obiektów oraz statusie.
+OANDA TMS w Polsce korzysta z MT5. Klucz Twelve Data jest pobierany z ignorowanego
+`config/forex.env` i ukryty w reprezentacji obiektów oraz statusie.
 
 Przed każdym wejściem bramka wymaga dwóch świeżych, zgodnych źródeł ceny.
 Rozbieżność większa niż 0,2%, brak jednej z siedmiu par, stary kalendarz,
@@ -129,7 +130,7 @@ wolumenu całego rynku, dlatego tick volume pozostaje tylko jednym z filtrów.
    zalogować terminal wyłącznie do rachunku DEMO. Nie wpłacać pieniędzy.
 2. Zainstalować oficjalny lokalny moduł z `requirements_trading_mt5.txt`.
 3. Utworzyć bezpłatny klucz Twelve Data i sprawdzić limit bieżącego planu.
-4. Utworzyć klucz FMP oraz potwierdzić dostęp do `stable/economic-calendar`.
+4. Potwierdzić dostępność publicznego tygodniowego eksportu Forex Factory.
 5. Skopiować `config/forex.env.example` do lokalnego `config/forex.env`, wkleić
    klucze i ustawić `JARVIS_OS_FOREX_DATA_ENABLED=true`.
 6. Wykonać serię cykli obserwacyjnych bez pozycji i sprawdzić świeżość,
@@ -141,4 +142,4 @@ Dokumentacja źródeł: [MetaTrader 5 Python](https://www.mql5.com/en/docs/pytho
 [OANDA REST-V20](https://developer.oanda.com/rest-live-v20/development-guide/),
 [Twelve Data](https://twelvedata.com/docs/currencies),
 [NBP Web API](https://api.nbp.pl/) i
-[FMP Economic Calendar](https://site.financialmodelingprep.com/developer/docs/stable/economics-calendar).
+[Forex Factory Calendar](https://www.forexfactory.com/calendar).

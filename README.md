@@ -59,9 +59,10 @@ cycle can open or close simulated positions, recheck risk at execution time,
 persist an audit trail and reject duplicate cycles. The primary source can be a
 local MetaTrader 5 terminal logged into a DEMO account; an OANDA Practice REST
 adapter remains an alternative for regions where v20 is available. Twelve Data
-cross-checks prices, NBP supplies the public USD/PLN reference and FMP supplies
-the economic calendar. Configuration is absent by default, so the opening gate
-remains closed. No broker order route or continuous background feed is exposed.
+cross-checks prices, NBP supplies the public USD/PLN reference and the public
+weekly Forex Factory export supplies the economic calendar. Configuration is
+absent by default, so the opening gate remains closed. No broker order route or
+continuous background feed is exposed.
 
 ## Optional Forex PAPER data
 
@@ -78,7 +79,7 @@ Then copy `config/forex.env.example` to the ignored `config/forex.env` and fill
 in:
 
 - a Twelve Data API key for the independent price check;
-- an FMP API key for the economic-event calendar.
+- the public weekly Forex Factory economic calendar needs no key.
 
 On Windows, copy one key to the clipboard and store it without placing the
 secret in shell history:
@@ -87,16 +88,15 @@ secret in shell history:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\set_local_forex_secret.ps1 -Name JARVIS_OS_TWELVE_DATA_API_KEY
 ```
 
-Use `JARVIS_OS_FMP_API_KEY` as `-Name` for the calendar key. The helper accepts
-only these two local settings, writes the ignored file and removes the secret
-from the clipboard.
+The helper writes the ignored file and removes the secret from the clipboard.
 
 Keep `JARVIS_OS_FOREX_PRIMARY_PROVIDER=MT5_DEMO` and, for OANDA TMS,
 `JARVIS_OS_MT5_SYMBOL_SUFFIX=.pro`. The optional
 `OANDA_PRACTICE` provider is retained for non-TMS divisions with REST-v20
 Practice access and requires its separate practice account ID and token.
 
-NBP needs no key. Secrets are sent in HTTPS headers, are excluded from status
+NBP and Forex Factory need no keys. Secrets are sent in HTTPS headers and
+excluded from status
 and object representations, and are never committed. A cycle requires all
 seven primary quotes, 31 completed M15 candles per pair, matching fresh prices
 from the second source, a fresh calendar and a sufficiently recent NBP

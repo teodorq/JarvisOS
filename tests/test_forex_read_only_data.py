@@ -13,7 +13,7 @@ from urllib.parse import parse_qs, urlsplit
 from app.market_data.forex_environment import ForexDataSettings, load_forex_environment
 from app.market_data.forex_gateway import ForexReadOnlyDataGateway
 from app.market_data.forex_sources import (
-    FmpEconomicCalendarReadOnlySource,
+    ForexFactoryEconomicCalendarReadOnlySource,
     NbpPlnReadOnlySource,
     OandaPracticeReadOnlySource,
     TwelveDataReadOnlySource,
@@ -83,15 +83,15 @@ class FakeForexTransport:
                     "mid": 3.75,
                 }],
             }
-        if parsed.hostname == FmpEconomicCalendarReadOnlySource.HOST:
-            if not self.event_currency:
-                return []
+        if parsed.hostname == ForexFactoryEconomicCalendarReadOnlySource.HOST:
+            currency = self.event_currency or "EUR"
             return [{
-                "date": NOW.isoformat(),
-                "country": "Germany" if self.event_currency == "EUR" else "United States",
-                "currency": self.event_currency,
-                "event": "Test high-impact release",
-                "impact": "High",
+                "date": (
+                    NOW if self.event_currency else NOW + timedelta(hours=12)
+                ).isoformat(),
+                "country": currency,
+                "title": "Test economic release",
+                "impact": "High" if self.event_currency else "Low",
             }]
         raise AssertionError(request.public_summary())
 
@@ -326,16 +326,22 @@ class ProviderParserTests(unittest.TestCase):
         self.assertLess(bars[0].timestamp, bars[-1].timestamp)
         self.assertTrue(all(call.public_summary()["method"] == "GET" for call in fake.calls))
 
-    def test_twelve_data_nbp_and_fmp_parsers(self) -> None:
+    def test_twelve_data_nbp_and_forex_factory_parsers(self) -> None:
         fake = FakeForexTransport(event_currency="EUR")
         pair = major_pair("EUR_USD")
         independent = TwelveDataReadOnlySource("key", fake).fetch_rates((pair,))
         reference = NbpPlnReadOnlySource(fake).fetch_usd_pln(fetched_at=NOW)
-        calendar = FmpEconomicCalendarReadOnlySource("key", fake).fetch_calendar(now=NOW)
+        calendar = ForexFactoryEconomicCalendarReadOnlySource(fake).fetch_calendar(now=NOW)
         self.assertEqual(independent[pair.symbol].midpoint, PRICES[pair.symbol])
         self.assertEqual(reference.midpoint_pln, Decimal("3.75"))
         self.assertEqual(calendar.events[0].currencies, ("EUR",))
         self.assertEqual(calendar.events[0].importance, 3)
+        self.assertEqual(calendar.provider, "FOREX_FACTORY")
+
+    def test_forex_factory_calendar_fails_closed_on_empty_feed(self) -> None:
+        source = ForexFactoryEconomicCalendarReadOnlySource(lambda request: [])
+        with self.assertRaisesRegex(TradingValidationError, "invalid_response"):
+            source.fetch_calendar(now=NOW)
 
     def test_oanda_rejects_non_practice_credentials_shape(self) -> None:
         with self.assertRaisesRegex(TradingValidationError, "invalid_account_id"):

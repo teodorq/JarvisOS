@@ -11,7 +11,7 @@ from app.market_data.forex_environment import ForexDataSettings
 from app.market_data.forex_models import EconomicCalendarSnapshot, ForexDataBundle, IndependentRate
 from app.market_data.mt5_demo import Mt5DemoReadOnlySource
 from app.market_data.forex_sources import (
-    FmpEconomicCalendarReadOnlySource,
+    ForexFactoryEconomicCalendarReadOnlySource,
     JsonTransport,
     NbpPlnReadOnlySource,
     OandaPracticeReadOnlySource,
@@ -82,7 +82,7 @@ class ForexReadOnlyDataGateway:
                 "primary": self.settings.primary_provider,
                 "independent": "TWELVE_DATA",
                 "pln_reference": "NBP",
-                "economic_calendar": "FMP",
+                "economic_calendar": "FOREX_FACTORY_WEEKLY",
             },
             "live_order_surface": False,
             "real_money_access": False,
@@ -95,8 +95,8 @@ class ForexReadOnlyDataGateway:
         independent_source = TwelveDataReadOnlySource(
             self.settings.twelve_data_api_key, self._transport
         )
-        calendar_source = FmpEconomicCalendarReadOnlySource(
-            self.settings.fmp_api_key, self._transport
+        calendar_source = ForexFactoryEconomicCalendarReadOnlySource(
+            self._transport
         )
         nbp_source = NbpPlnReadOnlySource(self._transport)
 

@@ -217,6 +217,66 @@ class NbpPlnReadOnlySource:
         )
 
 
+class ForexFactoryEconomicCalendarReadOnlySource:
+    """Read the public weekly Forex Factory JSON export without credentials."""
+
+    HOST = "nfs.faireconomy.media"
+    PATH = "/ff_calendar_thisweek.json"
+
+    def __init__(self, transport: JsonTransport | None = None) -> None:
+        self._transport = transport or JsonHttpTransport()
+
+    def fetch_calendar(self, *, now: datetime) -> EconomicCalendarSnapshot:
+        selected_now = aware_utc(now)
+        request = PreparedJsonRequest.build(
+            host=self.HOST,
+            path=self.PATH,
+            headers={"Accept": "application/json"},
+        )
+        payload = self._transport(request)
+        if not isinstance(payload, list) or not 1 <= len(payload) <= 1_000:
+            raise TradingValidationError("forex_factory_calendar: invalid_response")
+        events: list[EconomicEvent] = []
+        for raw in payload:
+            row = _mapping(raw, "forex_factory_calendar: invalid_event")
+            currency = str(row.get("country", "")).strip().upper()
+            if currency not in _MAJOR_CURRENCIES:
+                continue
+            importance = {"low": 1, "medium": 2, "high": 3}.get(
+                str(row.get("impact", "")).strip().casefold()
+            )
+            if importance is None:
+                raise TradingValidationError(
+                    "forex_factory_calendar: invalid_importance"
+                )
+            events.append(EconomicEvent(
+                event_at=_utc_datetime(
+                    row.get("date"), "forex_factory_calendar: invalid_time"
+                ),
+                title=row.get("title"),
+                currencies=(currency,),
+                importance=importance,
+            ))
+        events.sort(key=lambda item: item.event_at)
+        if not events:
+            raise TradingValidationError("forex_factory_calendar: coverage_missing")
+        anchor = events[0].event_at
+        start_day = anchor.date() - timedelta(days=(anchor.weekday() + 1) % 7)
+        coverage_start = datetime.combine(start_day, time.min, tzinfo=timezone.utc)
+        coverage_end = coverage_start + timedelta(days=7)
+        if any(
+            not coverage_start <= event.event_at < coverage_end for event in events
+        ):
+            raise TradingValidationError("forex_factory_calendar: invalid_coverage")
+        return EconomicCalendarSnapshot(
+            provider="FOREX_FACTORY",
+            fetched_at=selected_now,
+            coverage_start=coverage_start,
+            coverage_end=coverage_end,
+            events=tuple(events),
+        )
+
+
 class FmpEconomicCalendarReadOnlySource:
     HOST = "financialmodelingprep.com"
 
@@ -277,6 +337,7 @@ class FmpEconomicCalendarReadOnlySource:
 
 __all__ = [
     "FmpEconomicCalendarReadOnlySource",
+    "ForexFactoryEconomicCalendarReadOnlySource",
     "JsonTransport",
     "MarketDataTransportError",
     "NbpPlnReadOnlySource",

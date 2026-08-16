@@ -103,7 +103,7 @@ class ForexDataSettings:
 
     @property
     def calendar_ready(self) -> bool:
-        return bool(self.enabled and self.fmp_api_key)
+        return self.enabled
 
     @property
     def primary_ready(self) -> bool:
