@@ -80,6 +80,17 @@ in:
 - a Twelve Data API key for the independent price check;
 - an FMP API key for the economic-event calendar.
 
+On Windows, copy one key to the clipboard and store it without placing the
+secret in shell history:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\set_local_forex_secret.ps1 -Name JARVIS_OS_TWELVE_DATA_API_KEY
+```
+
+Use `JARVIS_OS_FMP_API_KEY` as `-Name` for the calendar key. The helper accepts
+only these two local settings, writes the ignored file and removes the secret
+from the clipboard.
+
 Keep `JARVIS_OS_FOREX_PRIMARY_PROVIDER=MT5_DEMO` and, for OANDA TMS,
 `JARVIS_OS_MT5_SYMBOL_SUFFIX=.pro`. The optional
 `OANDA_PRACTICE` provider is retained for non-TMS divisions with REST-v20
