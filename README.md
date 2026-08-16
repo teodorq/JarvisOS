@@ -52,6 +52,13 @@ required gates before any future broker integration are documented in
 live-market performance; this module is technical research infrastructure, not
 investment advice.
 
+The Forex PAPER layer scans seven major currency pairs, ranks deterministic
+signals and applies portfolio-wide currency exposure limits. A local autonomous
+cycle can open or close simulated positions, recheck risk at execution time,
+persist an audit trail and reject duplicate cycles. It remains dormant until
+fresh prices, a second source, an economic calendar and PLN conversion data are
+provided; no broker or continuous background feed is connected.
+
 ## Optional Google Workspace integration
 
 Copy `config/google_workspace_client_secret.example.json` to a local credentials file and fill it with credentials from Google Cloud. Real client secrets and OAuth tokens must never be committed.

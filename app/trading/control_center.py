@@ -6,6 +6,10 @@ from pathlib import Path
 from typing import Any
 
 from app.trading.backtest import HistoricalPaperBacktester
+from app.trading.forex_coordinator import ForexPaperCoordinator
+from app.trading.forex_models import MAJOR_FOREX_PAIRS
+from app.trading.forex_risk import ForexPaperPolicy
+from app.trading.forex_scanner import ForexMarketScanner
 from app.trading.paper_broker import PaperTradingEngine
 from app.trading.policy import PaperTradingPolicy
 from app.trading.risk import PreTradeRiskEngine
@@ -19,6 +23,9 @@ class TradingControlCenter:
         self.engine = PaperTradingEngine(project_root, policy=self.policy)
         self.risk = PreTradeRiskEngine(self.policy)
         self.backtester = HistoricalPaperBacktester(self.policy)
+        self.forex_policy = ForexPaperPolicy()
+        self.forex_scanner = ForexMarketScanner()
+        self.forex = ForexPaperCoordinator(self.forex_policy)
 
     def status(self) -> dict[str, Any]:
         account = self.engine.status()
@@ -32,9 +39,26 @@ class TradingControlCenter:
                 "tamper_evident_audit": account["audit_chain_valid"],
                 "next_bar_backtest": True,
                 "validated_historical_csv": True,
+                "multi_pair_forex_scanner": True,
+                "forex_currency_portfolio_risk": True,
+                "forex_paper_decision_coordinator": True,
+                "forex_local_paper_autopilot": True,
+                "forex_execution_risk_recheck": True,
                 "kill_switch": True,
                 "external_market_data": False,
+                "external_economic_calendar": False,
+                "independent_second_price_source": False,
+                "live_pln_conversion": False,
                 "external_paper_broker": False,
+            },
+            "forex": {
+                "status": "LOCAL_SCANNER_READY",
+                "universe": [pair.symbol for pair in MAJOR_FOREX_PAIRS],
+                "pair_count": len(MAJOR_FOREX_PAIRS),
+                "bidirectional_paper_signals": True,
+                "automatic_paper_execution": True,
+                "continuous_runtime_active": False,
+                "opening_gate_ready": False,
             },
             "account": account,
             "limits": self.policy.status(),
@@ -62,14 +86,21 @@ class TradingControlCenter:
             "podglądania przyszłości i lokalna księga — gotowe.\n"
             "• Ryzyko: limity zlecenia, pozycji, ekspozycji, dziennej straty, "
             "spreadu i liczby zleceń — aktywne.\n"
+            "• Forex: skaner 7 głównych par, ranking i wspólne limity walutowe "
+            "— gotowe lokalnie.\n"
+            "• Autopilot PAPER: lokalne otwieranie, zamykanie, ponowna kontrola "
+            "ryzyka i ochrona przed duplikatem — gotowe.\n"
             f"• Konto demo: {account['equity']} {account['base_currency']}; "
             f"pozycje: {account['position_count']}; wypełnienia: {account['fill_count']}.\n"
             f"• Audyt: {audit}; wyłącznik awaryjny: {kill_switch}.\n"
-            "• Dane rynkowe i zewnętrzny broker demonstracyjny: jeszcze niepodłączone.\n"
-            "• Prawdziwe zlecenia, short selling, dźwignia, sieć i dostęp do "
+            "• Dwa źródła cen, kalendarz gospodarczy, przelicznik PLN i broker "
+            "demo: jeszcze niepodłączone; automatyczne wejścia pozostają zablokowane "
+            "do czasu dostarczenia kompletu tych danych.\n"
+            "• Sygnały LONG/SHORT istnieją tylko w planie PAPER. Prawdziwe "
+            "zlecenia, dźwignia, sieć i dostęp do "
             "pieniędzy: twardo zablokowane.\n"
-            "Następny etap: wybrać klasę aktywów i brokera demonstracyjnego, "
-            "a potem przeprowadzić długie testy paper."
+            "Następny etap: podłączyć wyłącznie dane do odczytu i kalendarz, "
+            "potem uruchomić wykonanie na rachunku demonstracyjnym."
         )
 
 

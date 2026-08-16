@@ -61,6 +61,9 @@ class ClientCapabilityPolicy:
         "zabezpieczenia tradingu",
         "audyt tradingu",
         "status silnika tradingowego",
+        "status forex",
+        "gotowosc forex",
+        "skaner forex",
     )
     OWNER_ONLY_THOUGHT_MARKERS = (
         "autodev",

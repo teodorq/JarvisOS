@@ -114,7 +114,7 @@ class PersonalAssistantController:
             "status claude",
             "status cartesia",
             "status elevenlabs",
-            "status paper tradingu", "stan paper tradingu", "status tradingu", "gotowosc tradingu", "gotowosc do tradingu", "zabezpieczenia tradingu", "audyt tradingu", "status silnika tradingowego",
+            "status paper tradingu", "stan paper tradingu", "status tradingu", "gotowosc tradingu", "gotowosc do tradingu", "zabezpieczenia tradingu", "audyt tradingu", "status silnika tradingowego", "status forex", "gotowosc forex", "skaner forex",
             "tryb ciagly glosu",
             "centrum codziennej pracy",
             "status codziennej pracy",

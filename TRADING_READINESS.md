@@ -74,3 +74,38 @@ poślizgu i częściowych realizacji.
 - [Interactive Brokers — ograniczenia środowiska paper](https://www.interactivebrokers.com/docs/tws-api/doc/notes-limitations/limitations/paper-trading)
 
 Ten dokument opisuje projekt techniczny, a nie poradę inwestycyjną.
+
+## Wieloparowy Forex PAPER ONLY
+
+Pierwszy koszyk Forex obejmuje siedem głównych par:
+
+- EUR/USD, GBP/USD, USD/JPY i USD/CHF;
+- AUD/USD, USD/CAD i NZD/USD.
+
+Lokalny cykl autonomiczny wykonuje kolejno:
+
+1. Sprawdzenie świeżości kwotowania, kolejności świec, luk, spreadu i
+   dostępności tick volume.
+2. Kontrolę sesji, kalendarza gospodarczego, drugiego źródła ceny oraz
+   przelicznika do PLN.
+3. Ocenę trendu wszystkich siedmiu par i ranking nowych sygnałów.
+4. Pierwszeństwo zamknięcia istniejącej pozycji przed nowym wejściem.
+5. Obliczenie wielkości pozycji z limitu ryzyka 0,25% kapitału demo.
+6. Kontrolę maksymalnie dwóch pozycji, łącznego ryzyka oraz skumulowanej
+   ekspozycji na każdą walutę.
+7. Ponowną kontrolę ryzyka bezpośrednio w lokalnym wykonawcy PAPER.
+8. Atomowy zapis cyklu, otwarcia lub zamknięcia i łańcucha audytowego.
+
+Powtórzenie identycznego identyfikatora cyklu nie tworzy drugiej pozycji.
+Kill switch blokuje nowe wejścia, ale nie usuwa możliwości bezpiecznego
+zamknięcia istniejącej pozycji. Sygnały LONG i SHORT są wyłącznie symulowane.
+
+Autopilot nie działa jeszcze w tle, ponieważ nie podłączono bieżących źródeł
+cen, kalendarza gospodarczego ani rachunku demonstracyjnego. Brak któregokolwiek
+z obowiązkowych źródeł kończy cykl bez otwarcia. Spot Forex nie ma jednego
+centralnego wolumenu całego rynku, dlatego tick volume nie może być jedyną
+podstawą decyzji.
+
+Przyszły adapter brokera musi korzystać wyłącznie z wydzielonego środowiska
+demonstracyjnego. Przykładem takiego rozdzielenia jest oficjalnie opisane
+środowisko `practice` w [OANDA REST-V20](https://developer.oanda.com/rest-live-v20/introduction/).

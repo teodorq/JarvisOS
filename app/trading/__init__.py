@@ -3,6 +3,31 @@
 from app.trading.backtest import HistoricalPaperBacktester
 from app.trading.control_center import TradingControlCenter
 from app.trading.dataset import HistoricalCsvLoader, HistoricalDataset
+from app.trading.forex_coordinator import ForexPaperCoordinator, ForexPaperInstruction
+from app.trading.forex_autopilot import ForexPaperAutopilot
+from app.trading.forex_executor import ForexPaperExecutionEngine
+from app.trading.forex_ledger import ForexPaperLedger
+from app.trading.forex_models import (
+    ForexBar,
+    ForexPair,
+    ForexPosition,
+    ForexQuote,
+    ForexSafetyContext,
+    MAJOR_FOREX_PAIRS,
+    USD_PLN_CONVERSION_PAIR,
+    major_pair,
+)
+from app.trading.forex_risk import (
+    ForexPaperPolicy,
+    ForexPortfolioRiskEngine,
+    ForexRateBook,
+    ForexRiskDecision,
+)
+from app.trading.forex_scanner import (
+    ForexMarketScanner,
+    ForexPairAssessment,
+    ForexScannerPolicy,
+)
 from app.trading.ledger import PaperTradingLedger
 from app.trading.models import (
     MarketBar,
@@ -19,9 +44,27 @@ __all__ = [
     "HistoricalPaperBacktester",
     "HistoricalCsvLoader",
     "HistoricalDataset",
+    "ForexBar",
+    "ForexMarketScanner",
+    "ForexPair",
+    "ForexPairAssessment",
+    "ForexPaperCoordinator",
+    "ForexPaperAutopilot",
+    "ForexPaperExecutionEngine",
+    "ForexPaperInstruction",
+    "ForexPaperLedger",
+    "ForexPaperPolicy",
+    "ForexPortfolioRiskEngine",
+    "ForexPosition",
+    "ForexQuote",
+    "ForexRateBook",
+    "ForexRiskDecision",
+    "ForexSafetyContext",
+    "ForexScannerPolicy",
     "LiveTradingBlockedError",
     "MarketBar",
     "MarketQuote",
+    "MAJOR_FOREX_PAIRS",
     "PaperOrder",
     "PaperTradingEngine",
     "PaperTradingLedger",
@@ -31,4 +74,6 @@ __all__ = [
     "StrategySignal",
     "TradingControlCenter",
     "TradingValidationError",
+    "USD_PLN_CONVERSION_PAIR",
+    "major_pair",
 ]
