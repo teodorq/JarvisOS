@@ -157,9 +157,17 @@ class FakeMt5Module:
     ACCOUNT_TRADE_MODE_REAL = 2
     TIMEFRAME_M15 = 15
 
-    def __init__(self, *, trade_mode: int = 0, connected: bool = True) -> None:
+    def __init__(
+        self,
+        *,
+        trade_mode: int = 0,
+        connected: bool = True,
+        unready_once: bool = False,
+    ) -> None:
         self.trade_mode = trade_mode
         self.connected = connected
+        self.unready_once = unready_once
+        self._tick_calls: dict[str, int] = {}
         self.calls: list[tuple[object, ...]] = []
 
     def initialize(self, *, timeout: int) -> bool:
@@ -180,12 +188,17 @@ class FakeMt5Module:
 
     def symbol_info_tick(self, symbol: str) -> object:
         self.calls.append(("symbol_info_tick", symbol))
+        self._tick_calls[symbol] = self._tick_calls.get(symbol, 0) + 1
         pair = next(pair for pair in MAJOR_FOREX_PAIRS if pair.symbol.replace("_", "") == symbol)
         price = PRICES[pair.symbol]
         return SimpleNamespace(
             bid=float(price - pair.pip_size / Decimal("2")),
             ask=float(price + pair.pip_size / Decimal("2")),
-            time_msc=int(NOW.timestamp() * 1000),
+            time_msc=(
+                0
+                if self.unready_once and self._tick_calls[symbol] == 1
+                else int(NOW.timestamp() * 1000)
+            ),
         )
 
     def copy_rates_from_pos(
@@ -287,6 +300,16 @@ class ProviderParserTests(unittest.TestCase):
         with self.assertRaisesRegex(TradingValidationError, "terminal_disconnected"):
             Mt5DemoReadOnlySource(module=fake).fetch_market((major_pair("EUR_USD"),))
         self.assertEqual(fake.calls[-1], ("shutdown",))
+
+    def test_mt5_waits_for_newly_selected_symbols_to_synchronize(self) -> None:
+        fake = FakeMt5Module(unready_once=True)
+        with patch("app.market_data.mt5_demo.time.sleep") as sleep:
+            quotes, bars = Mt5DemoReadOnlySource(module=fake).fetch_market(
+                (major_pair("EUR_USD"),)
+            )
+        self.assertEqual(tuple(quotes), ("EUR_USD",))
+        self.assertEqual(len(bars["EUR_USD"]), 31)
+        sleep.assert_called_once_with(0.2)
 
     def test_oanda_practice_quotes_and_complete_candles(self) -> None:
         fake = FakeForexTransport()

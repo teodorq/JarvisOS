@@ -80,7 +80,8 @@ in:
 - a Twelve Data API key for the independent price check;
 - an FMP API key for the economic-event calendar.
 
-Keep `JARVIS_OS_FOREX_PRIMARY_PROVIDER=MT5_DEMO`. The optional
+Keep `JARVIS_OS_FOREX_PRIMARY_PROVIDER=MT5_DEMO` and, for OANDA TMS,
+`JARVIS_OS_MT5_SYMBOL_SUFFIX=.pro`. The optional
 `OANDA_PRACTICE` provider is retained for non-TMS divisions with REST-v20
 Practice access and requires its separate practice account ID and token.
 

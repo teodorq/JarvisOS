@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 import importlib
 import re
+import time
 from typing import Any, Iterable, Mapping
 
 from app.trading.forex_models import ForexBar, ForexPair, ForexQuote
@@ -64,12 +65,33 @@ class Mt5DemoReadOnlySource:
             self._validate_demo_session(mt5)
             quotes: dict[str, ForexQuote] = {}
             bars: dict[str, tuple[ForexBar, ...]] = {}
+            terminal_symbols: dict[str, tuple[ForexPair, str]] = {}
             for pair in selected:
                 terminal_symbol = pair.symbol.replace("_", "") + self.symbol_suffix
                 if not mt5.symbol_select(terminal_symbol, True):
                     raise TradingValidationError("mt5_demo: symbol_unavailable")
-                quotes[pair.symbol] = self._quote(mt5, pair, terminal_symbol)
-                bars[pair.symbol] = self._bars(mt5, pair, terminal_symbol, bar_count)
+                terminal_symbols[pair.symbol] = (pair, terminal_symbol)
+            pending = dict(terminal_symbols)
+            deadline = time.monotonic() + 8.0
+            last_sync_error: TradingValidationError | None = None
+            while pending:
+                for symbol, (pair, terminal_symbol) in tuple(pending.items()):
+                    try:
+                        quote = self._quote(mt5, pair, terminal_symbol)
+                        series = self._bars(mt5, pair, terminal_symbol, bar_count)
+                    except TradingValidationError as error:
+                        last_sync_error = error
+                        continue
+                    quotes[symbol] = quote
+                    bars[symbol] = series
+                    pending.pop(symbol)
+                if not pending:
+                    break
+                if time.monotonic() >= deadline:
+                    raise TradingValidationError(
+                        "mt5_demo: market_sync_timeout"
+                    ) from last_sync_error
+                time.sleep(0.2)
             return quotes, bars
         except TradingValidationError:
             raise
