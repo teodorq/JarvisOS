@@ -18,6 +18,7 @@ class AssistantStatusFormatter:
             "voice_status": "sprawdzenie głosu",
             "daily_status": "sprawdzenie planu i codziennej pracy",
             "integration_status": "sprawdzenie integracji",
+            "paper_trading_status": "sprawdzenie przygotowania paper tradingu",
             "gmail_search": "wyszukiwanie wiadomości Gmail",
             "natural_action": "wykonanie ostatniego polecenia",
         }

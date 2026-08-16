@@ -12,6 +12,7 @@ class ClientCapabilityPolicy:
         "day_business_summary",
         "advertising_overview",
         "trading_overview",
+        "paper_trading_status",
     }
     OWNER_ONLY_MARKERS = (
         "autodev",
@@ -52,6 +53,14 @@ class ClientCapabilityPolicy:
         "ustawienia systemu",
         "konfiguracja business",
         "logi systemu",
+        "status paper tradingu",
+        "stan paper tradingu",
+        "status tradingu",
+        "gotowosc tradingu",
+        "gotowosc do tradingu",
+        "zabezpieczenia tradingu",
+        "audyt tradingu",
+        "status silnika tradingowego",
     )
     OWNER_ONLY_THOUGHT_MARKERS = (
         "autodev",

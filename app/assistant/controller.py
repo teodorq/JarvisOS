@@ -23,6 +23,7 @@ from app.assistant_v12.conversation_engine import NaturalConversationEngineV3
 from app.online_assistant.controller import OnlineAssistantController
 from app.natural_actions import NaturalActionService
 from app.integrations import IntegrationStatusService
+from app.trading import TradingControlCenter
 class PersonalAssistantController:
     """B96-B130 cohesive assistant runtime without bypassing safety gates."""
     STAGES = {
@@ -63,6 +64,7 @@ class PersonalAssistantController:
         )
         self.natural_actions = NaturalActionService(self.project_root, online=self.online)
         self.integrations = IntegrationStatusService()
+        self.trading = TradingControlCenter(self.project_root)
     @staticmethod
     def matches(command: object) -> bool:
         text = fold_text(command)
@@ -112,6 +114,7 @@ class PersonalAssistantController:
             "status claude",
             "status cartesia",
             "status elevenlabs",
+            "status paper tradingu", "stan paper tradingu", "status tradingu", "gotowosc tradingu", "gotowosc do tradingu", "zabezpieczenia tradingu", "audyt tradingu", "status silnika tradingowego",
             "tryb ciagly glosu",
             "centrum codziennej pracy",
             "status codziennej pracy",
@@ -216,6 +219,7 @@ class PersonalAssistantController:
             "desktop_status",
             "daily_status",
             "integration_status",
+            "paper_trading_status",
             "clarification",
         }
         return {
@@ -343,6 +347,7 @@ class PersonalAssistantController:
             return self._format_daily_status()
         if intent == "integration_status":
             return self.integrations.format_status()
+        if intent == "paper_trading_status": return self.trading.format_status()
         if intent == "remember_project":
             return self._remember_project(command)
         if intent == "activate_project":

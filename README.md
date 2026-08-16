@@ -36,6 +36,22 @@ For a quick source check:
 .\.venv\Scripts\python.exe -m compileall -q app cloud_service software_engineer tools
 ```
 
+## Local paper-trading foundation
+
+JARVIS OS includes an owner-only, broker-neutral trading foundation for safe
+simulation and research. It provides strict market models, conservative
+pre-trade limits, an atomic local demo ledger, a tamper-evident audit chain, an
+emergency stop and next-bar historical backtesting. It intentionally has no
+market-data connection, broker connection, network transport, leverage, short
+selling or path to real-money orders.
+
+Say or type `Status paper tradingu` in owner mode to see the local readiness
+snapshot. The feature is blocked in client mode. Detailed scope, limits and the
+required gates before any future broker integration are documented in
+[`TRADING_READINESS.md`](TRADING_READINESS.md). Paper results do not predict
+live-market performance; this module is technical research infrastructure, not
+investment advice.
+
 ## Optional Google Workspace integration
 
 Copy `config/google_workspace_client_secret.example.json` to a local credentials file and fill it with credentials from Google Cloud. Real client secrets and OAuth tokens must never be committed.
