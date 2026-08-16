@@ -71,6 +71,10 @@ to see the local configuration state of Azure, voice, RevenueCat, Meta Ads and
 Claude. This status check makes no external request and never displays API keys
 or private endpoint addresses.
 
+Say or type `Co potrafisz?` (or use `CO POTRAFIĘ` in the daily tools) for a
+short, client-safe guide with verified example commands. The guide performs no
+action and never advertises owner-only development or business controls.
+
 The Azure deployment also exposes a private, installable `/phone` app. Access
 uses the owner's Microsoft account and a fixed 60-minute Azure session instead
 of a pairing code. Signing out invalidates the current session; the Microsoft

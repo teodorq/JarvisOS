@@ -26,6 +26,7 @@ SAFE_CLIENT_ACTIONS: tuple[tuple[str, tuple[ClientToolAction, ...]], ...] = (
             ClientToolAction("PLAN NA JUTRO", "Zaplanuj mój jutrzejszy dzień"),
             ClientToolAction("OSTATNIE DZIAŁANIA", "Co ostatnio udało mi się zrobić?"),
             ClientToolAction("RACHUNKI", "Podlicz moje rachunki do zapłaty"),
+            ClientToolAction("CO POTRAFIĘ", "Co potrafisz?"),
         ),
     ),
     (

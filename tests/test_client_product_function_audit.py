@@ -89,6 +89,7 @@ class ClientProductFunctionAuditTests(unittest.TestCase):
 
     def test_owner_financial_tools_are_absent_and_blocked_in_client(self):
         labels = {action.label for _group, actions in SAFE_CLIENT_ACTIONS for action in actions}
+        self.assertIn("CO POTRAFIĘ", labels)
         self.assertNotIn("REKLAMY", labels)
         self.assertNotIn("TRADING", labels)
         for command in (

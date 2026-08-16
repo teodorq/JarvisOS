@@ -4,6 +4,7 @@ from pathlib import Path
 import re
 from typing import Any
 from app.assistant.daily_work import DailyWorkService
+from app.assistant.capability_guide import CapabilityGuideService
 from app.assistant.natural_language import (
     NaturalLanguageService,
     ResolvedCommand,
@@ -46,6 +47,7 @@ class PersonalAssistantController:
         self.project_root = resolve_project_root(project_root)
         self.memory = memory
         self.conversation = NaturalLanguageService(self.project_root)
+        self.capabilities = CapabilityGuideService()
         self.desktop = ReliableDesktopService(self.project_root)
         self.projects = ProjectMemoryService(self.project_root)
         self.voice = VoiceRuntimeService(self.project_root)
@@ -70,6 +72,16 @@ class PersonalAssistantController:
             "podaj godzine",
             "powiedz mi godzine",
             "aktualna godzina",
+            "co potrafisz",
+            "co umiesz",
+            "co mozesz zrobic",
+            "jakie masz funkcje",
+            "pokaz pomoc",
+            "pomoc jarvis",
+            "jak z ciebie korzystac",
+            "przyklady polecen",
+            "lista polecen",
+            "centrum mozliwosci",
             "status asystenta",
             "status b96",
             "status b97",
@@ -196,6 +208,7 @@ class PersonalAssistantController:
             return thought
         read_only = resolved.intent in {
             "current_time",
+            "capability_help",
             "assistant_status",
             "conversation_status",
             "memory_status",
@@ -292,6 +305,7 @@ class PersonalAssistantController:
             "status": "CORE_PRODUCT_UPGRADE_READY",
             "stages": dict(self.STAGES),
             "conversation": self._conversation_status(),
+            "capabilities": self.capabilities.status(),
             "desktop": self.desktop.status(),
             "memory": self.projects.status(),
             "voice": self.voice.status(),
@@ -313,6 +327,8 @@ class PersonalAssistantController:
     def _dispatch(self, intent: str, command: str) -> str:
         if intent == "current_time":
             return f"Teraz jest {datetime.now().strftime('%H:%M')}."
+        if intent == "capability_help":
+            return self.capabilities.format_guide()
         if intent == "assistant_status":
             return self._format_full_status()
         if intent == "conversation_status":
