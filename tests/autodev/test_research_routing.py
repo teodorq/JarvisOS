@@ -226,10 +226,12 @@ class BrainRoutingTest(
         )
 
         self.assertEqual(
-            thought.get(
-                "handler"
-            ),
-            "standard"
+            thought.get("handler"),
+            "personal_assistant"
+        )
+        self.assertEqual(
+            thought.get("assistant_intent"),
+            "weather"
         )
 
 

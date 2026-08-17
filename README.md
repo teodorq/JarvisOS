@@ -129,6 +129,15 @@ method for placing, changing or closing broker orders.
 
 Copy `config/google_workspace_client_secret.example.json` to a local credentials file and fill it with credentials from Google Cloud. Real client secrets and OAuth tokens must never be committed.
 
+## Weather without an API key
+
+JARVIS OS can answer `Jaka jest pogoda w Miami?` and
+`Jaka bedzie pogoda jutro w Warszawie?` through a direct, read-only Open-Meteo
+lookup. The fixed HTTPS endpoints use bounded responses and short timeouts; no
+account or API key is required. Location text is used only for the lookup and is
+not written to a separate weather history. The response identifies Open-Meteo
+as its source.
+
 ## Optional Azure planner
 
 Copy `config/cloud.env.example` to `config/cloud.env` and provide:

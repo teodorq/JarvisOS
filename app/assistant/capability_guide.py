@@ -47,6 +47,14 @@ CAPABILITY_CATEGORIES: tuple[CapabilityCategory, ...] = (
         ),
     ),
     CapabilityCategory(
+        "Pogoda",
+        "bie\u017c\u0105ce warunki i prognoza na jutro dla miast na ca\u0142ym \u015bwiecie",
+        (
+            "Jaka jest pogoda w Miami?",
+            "Jaka b\u0119dzie pogoda jutro w Warszawie?",
+        ),
+    ),
+    CapabilityCategory(
         "System i integracje",
         "stan JARVIS OS, Azure i opcjonalnych połączeń zewnętrznych",
         (

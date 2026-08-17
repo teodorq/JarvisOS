@@ -5,14 +5,11 @@ import re
 from typing import Any
 from app.assistant.daily_work import DailyWorkService
 from app.assistant.capability_guide import CapabilityGuideService
-from app.assistant.natural_language import (
-    NaturalLanguageService,
-    ResolvedCommand,
-    fold_text,
-)
+from app.assistant.natural_language import NaturalLanguageService, ResolvedCommand, fold_text
 from app.assistant.project_memory import ProjectMemoryService
 from app.assistant.reliable_desktop import ReliableDesktopService
 from app.assistant.voice_runtime import VoiceRuntimeService
+from app.assistant.weather import WeatherService
 from app.assistant.status_formatter import AssistantStatusFormatter
 from app.core.project_paths import resolve_project_root
 from app.intelligence.controller import IntelligenceSuiteController
@@ -39,12 +36,7 @@ class PersonalAssistantController:
         **OnlineAssistantController.STAGES,
         **NaturalActionService.STAGES,
     }
-    def __init__(
-        self,
-        project_root: str | Path | None = None,
-        *,
-        memory: Any | None = None,
-    ) -> None:
+    def __init__(self, project_root: str | Path | None = None, *, memory: Any | None = None) -> None:
         self.project_root = resolve_project_root(project_root)
         self.memory = memory
         self.conversation = NaturalLanguageService(self.project_root)
@@ -52,16 +44,13 @@ class PersonalAssistantController:
         self.desktop = ReliableDesktopService(self.project_root)
         self.projects = ProjectMemoryService(self.project_root)
         self.voice = VoiceRuntimeService(self.project_root)
+        self.weather = WeatherService()
         self.daily = DailyWorkService(self.project_root)
         self.intelligence = IntelligenceSuiteController(self.project_root)
         self.productivity = ProductivitySuiteController(self.project_root)
-        self.stability = StabilitySuiteController(
-            self.project_root, runtime_status=self._stability_runtime_status
-        )
+        self.stability = StabilitySuiteController(self.project_root, runtime_status=self._stability_runtime_status)
         self.assistant_v12 = AssistantV12Controller(self.project_root)
-        self.online = OnlineAssistantController(
-            self.project_root, reminders=self.productivity.reminders
-        )
+        self.online = OnlineAssistantController(self.project_root, reminders=self.productivity.reminders)
         self.natural_actions = NaturalActionService(self.project_root, online=self.online)
         self.integrations = IntegrationStatusService()
         self.trading = TradingControlCenter(self.project_root)
@@ -74,6 +63,7 @@ class PersonalAssistantController:
             "podaj godzine",
             "powiedz mi godzine",
             "aktualna godzina",
+            "pogoda", "pogode", "pogody", "weather", "forecast",
             "co potrafisz",
             "co umiesz",
             "co mozesz zrobic",
@@ -211,6 +201,7 @@ class PersonalAssistantController:
             return thought
         read_only = resolved.intent in {
             "current_time",
+            "weather",
             "capability_help",
             "assistant_status",
             "conversation_status",
@@ -313,6 +304,7 @@ class PersonalAssistantController:
             "desktop": self.desktop.status(),
             "memory": self.projects.status(),
             "voice": self.voice.status(),
+            "weather": self.weather.status(),
             "daily_work": self.daily.status(),
             "intelligence": self.intelligence.status(),
             "productivity": self.productivity.status(),
@@ -331,6 +323,8 @@ class PersonalAssistantController:
     def _dispatch(self, intent: str, command: str) -> str:
         if intent == "current_time":
             return f"Teraz jest {datetime.now().strftime('%H:%M')}."
+        if intent == "weather":
+            return self.weather.format_for_command(command)
         if intent == "capability_help":
             return self.capabilities.format_guide()
         if intent == "assistant_status":

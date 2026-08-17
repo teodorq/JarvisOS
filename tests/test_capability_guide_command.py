@@ -18,8 +18,8 @@ class CapabilityGuideServiceTests(unittest.TestCase):
         status = guide.status()
         rendered = guide.format_guide()
 
-        self.assertEqual(status["category_count"], 5)
-        self.assertEqual(status["example_count"], 10)
+        self.assertEqual(status["category_count"], 6)
+        self.assertEqual(status["example_count"], 12)
         self.assertTrue(status["client_safe"])
         self.assertFalse(status["external_requests"])
         for title in (
@@ -27,6 +27,7 @@ class CapabilityGuideServiceTests(unittest.TestCase):
             "Poczta i kalendarz",
             "Dokumenty i pamięć",
             "Komputer i głos",
+            "Pogoda",
             "System i integracje",
         ):
             with self.subTest(title=title):
