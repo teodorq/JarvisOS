@@ -30,7 +30,7 @@ from app.trading.models import TradingValidationError, aware_utc
 @dataclass(frozen=True, slots=True)
 class ForexDataGatePolicy:
     max_primary_age_seconds: int = 10
-    max_independent_age_seconds: int = 90
+    max_independent_age_seconds: int = 180
     max_source_deviation_pct: Decimal = Decimal("0.002")
     max_calendar_age_seconds: int = 900
     max_nbp_business_age_days: int = 4
@@ -100,7 +100,7 @@ class ForexReadOnlyDataGateway:
         )
         nbp_source = NbpPlnReadOnlySource(self._transport)
 
-        quotes, bars = self._primary_market()
+        quotes, bars = self._primary_market(selected_now)
         independent = independent_source.fetch_rates(self.universe)
         pln_reference = nbp_source.fetch_usd_pln(fetched_at=selected_now)
         calendar = calendar_source.fetch_calendar(now=selected_now)
@@ -159,13 +159,13 @@ class ForexReadOnlyDataGateway:
         )
 
     def _primary_market(
-        self,
+        self, now: datetime,
     ) -> tuple[dict[str, ForexQuote], dict[str, tuple[ForexBar, ...]]]:
         if self.settings.primary_provider == "MT5_DEMO":
             return Mt5DemoReadOnlySource(
                 symbol_suffix=self.settings.mt5_symbol_suffix,
                 module=self._mt5_module,
-            ).fetch_market(self.universe)
+            ).fetch_market(self.universe, now=now)
         source = OandaPracticeReadOnlySource(
             account_id=self.settings.oanda_practice_account_id,
             token=self.settings.oanda_practice_token,

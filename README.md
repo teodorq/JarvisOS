@@ -74,6 +74,17 @@ before the execution boundary. Evidence is kept in the ignored, tamper-evident
 .\.venv\Scripts\python.exe .\tools\run_forex_observation.py --status
 ```
 
+On Windows, install the observation-only autostart once:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\install_forex_observer_autostart.ps1
+```
+
+The limited interactive task starts only the configured OANDA TMS MT5 terminal,
+waits for it to connect and records an observation every 15 minutes while the
+Forex market is open. It opens no web pages and exposes no order route. Remove
+the task with the same command plus `-Remove`.
+
 ## Optional Forex PAPER data
 
 For OANDA TMS in Poland, install its Windows MetaTrader 5, sign the terminal in

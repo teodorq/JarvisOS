@@ -10,10 +10,11 @@ import time
 from typing import Any, Iterable, Mapping
 
 from app.trading.forex_models import ForexBar, ForexPair, ForexQuote
-from app.trading.models import TradingValidationError
+from app.trading.models import TradingValidationError, aware_utc
 
 
 _SYMBOL_SUFFIX = re.compile(r"^[A-Za-z0-9._-]{0,12}$")
+_LOCAL_TIME_SERVERS = frozenset({"OANDATMS-MT5"})
 
 
 def _value(record: object, field: str, code: str) -> object:
@@ -45,8 +46,10 @@ class Mt5DemoReadOnlySource:
         pairs: Iterable[ForexPair],
         *,
         bar_count: int = 31,
+        now: datetime | None = None,
     ) -> tuple[dict[str, ForexQuote], dict[str, tuple[ForexBar, ...]]]:
         selected = tuple(pairs)
+        selected_now = aware_utc(now or datetime.now(timezone.utc), "now")
         symbols = tuple(pair.symbol for pair in selected)
         if (
             not symbols
@@ -62,7 +65,7 @@ class Mt5DemoReadOnlySource:
             if not mt5.initialize(timeout=10_000):
                 raise TradingValidationError("mt5_demo: terminal_unavailable")
             initialized = True
-            self._validate_demo_session(mt5)
+            server = self._validate_demo_session(mt5)
             quotes: dict[str, ForexQuote] = {}
             bars: dict[str, tuple[ForexBar, ...]] = {}
             terminal_symbols: dict[str, tuple[ForexPair, str]] = {}
@@ -71,14 +74,44 @@ class Mt5DemoReadOnlySource:
                 if not mt5.symbol_select(terminal_symbol, True):
                     raise TradingValidationError("mt5_demo: symbol_unavailable")
                 terminal_symbols[pair.symbol] = (pair, terminal_symbol)
+            first_terminal_symbol = next(iter(terminal_symbols.values()))[1]
+            offset_deadline = time.monotonic() + 8.0
+            while True:
+                try:
+                    server_offset_seconds = self._server_time_offset(
+                        mt5,
+                        first_terminal_symbol,
+                        server,
+                        selected_now,
+                    )
+                    break
+                except TradingValidationError as error:
+                    if str(error) == "mt5_demo: unsupported_server_time_offset":
+                        raise
+                    if time.monotonic() >= offset_deadline:
+                        raise TradingValidationError(
+                            "mt5_demo: market_sync_timeout"
+                        ) from error
+                    time.sleep(0.2)
             pending = dict(terminal_symbols)
             deadline = time.monotonic() + 8.0
             last_sync_error: TradingValidationError | None = None
             while pending:
                 for symbol, (pair, terminal_symbol) in tuple(pending.items()):
                     try:
-                        quote = self._quote(mt5, pair, terminal_symbol)
-                        series = self._bars(mt5, pair, terminal_symbol, bar_count)
+                        quote = self._quote(
+                            mt5,
+                            pair,
+                            terminal_symbol,
+                            server_offset_seconds,
+                        )
+                        series = self._bars(
+                            mt5,
+                            pair,
+                            terminal_symbol,
+                            bar_count,
+                            server_offset_seconds,
+                        )
                     except TradingValidationError as error:
                         last_sync_error = error
                         continue
@@ -113,7 +146,7 @@ class Mt5DemoReadOnlySource:
             raise TradingValidationError("mt5_demo: package_unavailable") from error
 
     @staticmethod
-    def _validate_demo_session(mt5: Any) -> None:
+    def _validate_demo_session(mt5: Any) -> str:
         terminal = mt5.terminal_info()
         if terminal is None or getattr(terminal, "connected", False) is not True:
             raise TradingValidationError("mt5_demo: terminal_disconnected")
@@ -125,16 +158,61 @@ class Mt5DemoReadOnlySource:
             raise TradingValidationError("mt5_demo: real_or_non_demo_account_blocked")
         if int(getattr(account, "login", 0) or 0) <= 0:
             raise TradingValidationError("mt5_demo: invalid_demo_account")
+        return str(getattr(account, "server", "") or "").strip().upper()
 
     @staticmethod
-    def _quote(mt5: Any, pair: ForexPair, terminal_symbol: str) -> ForexQuote:
+    def _raw_tick_seconds(tick: object) -> float:
+        milliseconds = int(getattr(tick, "time_msc", 0) or 0)
+        seconds = (
+            milliseconds / 1000
+            if milliseconds
+            else int(getattr(tick, "time", 0) or 0)
+        )
+        if seconds <= 0:
+            raise TradingValidationError("mt5_demo: invalid_tick_time")
+        return seconds
+
+    @classmethod
+    def _server_time_offset(
+        cls,
+        mt5: Any,
+        terminal_symbol: str,
+        server: str,
+        now: datetime,
+    ) -> int:
         tick = mt5.symbol_info_tick(terminal_symbol)
         if tick is None:
             raise TradingValidationError("mt5_demo: quote_unavailable")
-        milliseconds = int(getattr(tick, "time_msc", 0) or 0)
-        seconds = milliseconds / 1000 if milliseconds else int(getattr(tick, "time", 0) or 0)
-        if seconds <= 0:
-            raise TradingValidationError("mt5_demo: invalid_tick_time")
+        raw_time = datetime.fromtimestamp(
+            cls._raw_tick_seconds(tick), tz=timezone.utc
+        )
+        future_seconds = (raw_time - now).total_seconds()
+        if future_seconds <= 2:
+            return 0
+        whole_hours = int(round(future_seconds / 3600))
+        residual_seconds = abs(future_seconds - whole_hours * 3600)
+        if (
+            server not in _LOCAL_TIME_SERVERS
+            or not 1 <= whole_hours <= 3
+            or residual_seconds > 120
+        ):
+            raise TradingValidationError(
+                "mt5_demo: unsupported_server_time_offset"
+            )
+        return whole_hours * 3600
+
+    @classmethod
+    def _quote(
+        cls,
+        mt5: Any,
+        pair: ForexPair,
+        terminal_symbol: str,
+        server_offset_seconds: int,
+    ) -> ForexQuote:
+        tick = mt5.symbol_info_tick(terminal_symbol)
+        if tick is None:
+            raise TradingValidationError("mt5_demo: quote_unavailable")
+        seconds = cls._raw_tick_seconds(tick) - server_offset_seconds
         return ForexQuote.create(
             pair=pair,
             bid=Decimal(str(getattr(tick, "bid", 0))),
@@ -148,6 +226,7 @@ class Mt5DemoReadOnlySource:
         pair: ForexPair,
         terminal_symbol: str,
         count: int,
+        server_offset_seconds: int,
     ) -> tuple[ForexBar, ...]:
         timeframe = getattr(mt5, "TIMEFRAME_M15", None)
         if timeframe is None:
@@ -159,7 +238,10 @@ class Mt5DemoReadOnlySource:
             ForexBar.create(
                 pair=pair,
                 timestamp=datetime.fromtimestamp(
-                    int(_value(row, "time", "mt5_demo: invalid_bar")),
+                    (
+                        int(_value(row, "time", "mt5_demo: invalid_bar"))
+                        - server_offset_seconds
+                    ),
                     tz=timezone.utc,
                 ),
                 open=_value(row, "open", "mt5_demo: invalid_bar"),
