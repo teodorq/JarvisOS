@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from copy import deepcopy
 from datetime import datetime, timezone
 import hashlib
@@ -105,49 +106,243 @@ class ForexObservationJournal:
             return deepcopy(self._normalized(self.store.load()))
 
     def summary(self) -> dict[str, Any]:
-        state = self.snapshot()
-        observations = state["observations"]
-        completed = [
-            item for item in observations
-            if item.get("status") == "OBSERVATION_RECORDED"
-        ]
-        qualified = [
-            item for item in completed
-            if item.get("market_open") is True
-            and item.get("fully_cross_checked") is True
-        ]
-        market_days = {
-            str(item.get("observed_at", ""))[:10]
-            for item in qualified
-            if str(item.get("observed_at", ""))
-        }
-        audit_valid = self.verify(state)
-        promotion_ready = (
-            audit_valid
-            and len(qualified) >= self.MINIMUM_MARKET_OPEN_OBSERVATIONS
-            and len(market_days) >= self.MINIMUM_MARKET_DAYS
-        )
+        review = self.review()
         return {
-            "status": "READY" if audit_valid else "BLOCKED",
+            "status": "BLOCKED" if review["status"] == "BLOCKED" else "READY",
             "mode": "FOREX_OBSERVATION_ONLY",
-            "observation_count": len(observations),
-            "completed_count": len(completed),
-            "blocked_count": len(observations) - len(completed),
-            "qualified_market_open_count": len(qualified),
-            "qualified_market_day_count": len(market_days),
+            "observation_count": review["observation_count"],
+            "completed_count": review["completed_count"],
+            "blocked_count": review["blocked_count"],
+            "qualified_market_open_count": review[
+                "qualified_market_open_count"
+            ],
+            "qualified_market_day_count": review["qualified_market_day_count"],
             "minimum_market_open_observations": (
                 self.MINIMUM_MARKET_OPEN_OBSERVATIONS
             ),
             "minimum_market_days": self.MINIMUM_MARKET_DAYS,
-            "paper_promotion_ready": promotion_ready,
+            "paper_promotion_ready": review["owner_review_ready"],
             "automatic_promotion": False,
+            "audit_chain_valid": review["audit_chain_valid"],
+            "latest_observation_id": review["latest_observation_id"],
+            "paper_orders_sent": False,
+            "live_orders_sent": False,
+        }
+
+    def review(self) -> dict[str, Any]:
+        """Build a read-only evidence review without enabling PAPER execution."""
+        state = self.snapshot()
+        observations = list(state["observations"])
+        audit_valid = self.verify(state)
+        completed = [
+            item for item in observations
+            if item.get("status") == "OBSERVATION_RECORDED"
+        ]
+        statuses = Counter(
+            str(item.get("status", "UNKNOWN")) or "UNKNOWN"
+            for item in observations
+        )
+        market_days: Counter[str] = Counter()
+        opening_blocks: Counter[str] = Counter()
+        assessment_actions: Counter[str] = Counter()
+        instruction_actions: Counter[str] = Counter()
+        instruction_pairs: Counter[str] = Counter()
+        assessed_pairs: Counter[str] = Counter()
+        execution_statuses: Counter[str] = Counter()
+        observed_times: list[datetime] = []
+        expected_pairs = {pair.symbol for pair in MAJOR_FOREX_PAIRS}
+        qualified_pair_coverage_complete = True
+        qualified_count = 0
+        schema_issue_detected = False
+        for item in observations:
+            item_status = str(item.get("status", ""))
+            is_qualified = (
+                item_status == "OBSERVATION_RECORDED"
+                and item.get("market_open") is True
+                and item.get("fully_cross_checked") is True
+            )
+            schema_issue_detected = schema_issue_detected or (
+                item_status not in {"OBSERVATION_RECORDED", "DATA_BLOCKED"}
+                or item.get("mode") != "FOREX_OBSERVATION_ONLY"
+                or type(item.get("market_open")) is not bool
+                or type(item.get("fully_cross_checked")) is not bool
+            )
+            try:
+                observed_at = datetime.fromisoformat(
+                    str(item.get("observed_at", "")).replace("Z", "+00:00")
+                )
+                observed_at = aware_utc(observed_at, "observed_at")
+            except (TypeError, ValueError, TradingValidationError):
+                schema_issue_detected = True
+            else:
+                observed_times.append(observed_at)
+                if is_qualified:
+                    qualified_count += 1
+                    market_days.update((observed_at.date().isoformat(),))
+
+            raw_blocks = item.get("opening_blocks", [])
+            if isinstance(raw_blocks, (list, tuple)):
+                opening_blocks.update(
+                    str(code) for code in raw_blocks if str(code)
+                )
+            else:
+                schema_issue_detected = True
+            raw_execution = item.get("execution", {})
+            execution = (
+                dict(raw_execution) if isinstance(raw_execution, Mapping) else {}
+            )
+            if not isinstance(raw_execution, Mapping):
+                schema_issue_detected = True
+            execution_statuses.update((str(execution.get("status", "MISSING")),))
+            raw_assessments = item.get("assessments", [])
+            assessments = (
+                list(raw_assessments)
+                if isinstance(raw_assessments, (list, tuple))
+                else []
+            )
+            if not isinstance(raw_assessments, (list, tuple)):
+                schema_issue_detected = True
+            observed_pairs = {
+                str(assessment.get("pair", ""))
+                for assessment in assessments
+                if isinstance(assessment, dict) and assessment.get("pair")
+            }
+            for assessment in assessments:
+                if not isinstance(assessment, dict):
+                    continue
+                pair = str(assessment.get("pair", ""))
+                action = str(assessment.get("action", "UNKNOWN")) or "UNKNOWN"
+                if pair:
+                    assessed_pairs.update((pair,))
+                assessment_actions.update((action,))
+            if is_qualified and observed_pairs != expected_pairs:
+                qualified_pair_coverage_complete = False
+            raw_plan = item.get("proposed_plan", {})
+            plan = dict(raw_plan) if isinstance(raw_plan, Mapping) else {}
+            if not isinstance(raw_plan, Mapping):
+                schema_issue_detected = True
+            raw_instructions = plan.get("instructions", [])
+            instructions = (
+                list(raw_instructions)
+                if isinstance(raw_instructions, (list, tuple))
+                else []
+            )
+            if not isinstance(raw_instructions, (list, tuple)):
+                schema_issue_detected = True
+            for instruction in instructions:
+                if not isinstance(instruction, dict):
+                    continue
+                action = str(instruction.get("action", "UNKNOWN")) or "UNKNOWN"
+                pair = str(instruction.get("pair", ""))
+                instruction_actions.update((action,))
+                if pair:
+                    instruction_pairs.update((pair,))
+
+        paper_order_detected = any(
+            item.get("paper_orders_sent") is not False for item in observations
+        )
+        live_order_detected = any(
+            item.get("live_orders_sent") is not False for item in observations
+        )
+        order_network_detected = any(
+            item.get("order_network_access") is not False for item in observations
+        )
+        position_change_detected = any(
+            item.get("positions_unchanged") is not True for item in observations
+        )
+        execution_detected = (
+            execution_statuses.get("NOT_EXECUTED", 0) != len(observations)
+        )
+        day_count = len(market_days)
+        gate_ready = (
+            audit_valid
+            and qualified_count >= self.MINIMUM_MARKET_OPEN_OBSERVATIONS
+            and day_count >= self.MINIMUM_MARKET_DAYS
+        )
+        critical_issues: list[str] = []
+        for detected, code in (
+            (not audit_valid, "AUDIT_CHAIN_INVALID"),
+            (paper_order_detected, "PAPER_ORDER_FLAG_DETECTED"),
+            (live_order_detected, "LIVE_ORDER_FLAG_DETECTED"),
+            (order_network_detected, "ORDER_NETWORK_ACCESS_DETECTED"),
+            (position_change_detected, "POSITION_STATE_CHANGED"),
+            (execution_detected, "EXECUTION_STATUS_INVALID"),
+            (schema_issue_detected, "OBSERVATION_SCHEMA_INVALID"),
+            (
+                not qualified_pair_coverage_complete,
+                "QUALIFIED_PAIR_COVERAGE_INCOMPLETE",
+            ),
+        ):
+            if detected:
+                critical_issues.append(code)
+        pending: list[str] = []
+        if qualified_count < self.MINIMUM_MARKET_OPEN_OBSERVATIONS:
+            pending.append("MINIMUM_QUALIFIED_OBSERVATIONS_PENDING")
+        if day_count < self.MINIMUM_MARKET_DAYS:
+            pending.append("MINIMUM_MARKET_DAYS_PENDING")
+        owner_review_ready = gate_ready and not critical_issues
+        status = (
+            "BLOCKED"
+            if critical_issues
+            else "READY_FOR_OWNER_REVIEW"
+            if owner_review_ready
+            else "COLLECTING_EVIDENCE"
+        )
+        return {
+            "status": status,
+            "mode": "FOREX_OBSERVATION_REVIEW_ONLY",
+            "review_only": True,
             "audit_chain_valid": audit_valid,
+            "observation_count": len(observations),
+            "completed_count": len(completed),
+            "blocked_count": len(observations) - len(completed),
+            "qualified_market_open_count": qualified_count,
+            "qualified_market_day_count": day_count,
+            "minimum_market_open_observations": (
+                self.MINIMUM_MARKET_OPEN_OBSERVATIONS
+            ),
+            "minimum_market_days": self.MINIMUM_MARKET_DAYS,
+            "remaining_qualified_observations": max(
+                0, self.MINIMUM_MARKET_OPEN_OBSERVATIONS - qualified_count
+            ),
+            "remaining_market_days": max(0, self.MINIMUM_MARKET_DAYS - day_count),
+            "first_observed_at": (
+                min(observed_times).isoformat() if observed_times else ""
+            ),
+            "last_observed_at": (
+                max(observed_times).isoformat() if observed_times else ""
+            ),
             "latest_observation_id": (
                 str(observations[-1].get("observation_id", ""))
                 if observations else ""
             ),
-            "paper_orders_sent": False,
-            "live_orders_sent": False,
+            "distributions": {
+                "observation_statuses": dict(sorted(statuses.items())),
+                "qualified_by_market_day": dict(sorted(market_days.items())),
+                "opening_blocks": dict(sorted(opening_blocks.items())),
+                "assessment_actions": dict(sorted(assessment_actions.items())),
+                "proposed_instruction_actions": dict(
+                    sorted(instruction_actions.items())
+                ),
+                "proposed_instruction_pairs": dict(sorted(instruction_pairs.items())),
+                "assessed_pairs": dict(sorted(assessed_pairs.items())),
+            },
+            "safety": {
+                "all_positions_unchanged": not position_change_detected,
+                "qualified_pair_coverage_complete": qualified_pair_coverage_complete,
+                "paper_orders_detected": paper_order_detected,
+                "live_orders_detected": live_order_detected,
+                "order_network_access_detected": order_network_detected,
+                "execution_detected": execution_detected,
+                "execution_statuses": dict(sorted(execution_statuses.items())),
+            },
+            "issues": critical_issues + pending,
+            "observation_thresholds_met": gate_ready,
+            "paper_promotion_ready": owner_review_ready,
+            "owner_review_ready": owner_review_ready,
+            "automatic_promotion": False,
+            "paper_execution_enabled": False,
+            "live_execution_enabled": False,
         }
 
     @classmethod

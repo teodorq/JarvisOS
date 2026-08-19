@@ -221,6 +221,7 @@ class NaturalLanguageService:
             ("capability_help", ("co potrafisz", "co umiesz", "co mozesz zrobic", "jakie masz funkcje", "pokaz pomoc", "pomoc jarvis", "jak z ciebie korzystac", "przyklady polecen", "lista polecen", "centrum mozliwosci")),
             ("current_time", ("ktora jest godzina", "jaka jest godzina", "podaj godzine", "powiedz mi godzine", "aktualna godzina")),
             ("weather", ("pogoda", "pogode", "pogody", "prognoza pogody", "weather", "forecast")),
+            ("forex_observation_review", ("raport obserwacji forex", "przejrzyj obserwacje forex", "audyt obserwacji forex", "jakosc obserwacji forex")),
             ("paper_trading_status", ("status paper tradingu", "stan paper tradingu", "status tradingu", "gotowosc tradingu", "gotowosc do tradingu", "zabezpieczenia tradingu", "audyt tradingu", "status silnika tradingowego", "status forex", "gotowosc forex", "skaner forex", "status obserwatora forex", "ile obserwacji forex", "postep obserwacji forex", "czy paper gotowy", "czy paper jest gotowy")),
             ("integration_status", ("status integracji", "pokaz integracje", "jakie integracje", "polaczenia zewnetrzne", "status revenuecat", "status meta ads", "status claude", "status cartesia", "status elevenlabs")),
             ("assistant_status", ("status asystenta", "status b96", "status b100")),

@@ -191,6 +191,15 @@ class ForexObservationTests(unittest.TestCase):
                 "observed_at": observed.isoformat(),
                 "market_open": True,
                 "fully_cross_checked": True,
+                "opening_blocks": [],
+                "assessments": [
+                    {"pair": pair.symbol, "action": "WATCH"}
+                    for pair in MAJOR_FOREX_PAIRS
+                ],
+                "proposed_plan": {"instructions": []},
+                "execution": {"status": "NOT_EXECUTED"},
+                "positions_unchanged": True,
+                "order_network_access": False,
                 "paper_orders_sent": False,
                 "live_orders_sent": False,
             })
@@ -204,6 +213,61 @@ class ForexObservationTests(unittest.TestCase):
         self.assertIn("dni rynkowe 3/3", rendered)
         self.assertIn("Bramka PAPER: GOTOWA DO PRZEGLĄDU", rendered)
         self.assertIn("PAPER nie został uruchomiony", rendered)
+
+    def test_review_aggregates_evidence_and_remains_read_only(self) -> None:
+        service = self.service()
+        service.observe_once(
+            observation_id="forex-observation-review",
+            now=self.now,
+        )
+
+        review = service.journal.review()
+
+        self.assertEqual(review["status"], "COLLECTING_EVIDENCE")
+        self.assertTrue(review["review_only"])
+        self.assertTrue(review["audit_chain_valid"])
+        self.assertEqual(review["qualified_market_open_count"], 1)
+        self.assertEqual(review["qualified_market_day_count"], 1)
+        self.assertEqual(review["remaining_qualified_observations"], 19)
+        self.assertEqual(review["remaining_market_days"], 2)
+        self.assertEqual(
+            review["distributions"]["assessed_pairs"],
+            {pair.symbol: 1 for pair in MAJOR_FOREX_PAIRS},
+        )
+        self.assertEqual(
+            review["distributions"]["proposed_instruction_actions"],
+            {"OPEN_LONG": 1},
+        )
+        self.assertTrue(review["safety"]["all_positions_unchanged"])
+        self.assertTrue(review["safety"]["qualified_pair_coverage_complete"])
+        self.assertFalse(review["safety"]["paper_orders_detected"])
+        self.assertFalse(review["safety"]["live_orders_detected"])
+        self.assertFalse(review["paper_execution_enabled"])
+        self.assertFalse(review["live_execution_enabled"])
+
+    def test_review_blocks_incomplete_safety_evidence(self) -> None:
+        journal = ForexObservationJournal(self.root)
+        journal.record({
+            "status": "OBSERVATION_RECORDED",
+            "mode": "FOREX_OBSERVATION_ONLY",
+            "observation_id": "forex-incomplete-review",
+            "observed_at": self.now.isoformat(),
+            "market_open": True,
+            "fully_cross_checked": True,
+            "paper_orders_sent": False,
+            "live_orders_sent": False,
+        })
+
+        review = journal.review()
+
+        self.assertEqual(review["status"], "BLOCKED")
+        self.assertIn("ORDER_NETWORK_ACCESS_DETECTED", review["issues"])
+        self.assertIn("POSITION_STATE_CHANGED", review["issues"])
+        self.assertIn("EXECUTION_STATUS_INVALID", review["issues"])
+        self.assertIn("QUALIFIED_PAIR_COVERAGE_INCOMPLETE", review["issues"])
+        self.assertFalse(review["owner_review_ready"])
+        self.assertEqual(journal.summary()["status"], "BLOCKED")
+        self.assertFalse(journal.summary()["paper_promotion_ready"])
 
 
 if __name__ == "__main__":

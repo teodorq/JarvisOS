@@ -143,6 +143,12 @@ na `GOTOWA DO PRZEGLĄDU`; właściciel musi najpierw przejrzeć dowody, a ciąg
 wykonawca nadal pozostaje wyłączony. Pytanie `Ile obserwacji Forex?` pokazuje
 bieżący licznik i brakującą część obu progów bez ujawniania sekretów.
 
+Polecenie `Raport obserwacji Forex` wykonuje dokładniejszy audyt tylko do
+odczytu: podsumowuje wszystkie wpisy, przyczyny blokad, proponowane lecz
+niewykonane decyzje, pokrycie siedmiu par i niezmienność pozycji. Wykrycie
+zmiany pozycji, flagi zlecenia, sieci zleceń, niepełnego pokrycia lub uszkodzenia
+łańcucha blokuje gotowość do przeglądu. Sam raport nie może włączyć PAPER.
+
 ## Uruchomienie danych demonstracyjnych — kolejność
 
 1. Utworzyć rachunek demonstracyjny OANDA TMS, zainstalować desktopowy MT5 i

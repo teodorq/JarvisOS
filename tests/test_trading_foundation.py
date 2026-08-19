@@ -444,6 +444,25 @@ class TradingControlAndRoutingTests(unittest.TestCase):
                     ClientCapabilityPolicy.denial_message(command),
                 )
 
+    def test_observation_review_is_owner_only_and_read_only(self) -> None:
+        command = "Raport obserwacji Forex"
+        self.assertEqual(
+            NaturalLanguageService.classify(command),
+            "forex_observation_review",
+        )
+        self.assertTrue(PersonalAssistantController.matches(command))
+        with TemporaryDirectory() as directory:
+            controller = PersonalAssistantController(directory)
+            thought = controller.plan(command)
+            response = controller.handle(command)
+        self.assertTrue(thought["read_only"])
+        self.assertIn("tylko odczyt", response)
+        self.assertIn("Raport nie może sam uruchomić PAPER ani LIVE", response)
+        self.assertIn(
+            "tylko w trybie właściciela",
+            ClientCapabilityPolicy.denial_for_thought(thought),
+        )
+
 
 class TradingSourceSafetyTests(unittest.TestCase):
     def test_trading_package_has_no_network_or_cloud_imports(self) -> None:

@@ -13,6 +13,7 @@ class ClientCapabilityPolicy:
         "advertising_overview",
         "trading_overview",
         "paper_trading_status",
+        "forex_observation_review",
     }
     OWNER_ONLY_MARKERS = (
         "autodev",

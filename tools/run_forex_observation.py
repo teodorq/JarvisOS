@@ -29,11 +29,15 @@ def main() -> int:
         description="JARVIS OS: obserwacja Forex bez wykonywania zleceń."
     )
     parser.add_argument("--status", action="store_true")
+    parser.add_argument("--review", action="store_true")
     parser.add_argument("--observation-id", default="")
     arguments = parser.parse_args()
     journal = ForexObservationJournal(PROJECT_ROOT)
     if arguments.status:
         print(json.dumps(journal.summary(), ensure_ascii=False, indent=2))
+        return 0
+    if arguments.review:
+        print(json.dumps(journal.review(), ensure_ascii=False, indent=2))
         return 0
     load_forex_environment(PROJECT_ROOT)
     settings = ForexDataSettings.from_environment()

@@ -97,6 +97,48 @@ class TradingControlCenter:
             },
         }
 
+    def format_observation_review(self) -> str:
+        review = self.forex_observations.review()
+        remaining = int(review["remaining_qualified_observations"])
+        remaining_days = int(review["remaining_market_days"])
+        blocks = review["distributions"]["opening_blocks"]
+        actions = review["distributions"]["proposed_instruction_actions"]
+        block_text = ", ".join(
+            f"{code}: {count}" for code, count in blocks.items()
+        ) or "brak"
+        action_text = ", ".join(
+            f"{action}: {count}" for action, count in actions.items()
+        ) or "brak propozycji"
+        safety = review["safety"]
+        if review["status"] == "READY_FOR_OWNER_REVIEW":
+            decision = "GOTOWY DO RĘCZNEGO PRZEGLĄDU; PAPER nadal jest wyłączony"
+        elif review["status"] == "BLOCKED":
+            decision = "ZABLOKOWANY przez błąd integralności lub bezpieczeństwa"
+        else:
+            day_word = "dnia rynkowego" if remaining_days == 1 else "dni rynkowych"
+            decision = (
+                f"ZBIERANIE DANYCH; brakuje {remaining} obserwacji i "
+                f"{remaining_days} {day_word}"
+            )
+        return (
+            "Audyt obserwacji Forex JARVIS OS — tylko odczyt:\n"
+            f"• Wynik: {decision}.\n"
+            f"• Wpisy: {review['observation_count']}; ukończone "
+            f"{review['completed_count']}; zablokowane {review['blocked_count']}.\n"
+            f"• Kwalifikowane: {review['qualified_market_open_count']}/"
+            f"{review['minimum_market_open_observations']}; dni rynkowe "
+            f"{review['qualified_market_day_count']}/{review['minimum_market_days']}.\n"
+            f"• Przyczyny blokad: {block_text}.\n"
+            f"• Proponowane decyzje (niewykonane): {action_text}.\n"
+            f"• Audyt: {'prawidłowy' if review['audit_chain_valid'] else 'USZKODZONY'}; "
+            f"pokrycie 7 par: {'pełne' if safety['qualified_pair_coverage_complete'] else 'NIEPEŁNE'}.\n"
+            f"• Bezpieczeństwo: pozycje {'bez zmian' if safety['all_positions_unchanged'] else 'ZMIENIONE'}; "
+            f"zlecenia PAPER: {'wykryte' if safety['paper_orders_detected'] else '0'}; "
+            f"zlecenia LIVE: {'wykryte' if safety['live_orders_detected'] else '0'}; "
+            f"sieć zleceń: {'wykryta' if safety['order_network_access_detected'] else 'wyłączona'}.\n"
+            "• Raport nie może sam uruchomić PAPER ani LIVE."
+        )
+
     def format_status(self) -> str:
         snapshot = self.status()
         account = snapshot["account"]

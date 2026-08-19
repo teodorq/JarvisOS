@@ -92,6 +92,11 @@ the remaining gate and whether PAPER execution is actually enabled. The status
 loads the ignored `config/forex.env` through the allowlisted loader but never
 shows a key or token.
 
+Use `Raport obserwacji Forex` for a deeper read-only review. It aggregates every
+recorded cycle, market-day coverage, blocked reasons, proposed but unexecuted
+actions, all seven-pair coverage and order-safety invariants. The report cannot
+promote or enable PAPER or LIVE execution.
+
 ## Optional Forex PAPER data
 
 For OANDA TMS in Poland, install its Windows MetaTrader 5, sign the terminal in

@@ -105,6 +105,7 @@ class PersonalAssistantController:
             "status cartesia",
             "status elevenlabs",
             "status paper tradingu", "stan paper tradingu", "status tradingu", "gotowosc tradingu", "gotowosc do tradingu", "zabezpieczenia tradingu", "audyt tradingu", "status silnika tradingowego", "status forex", "gotowosc forex", "skaner forex", "status obserwatora forex", "ile obserwacji forex", "postep obserwacji forex", "czy paper gotowy", "czy paper jest gotowy",
+            "raport obserwacji forex", "przejrzyj obserwacje forex", "audyt obserwacji forex", "jakosc obserwacji forex",
             "tryb ciagly glosu",
             "centrum codziennej pracy",
             "status codziennej pracy",
@@ -211,6 +212,7 @@ class PersonalAssistantController:
             "daily_status",
             "integration_status",
             "paper_trading_status",
+            "forex_observation_review",
             "clarification",
         }
         return {
@@ -342,6 +344,7 @@ class PersonalAssistantController:
         if intent == "integration_status":
             return self.integrations.format_status()
         if intent == "paper_trading_status": return self.trading.format_status()
+        if intent == "forex_observation_review": return self.trading.format_observation_review()
         if intent == "remember_project":
             return self._remember_project(command)
         if intent == "activate_project":
