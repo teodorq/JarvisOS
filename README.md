@@ -130,6 +130,22 @@ changed. It also checks timestamp alignment across pairs, positive tick volume
 and distinguishes regular weekend closures from unexpected intraday gaps. MT5
 position zero is the current bar, so the adapter deliberately starts at position
 one and exports closed bars only.
+
+Run the fixed LONG/SHORT 10/30 moving-average research on the newest verified
+export:
+
+```powershell
+.\.venv\Scripts\python.exe .\tools\run_forex_historical_research.py
+```
+
+The test generates every signal from current and earlier closed bars and fills
+it only at the next M15 open. It uses isolated chronological walk-forward
+windows plus a conservative synthetic spread/slippage model. Results remain
+separate in each pair's quote currency because the export does not contain a
+complete historical PLN conversion series. The ignored detailed report is
+written to `data/trading/research/latest.json`. This command cannot connect to
+the broker or promote PAPER/LIVE trading, and its results are research rather
+than a prediction of future profit.
 Then copy `config/forex.env.example` to the ignored `config/forex.env` and fill
 in:
 

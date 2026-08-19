@@ -6,6 +6,14 @@ from app.trading.dataset import HistoricalCsvLoader, HistoricalDataset
 from app.trading.forex_coordinator import ForexPaperCoordinator, ForexPaperInstruction
 from app.trading.forex_autopilot import ForexPaperAutopilot
 from app.trading.forex_executor import ForexPaperExecutionEngine
+from app.trading.forex_historical import (
+    BidirectionalForexHistoricalBacktester,
+    FixedForexCrossoverSignalGenerator,
+    ForexHistoricalPolicy,
+    ForexHistoricalSignal,
+    ForexHistoricalWalkForwardValidator,
+    ForexWalkForwardPolicy,
+)
 from app.trading.forex_ledger import ForexPaperLedger
 from app.trading.forex_models import (
     ForexBar,
@@ -47,11 +55,16 @@ from app.trading.walk_forward import (
 
 __all__ = [
     "HistoricalPaperBacktester",
+    "BidirectionalForexHistoricalBacktester",
     "ChronologicalHoldoutValidator",
     "HistoricalWalkForwardValidator",
     "HistoricalCsvLoader",
     "HistoricalDataset",
     "ForexBar",
+    "FixedForexCrossoverSignalGenerator",
+    "ForexHistoricalPolicy",
+    "ForexHistoricalSignal",
+    "ForexHistoricalWalkForwardValidator",
     "ForexMarketScanner",
     "ForexPair",
     "ForexPairAssessment",
@@ -68,6 +81,7 @@ __all__ = [
     "ForexRiskDecision",
     "ForexSafetyContext",
     "ForexScannerPolicy",
+    "ForexWalkForwardPolicy",
     "LiveTradingBlockedError",
     "MarketBar",
     "MarketQuote",
