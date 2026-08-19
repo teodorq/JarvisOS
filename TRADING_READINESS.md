@@ -18,7 +18,12 @@ Gotowe elementy:
   błąd podglądania przyszłości;
 - lokalny import danych OHLCV z CSV, walidacją kolejności i cyfrowym odciskiem
   zbioru;
-- właścicielska komenda `Status paper tradingu`.
+- właścicielska komenda `Status paper tradingu`;
+- skaner siedmiu głównych par Forex i deterministyczny koordynator decyzji;
+- źródła tylko do odczytu: MT5 DEMO, Twelve Data, NBP i kalendarz Forex Factory;
+- automatyczny obserwator rynku uruchamiany po zalogowaniu do Windows;
+- właścicielskie pytania `Ile obserwacji Forex?`, `Status obserwatora Forex`
+  oraz `Czy PAPER jest gotowy?` z prawdziwym licznikiem bramki.
 
 Domyślne ograniczenia rachunku demo:
 
@@ -31,19 +36,18 @@ Domyślne ograniczenia rachunku demo:
 - maksymalny wiek kwotowania: 30 sekund;
 - short selling, dźwignia i prawdziwy trading: wyłączone na stałe w tym etapie.
 
-## Czego jeszcze celowo nie podłączono
+## Czego jeszcze celowo nie włączono
 
-- dostawcy danych rynkowych;
-- brokera demonstracyjnego;
-- strategii decydującej o kupnie lub sprzedaży;
-- automatycznych harmonogramów sesji giełdowych;
-- podatków, przewalutowania i raportowania właściwego dla wybranego rynku;
-- jakiejkolwiek ścieżki do prawdziwego rachunku.
+- ciągłego wykonywania decyzji PAPER — pozostaje wyłączone do spełnienia i
+  ręcznego przeglądu bramki obserwacji;
+- zewnętrznego brokera demonstracyjnego do składania zleceń; obecny wykonawca
+  PAPER zapisuje wyłącznie lokalną symulację;
+- prawdziwego rachunku, dźwigni ani jakiejkolwiek sieciowej ścieżki zleceń;
+- podatków oraz raportowania właściwego dla rachunku rzeczywistego.
 
-Najpierw trzeba wybrać klasę aktywów (na przykład akcje, ETF-y albo krypto),
-rynek, walutę bazową, częstotliwość danych i brokera demonstracyjnego. Dopiero
-wtedy można poprawnie zaprojektować kalendarze, typy zleceń, źródło ceny,
-opłaty i ograniczenia konkretnego rynku.
+Wybranym pierwszym rynkiem jest Forex, walutą księgową PLN, a interwałem
+decyzyjnym M15. MT5 działa wyłącznie jako główne źródło danych z rachunku DEMO;
+nie jest powierzchnią wykonania zleceń.
 
 ## Bramy bezpieczeństwa przed dalszym etapem
 
@@ -123,6 +127,21 @@ wydarzenie wysokiej ważności w oknie 30 minut, zamknięty rynek albo kurs NBP
 starszy niż cztery dni blokują nowe pozycje. Dane NBP są referencją księgową dla
 PAPER, a nie drugim źródłem ceny wykonania. Spot Forex nie ma jednego centralnego
 wolumenu całego rynku, dlatego tick volume pozostaje tylko jednym z filtrów.
+
+## Bramka obserwacji przed PAPER
+
+Obserwator wykonuje ten sam odczyt danych, skan i plan, który będzie używany w
+PAPER, ale zatrzymuje się przed wykonaniem. Bramka wymaga jednocześnie:
+
+- co najmniej 20 kwalifikowanych obserwacji przy otwartym rynku;
+- kompletu zgodnych danych dla wszystkich siedmiu par;
+- obserwacji z co najmniej 3 różnych dni rynkowych;
+- prawidłowego łańcucha audytowego dziennika.
+
+Spełnienie progów nie uruchamia PAPER automatycznie. Status zmienia się jedynie
+na `GOTOWA DO PRZEGLĄDU`; właściciel musi najpierw przejrzeć dowody, a ciągły
+wykonawca nadal pozostaje wyłączony. Pytanie `Ile obserwacji Forex?` pokazuje
+bieżący licznik i brakującą część obu progów bez ujawniania sekretów.
 
 ## Uruchomienie danych demonstracyjnych — kolejność
 

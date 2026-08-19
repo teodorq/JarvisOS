@@ -5,7 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from app.market_data.forex_environment import ForexDataSettings
+from app.core.project_paths import resolve_project_root
+from app.market_data.forex_environment import (
+    ForexDataSettings,
+    load_forex_environment,
+)
 from app.trading.backtest import HistoricalPaperBacktester
 from app.trading.forex_coordinator import ForexPaperCoordinator
 from app.trading.forex_models import MAJOR_FOREX_PAIRS
@@ -21,20 +25,27 @@ class TradingControlCenter:
     """Expose a local, secret-free trading readiness snapshot."""
 
     def __init__(self, project_root: str | Path | None = None) -> None:
+        self.project_root = resolve_project_root(project_root)
+        load_forex_environment(self.project_root)
         self.policy = PaperTradingPolicy()
-        self.engine = PaperTradingEngine(project_root, policy=self.policy)
+        self.engine = PaperTradingEngine(self.project_root, policy=self.policy)
         self.risk = PreTradeRiskEngine(self.policy)
         self.backtester = HistoricalPaperBacktester(self.policy)
         self.forex_policy = ForexPaperPolicy()
         self.forex_scanner = ForexMarketScanner()
         self.forex = ForexPaperCoordinator(self.forex_policy)
         self.forex_data = ForexDataSettings.from_environment()
-        self.forex_observations = ForexObservationJournal(project_root)
+        self.forex_observations = ForexObservationJournal(self.project_root)
 
     def status(self) -> dict[str, Any]:
         account = self.engine.status()
         data_readiness = self.forex_data.readiness()
         observations = self.forex_observations.summary()
+        opening_gate_ready = bool(
+            data_readiness["complete"]
+            and observations["paper_promotion_ready"]
+            and observations["audit_chain_valid"]
+        )
         return {
             "status": "PAPER_FOUNDATION_READY",
             "mode": "PAPER_ONLY",
@@ -67,9 +78,10 @@ class TradingControlCenter:
                 "universe": [pair.symbol for pair in MAJOR_FOREX_PAIRS],
                 "pair_count": len(MAJOR_FOREX_PAIRS),
                 "bidirectional_paper_signals": True,
-                "automatic_paper_execution": True,
+                "automatic_paper_execution_available": True,
+                "automatic_paper_execution": False,
                 "continuous_runtime_active": False,
-                "opening_gate_ready": False,
+                "opening_gate_ready": opening_gate_ready,
                 "data_configuration_complete": data_readiness["complete"],
                 "data_configuration": data_readiness,
                 "observation": observations,
@@ -89,12 +101,44 @@ class TradingControlCenter:
         snapshot = self.status()
         account = snapshot["account"]
         data = snapshot["forex"]["data_configuration"]
+        observation = snapshot["forex"]["observation"]
         kill_switch = (
             "AKTYWNY — nowe symulowane zlecenia są zatrzymane"
             if account["kill_switch_active"]
             else "gotowy"
         )
         audit = "prawidłowy" if account["audit_chain_valid"] else "USZKODZONY"
+        qualified = int(observation["qualified_market_open_count"])
+        required = int(observation["minimum_market_open_observations"])
+        days = int(observation["qualified_market_day_count"])
+        required_days = int(observation["minimum_market_days"])
+        remaining = max(0, required - qualified)
+        remaining_days = max(0, required_days - days)
+        observation_audit = (
+            "prawidłowy" if observation["audit_chain_valid"] else "USZKODZONY"
+        )
+        if not observation["audit_chain_valid"]:
+            gate = (
+                "ZABLOKOWANA — łańcuch audytu obserwacji jest uszkodzony; "
+                "PAPER pozostaje wyłączony"
+            )
+            next_step = "sprawdzić i naprawić lokalny dziennik obserwacji"
+        elif observation["paper_promotion_ready"]:
+            gate = (
+                "GOTOWA DO PRZEGLĄDU — automatyczna promocja jest wyłączona, "
+                "a PAPER nie został uruchomiony"
+            )
+            next_step = (
+                "przejrzeć wyniki obserwacji i dopiero potem jawnie uruchomić "
+                "ciągły tryb PAPER"
+            )
+        else:
+            day_word = "dnia rynkowego" if remaining_days == 1 else "dni rynkowych"
+            gate = (
+                f"ZABLOKOWANA — brakuje {remaining} obserwacji i "
+                f"{remaining_days} {day_word}"
+            )
+            next_step = "pozostawić obserwator włączony do spełnienia obu progów"
         return (
             "Trading JARVIS OS — przygotowanie PAPER ONLY:\n"
             "• Rdzeń: ścisłe modele rynku, walidowany import CSV, backtest bez "
@@ -103,22 +147,27 @@ class TradingControlCenter:
             "spreadu i liczby zleceń — aktywne.\n"
             "• Forex: skaner 7 głównych par, ranking i wspólne limity walutowe "
             "— gotowe lokalnie.\n"
-            "• Autopilot PAPER: lokalne otwieranie, zamykanie, ponowna kontrola "
-            "ryzyka i ochrona przed duplikatem — gotowe.\n"
+            "• Silnik autopilota PAPER: lokalne otwieranie, zamykanie, ponowna "
+            "kontrola ryzyka i ochrona przed duplikatem — dostępne, lecz wykonanie "
+            "pozostaje WYŁĄCZONE.\n"
             f"• Konto demo: {account['equity']} {account['base_currency']}; "
             f"pozycje: {account['position_count']}; wypełnienia: {account['fill_count']}.\n"
             f"• Audyt: {audit}; wyłącznik awaryjny: {kill_switch}.\n"
+            f"• Obserwacje Forex: kwalifikowane {qualified}/{required}; dni "
+            f"rynkowe {days}/{required_days}; wszystkie wpisy "
+            f"{observation['observation_count']}; zablokowane "
+            f"{observation['blocked_count']}; audyt {observation_audit}.\n"
+            f"• Bramka PAPER: {gate}.\n"
             "• Dane Forex: lokalny adapter MT5 DEMO, opcjonalny OANDA Practice, "
             "Twelve Data, NBP i publiczny kalendarz Forex Factory oraz kontrola "
             "rozbieżności są gotowe.\n"
-            f"• Konfiguracja źródeł: {'kompletna' if data['complete'] else 'oczekuje na lokalne klucze kont demonstracyjnych'}; "
-            "automatyczne wejścia pozostają zablokowane do chwili poprawnej kontroli "
-            "wszystkich źródeł w bieżącym cyklu.\n"
+            f"• Konfiguracja źródeł: {'kompletna' if data['complete'] else 'niekompletna — sprawdź lokalny plik config/forex.env'}; "
+            "automatyczne wejścia pozostają zablokowane i wymagają również "
+            "ukończenia bramki obserwacji.\n"
             "• Sygnały LONG/SHORT istnieją tylko w planie PAPER. Prawdziwe "
             "zlecenia, dźwignia, sieć i dostęp do "
             "pieniędzy: twardo zablokowane.\n"
-            "Następny etap: połączyć lokalny MT5 wyłącznie z rachunkiem DEMO, "
-            "skonfigurować klucze danych i wykonać serię cykli obserwacyjnych."
+            f"Następny etap: {next_step}."
         )
 
 

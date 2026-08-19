@@ -85,6 +85,13 @@ waits for it to connect and records an observation every 15 minutes while the
 Forex market is open. It opens no web pages and exposes no order route. Remove
 the task with the same command plus `-Remove`.
 
+In owner mode, say or type `Ile obserwacji Forex?`,
+`Status obserwatora Forex` or `Czy PAPER jest gotowy?`. JARVIS reads the local
+tamper-evident journal and reports qualified observations, distinct market days,
+the remaining gate and whether PAPER execution is actually enabled. The status
+loads the ignored `config/forex.env` through the allowlisted loader but never
+shows a key or token.
+
 ## Optional Forex PAPER data
 
 For OANDA TMS in Poland, install its Windows MetaTrader 5, sign the terminal in

@@ -18,6 +18,7 @@ from app.trading.forex_observation import (
     ForexObservationJournal,
     ForexObservationService,
 )
+from app.trading.control_center import TradingControlCenter
 from app.trading.models import TradingValidationError
 
 
@@ -198,6 +199,11 @@ class ForexObservationTests(unittest.TestCase):
         self.assertTrue(summary["paper_promotion_ready"])
         self.assertFalse(summary["automatic_promotion"])
         self.assertEqual(summary["qualified_market_day_count"], 3)
+        rendered = TradingControlCenter(self.root).format_status()
+        self.assertIn("kwalifikowane 20/20", rendered)
+        self.assertIn("dni rynkowe 3/3", rendered)
+        self.assertIn("Bramka PAPER: GOTOWA DO PRZEGLĄDU", rendered)
+        self.assertIn("PAPER nie został uruchomiony", rendered)
 
 
 if __name__ == "__main__":

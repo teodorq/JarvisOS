@@ -64,6 +64,11 @@ class ClientCapabilityPolicy:
         "status forex",
         "gotowosc forex",
         "skaner forex",
+        "obserwator forex",
+        "obserwatora forex",
+        "obserwacji forex",
+        "paper gotowy",
+        "paper jest gotowy",
     )
     OWNER_ONLY_THOUGHT_MARKERS = (
         "autodev",

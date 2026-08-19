@@ -5,9 +5,11 @@ from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 
 from app.assistant.controller import PersonalAssistantController
 from app.assistant.natural_language import NaturalLanguageService
@@ -373,6 +375,10 @@ class TradingControlAndRoutingTests(unittest.TestCase):
         self.assertFalse(status["safety"]["live_trading_enabled"])
         self.assertIn("PAPER ONLY", rendered)
         self.assertIn("twardo zablokowane", rendered)
+        self.assertIn("kwalifikowane 0/20", rendered)
+        self.assertIn("dni rynkowe 0/3", rendered)
+        self.assertIn("Bramka PAPER: ZABLOKOWANA", rendered)
+        self.assertIn("wykonanie pozostaje WYŁĄCZONE", rendered)
 
     def test_owner_status_command_is_read_only_and_client_blocked(self) -> None:
         command = "Status paper tradingu"
@@ -398,6 +404,45 @@ class TradingControlAndRoutingTests(unittest.TestCase):
                 {"assistant_intent": "paper_trading_status"}
             ),
         )
+
+    def test_status_loads_ignored_forex_configuration_without_exposing_secret(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "config").mkdir()
+            (root / "config" / "forex.env").write_text(
+                "JARVIS_OS_FOREX_DATA_ENABLED=true\n"
+                "JARVIS_OS_FOREX_PRIMARY_PROVIDER=MT5_DEMO\n"
+                "JARVIS_OS_TWELVE_DATA_API_KEY=placeholder\n",
+                encoding="utf-8",
+            )
+            with patch.dict(os.environ, {}, clear=True):
+                center = TradingControlCenter(root)
+                status = center.status()
+                rendered = center.format_status()
+
+        self.assertTrue(status["forex"]["data_configuration_complete"])
+        self.assertIn("Konfiguracja źródeł: kompletna", rendered)
+        self.assertNotIn("placeholder", rendered)
+        self.assertNotIn("placeholder", repr(status))
+
+    def test_observation_progress_phrases_are_owner_only_read_only_status(self) -> None:
+        variants = (
+            "Status obserwatora Forex",
+            "Ile obserwacji Forex?",
+            "Postęp obserwacji Forex",
+            "Czy PAPER jest gotowy?",
+        )
+        for command in variants:
+            with self.subTest(command=command):
+                self.assertEqual(
+                    NaturalLanguageService.classify(command),
+                    "paper_trading_status",
+                )
+                self.assertTrue(PersonalAssistantController.matches(command))
+                self.assertIn(
+                    "tylko w trybie właściciela",
+                    ClientCapabilityPolicy.denial_message(command),
+                )
 
 
 class TradingSourceSafetyTests(unittest.TestCase):
