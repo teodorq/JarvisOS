@@ -370,6 +370,10 @@ class TradingControlAndRoutingTests(unittest.TestCase):
         self.assertTrue(status["components"]["pre_trade_risk"])
         self.assertTrue(status["components"]["atomic_ledger"])
         self.assertTrue(status["components"]["next_bar_backtest"])
+        self.assertTrue(status["components"]["chronological_holdout_backtest"])
+        self.assertTrue(
+            status["components"]["non_overlapping_walk_forward_backtest"]
+        )
         self.assertFalse(status["components"]["external_market_data"])
         self.assertFalse(status["components"]["external_paper_broker"])
         self.assertFalse(status["safety"]["live_trading_enabled"])

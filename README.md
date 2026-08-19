@@ -46,6 +46,13 @@ emergency stop and next-bar historical backtesting. Optional read-only market
 data can feed the simulator, but there is no broker order connection, leverage
 or path to real-money orders.
 
+Historical research also supports a strict chronological holdout and rolling
+walk-forward validation. Every test period follows its training period, future
+test windows cannot overlap, fills still occur only on a later bar, and neither
+result can automatically promote PAPER or send an order. The validator does not
+claim to audit how external signals were generated; that remains a separate
+anti-look-ahead requirement for every strategy adapter.
+
 Say or type `Status paper tradingu` in owner mode to see the local readiness
 snapshot. The feature is blocked in client mode. Detailed scope, limits and the
 required gates before any future broker integration are documented in

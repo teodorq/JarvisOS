@@ -16,6 +16,10 @@ Gotowe elementy:
 - wyłącznik awaryjny;
 - backtest realizujący sygnał dopiero na następnej świecy, co blokuje prosty
   błąd podglądania przyszłości;
+- chronologiczny holdout oddzielający wcześniejsze dane treningowe od późniejszych,
+  niewidzianych danych testowych;
+- deterministyczny walk-forward z wieloma niepokrywającymi się okresami testowymi,
+  izolowanym kapitałem testowym i raportem luki generalizacji;
 - lokalny import danych OHLCV z CSV, walidacją kolejności i cyfrowym odciskiem
   zbioru;
 - właścicielska komenda `Status paper tradingu`;
@@ -55,9 +59,12 @@ Przed rozważeniem prawdziwych zleceń wszystkie poniższe warunki muszą być
 spełnione i udokumentowane:
 
 1. Kontrola jakości licencjonowanych danych historycznych i bieżących.
-2. Backtest z kosztami, poślizgiem i podziałem na okres treningowy oraz
-   całkowicie niewidziany okres testowy.
-3. Testy walk-forward i odporności na zmianę parametrów.
+2. Uruchomienie gotowego backtestu z kosztami, poślizgiem i chronologicznym
+   podziałem na rzeczywistym, sprawdzonym zbiorze historycznym.
+3. Uruchomienie gotowego walk-forward na tym zbiorze oraz osobny test odporności
+   na zmianę parametrów. Sam mechanizm nie wybiera najlepszego wariantu na
+   podstawie przyszłych wyników i jawnie nie uznaje zewnętrznego generatora
+   sygnałów za sprawdzony pod kątem podglądania przyszłości.
 4. Minimum 30–90 dni ciągłego forward testu na rachunku paper.
 5. Testy restartu, opóźnień, brakujących danych, duplikatów, częściowych
    realizacji i zerwanego połączenia.

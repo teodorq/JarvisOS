@@ -39,9 +39,16 @@ from app.trading.models import (
 from app.trading.paper_broker import LiveTradingBlockedError, PaperTradingEngine
 from app.trading.policy import PaperTradingPolicy
 from app.trading.risk import PreTradeRiskEngine, RiskDecision
+from app.trading.walk_forward import (
+    ChronologicalHoldoutValidator,
+    HistoricalWalkForwardValidator,
+    WalkForwardPolicy,
+)
 
 __all__ = [
     "HistoricalPaperBacktester",
+    "ChronologicalHoldoutValidator",
+    "HistoricalWalkForwardValidator",
     "HistoricalCsvLoader",
     "HistoricalDataset",
     "ForexBar",
@@ -76,4 +83,5 @@ __all__ = [
     "TradingValidationError",
     "USD_PLN_CONVERSION_PAIR",
     "major_pair",
+    "WalkForwardPolicy",
 ]

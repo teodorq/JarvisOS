@@ -55,6 +55,8 @@ class TradingControlCenter:
                 "atomic_ledger": True,
                 "tamper_evident_audit": account["audit_chain_valid"],
                 "next_bar_backtest": True,
+                "chronological_holdout_backtest": True,
+                "non_overlapping_walk_forward_backtest": True,
                 "validated_historical_csv": True,
                 "multi_pair_forex_scanner": True,
                 "forex_currency_portfolio_risk": True,
@@ -184,7 +186,8 @@ class TradingControlCenter:
         return (
             "Trading JARVIS OS — przygotowanie PAPER ONLY:\n"
             "• Rdzeń: ścisłe modele rynku, walidowany import CSV, backtest bez "
-            "podglądania przyszłości i lokalna księga — gotowe.\n"
+            "podglądania przyszłości, chronologiczny holdout, walk-forward i "
+            "lokalna księga — gotowe.\n"
             "• Ryzyko: limity zlecenia, pozycji, ekspozycji, dziennej straty, "
             "spreadu i liczby zleceń — aktywne.\n"
             "• Forex: skaner 7 głównych par, ranking i wspólne limity walutowe "
