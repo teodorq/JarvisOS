@@ -58,6 +58,9 @@ class TradingControlCenter:
                 "chronological_holdout_backtest": True,
                 "non_overlapping_walk_forward_backtest": True,
                 "validated_historical_csv": True,
+                "mt5_demo_closed_m15_history_export": True,
+                "historical_dataset_fingerprint_recheck": True,
+                "historical_m15_quality_audit": True,
                 "multi_pair_forex_scanner": True,
                 "forex_currency_portfolio_risk": True,
                 "forex_paper_decision_coordinator": True,
@@ -188,6 +191,8 @@ class TradingControlCenter:
             "• Rdzeń: ścisłe modele rynku, walidowany import CSV, backtest bez "
             "podglądania przyszłości, chronologiczny holdout, walk-forward i "
             "lokalna księga — gotowe.\n"
+            "• Historia: eksport zamkniętych M15 z MT5 DEMO, manifest SHA-256 "
+            "oraz kontrola odcisków, synchronizacji, wolumenu i luk — gotowe.\n"
             "• Ryzyko: limity zlecenia, pozycji, ekspozycji, dziennej straty, "
             "spreadu i liczby zleceń — aktywne.\n"
             "• Forex: skaner 7 głównych par, ranking i wspólne limity walutowe "

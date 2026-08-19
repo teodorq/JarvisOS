@@ -10,6 +10,7 @@ from app.market_data.forex_models import (
     PlnReferenceRate,
 )
 from app.market_data.mt5_demo import Mt5DemoReadOnlySource
+from app.market_data.mt5_history import Mt5DemoHistoricalExporter
 
 __all__ = [
     "EconomicCalendarSnapshot",
@@ -20,6 +21,7 @@ __all__ = [
     "ForexReadOnlyDataGateway",
     "IndependentRate",
     "Mt5DemoReadOnlySource",
+    "Mt5DemoHistoricalExporter",
     "PlnReferenceRate",
     "load_forex_environment",
 ]

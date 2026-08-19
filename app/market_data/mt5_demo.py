@@ -137,6 +137,83 @@ class Mt5DemoReadOnlySource:
                 except Exception:
                     pass
 
+    def fetch_history(
+        self,
+        pairs: Iterable[ForexPair],
+        *,
+        bar_count: int = 5_000,
+        now: datetime | None = None,
+    ) -> dict[str, tuple[ForexBar, ...]]:
+        """Read closed M15 history after proving the terminal account is DEMO."""
+        selected = tuple(pairs)
+        selected_now = aware_utc(now or datetime.now(timezone.utc), "now")
+        symbols = tuple(pair.symbol for pair in selected)
+        if (
+            not symbols
+            or len(set(symbols)) != len(symbols)
+            or type(bar_count) is not int
+            or not 200 <= bar_count <= 50_000
+            or any(not pair.tradable for pair in selected)
+        ):
+            raise TradingValidationError("mt5_demo: invalid_history_request")
+
+        mt5 = self._load_module()
+        initialized = False
+        try:
+            if not mt5.initialize(timeout=10_000):
+                raise TradingValidationError("mt5_demo: terminal_unavailable")
+            initialized = True
+            server = self._validate_demo_session(mt5)
+            terminal_symbols: dict[str, tuple[ForexPair, str]] = {}
+            for pair in selected:
+                terminal_symbol = pair.symbol.replace("_", "") + self.symbol_suffix
+                if not mt5.symbol_select(terminal_symbol, True):
+                    raise TradingValidationError("mt5_demo: symbol_unavailable")
+                terminal_symbols[pair.symbol] = (pair, terminal_symbol)
+            first_terminal_symbol = next(iter(terminal_symbols.values()))[1]
+            server_offset_seconds = self._wait_for_server_offset(
+                mt5,
+                first_terminal_symbol,
+                server,
+                selected_now,
+            )
+            pending = dict(terminal_symbols)
+            history: dict[str, tuple[ForexBar, ...]] = {}
+            deadline = time.monotonic() + 15.0
+            last_sync_error: TradingValidationError | None = None
+            while pending:
+                for symbol, (pair, terminal_symbol) in tuple(pending.items()):
+                    try:
+                        history[symbol] = self._bars(
+                            mt5,
+                            pair,
+                            terminal_symbol,
+                            bar_count,
+                            server_offset_seconds,
+                        )
+                    except TradingValidationError as error:
+                        last_sync_error = error
+                        continue
+                    pending.pop(symbol)
+                if not pending:
+                    break
+                if time.monotonic() >= deadline:
+                    raise TradingValidationError(
+                        "mt5_demo: history_sync_timeout"
+                    ) from last_sync_error
+                time.sleep(0.2)
+            return history
+        except TradingValidationError:
+            raise
+        except Exception as error:
+            raise TradingValidationError("mt5_demo: history_unavailable") from error
+        finally:
+            if initialized:
+                try:
+                    mt5.shutdown()
+                except Exception:
+                    pass
+
     def _load_module(self) -> Any:
         if self._module is not None:
             return self._module
@@ -200,6 +277,32 @@ class Mt5DemoReadOnlySource:
                 "mt5_demo: unsupported_server_time_offset"
             )
         return whole_hours * 3600
+
+    @classmethod
+    def _wait_for_server_offset(
+        cls,
+        mt5: Any,
+        terminal_symbol: str,
+        server: str,
+        now: datetime,
+    ) -> int:
+        deadline = time.monotonic() + 8.0
+        while True:
+            try:
+                return cls._server_time_offset(
+                    mt5,
+                    terminal_symbol,
+                    server,
+                    now,
+                )
+            except TradingValidationError as error:
+                if str(error) == "mt5_demo: unsupported_server_time_offset":
+                    raise
+                if time.monotonic() >= deadline:
+                    raise TradingValidationError(
+                        "mt5_demo: market_sync_timeout"
+                    ) from error
+                time.sleep(0.2)
 
     @classmethod
     def _quote(

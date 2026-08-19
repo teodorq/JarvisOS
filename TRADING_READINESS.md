@@ -25,6 +25,8 @@ Gotowe elementy:
 - właścicielska komenda `Status paper tradingu`;
 - skaner siedmiu głównych par Forex i deterministyczny koordynator decyzji;
 - źródła tylko do odczytu: MT5 DEMO, Twelve Data, NBP i kalendarz Forex Factory;
+- atomowy eksport zamkniętych świec M15 z MT5 DEMO do siedmiu lokalnych CSV,
+  manifest SHA-256 oraz ponowna kontrola każdego odcisku przed badaniem;
 - automatyczny obserwator rynku uruchamiany po zalogowaniu do Windows;
 - właścicielskie pytania `Ile obserwacji Forex?`, `Status obserwatora Forex`
   oraz `Czy PAPER jest gotowy?` z prawdziwym licznikiem bramki.
@@ -134,6 +136,13 @@ wydarzenie wysokiej ważności w oknie 30 minut, zamknięty rynek albo kurs NBP
 starszy niż cztery dni blokują nowe pozycje. Dane NBP są referencją księgową dla
 PAPER, a nie drugim źródłem ceny wykonania. Spot Forex nie ma jednego centralnego
 wolumenu całego rynku, dlatego tick volume pozostaje tylko jednym z filtrów.
+
+Narzędzie `tools/export_mt5_history.py` pobiera wyłącznie zamknięte świece M15,
+zaczynając od pozycji 1 API MT5. Dane trafiają do ignorowanego katalogu
+`data/trading/history/`; manifest nie zapisuje loginu ani danych konta. Opcja
+`--verify-latest` ponownie przelicza odcisk każdego CSV i blokuje zmieniony zbiór.
+Raport sprawdza również identyczną oś czasu siedmiu par, udział dodatniego tick
+volume oraz oddziela regularne luki weekendowe od braków wewnątrz sesji.
 
 ## Bramka obserwacji przed PAPER
 

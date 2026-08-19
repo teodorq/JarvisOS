@@ -374,6 +374,13 @@ class TradingControlAndRoutingTests(unittest.TestCase):
         self.assertTrue(
             status["components"]["non_overlapping_walk_forward_backtest"]
         )
+        self.assertTrue(
+            status["components"]["mt5_demo_closed_m15_history_export"]
+        )
+        self.assertTrue(
+            status["components"]["historical_dataset_fingerprint_recheck"]
+        )
+        self.assertTrue(status["components"]["historical_m15_quality_audit"])
         self.assertFalse(status["components"]["external_market_data"])
         self.assertFalse(status["components"]["external_paper_broker"])
         self.assertFalse(status["safety"]["live_trading_enabled"])

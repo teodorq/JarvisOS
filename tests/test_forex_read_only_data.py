@@ -287,6 +287,31 @@ class ProviderParserTests(unittest.TestCase):
         ])
         self.assertEqual(fake.calls[-1], ("shutdown",))
 
+    def test_mt5_demo_reads_bounded_closed_m15_history(self) -> None:
+        fake = FakeMt5Module()
+        history = Mt5DemoReadOnlySource(module=fake).fetch_history(
+            (major_pair("EUR_USD"),),
+            bar_count=200,
+            now=NOW,
+        )
+
+        self.assertEqual(tuple(history), ("EUR_USD",))
+        self.assertEqual(len(history["EUR_USD"]), 200)
+        rate_calls = [call for call in fake.calls if call[0] == "copy_rates_from_pos"]
+        self.assertEqual(rate_calls, [("copy_rates_from_pos", "EURUSD", 15, 1, 200)])
+        self.assertEqual(fake.calls[-1], ("shutdown",))
+
+    def test_mt5_history_blocks_real_account_before_market_read(self) -> None:
+        fake = FakeMt5Module(trade_mode=FakeMt5Module.ACCOUNT_TRADE_MODE_REAL)
+        with self.assertRaisesRegex(TradingValidationError, "non_demo_account_blocked"):
+            Mt5DemoReadOnlySource(module=fake).fetch_history(
+                (major_pair("EUR_USD"),),
+                bar_count=200,
+                now=NOW,
+            )
+        self.assertFalse(any(call[0] == "copy_rates_from_pos" for call in fake.calls))
+        self.assertEqual(fake.calls[-1], ("shutdown",))
+
     def test_mt5_blocks_real_account_before_any_market_read(self) -> None:
         fake = FakeMt5Module(trade_mode=FakeMt5Module.ACCOUNT_TRADE_MODE_REAL)
         with self.assertRaisesRegex(TradingValidationError, "non_demo_account_blocked"):
@@ -419,12 +444,16 @@ class ForexDataGatewayTests(unittest.TestCase):
         self.assertNotIn("api-fxtrade.oanda.com", source)
         self.assertNotIn("/orders", source)
         self.assertNotIn("post(", source)
-        mt5_source = (
-            Path(__file__).resolve().parents[1]
-            / "app" / "market_data" / "mt5_demo.py"
-        ).read_text(encoding="utf-8").casefold()
+        market_data_root = (
+            Path(__file__).resolve().parents[1] / "app" / "market_data"
+        )
+        mt5_source = "\n".join(
+            (market_data_root / name).read_text(encoding="utf-8").casefold()
+            for name in ("mt5_demo.py", "mt5_history.py")
+        )
         self.assertNotIn("order_send", mt5_source)
         self.assertNotIn("positions_get", mt5_source)
+        self.assertNotIn("history_deals_get", mt5_source)
 
 
 if __name__ == "__main__":

@@ -115,6 +115,21 @@ to a DEMO account and install the optional local package:
 
 JARVIS does not store the MT5 login or password. It uses the terminal's current
 session and rejects real and contest accounts before reading the first price.
+
+Export a local research snapshot of 5,000 closed M15 bars for all seven pairs:
+
+```powershell
+.\.venv\Scripts\python.exe .\tools\export_mt5_history.py --bars 5000
+.\.venv\Scripts\python.exe .\tools\export_mt5_history.py --verify-latest
+```
+
+The export is stored under ignored `data/trading/history/`. Every pair gets a
+validated CSV and SHA-256 fingerprint in a secret-free manifest. Verification
+re-reads every CSV and fails if a file, fingerprint, pair set or safety flag has
+changed. It also checks timestamp alignment across pairs, positive tick volume
+and distinguishes regular weekend closures from unexpected intraday gaps. MT5
+position zero is the current bar, so the adapter deliberately starts at position
+one and exports closed bars only.
 Then copy `config/forex.env.example` to the ignored `config/forex.env` and fill
 in:
 
