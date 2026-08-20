@@ -31,6 +31,7 @@ from app.trading.forex_risk import (
     ForexRateBook,
     ForexRiskDecision,
 )
+from app.trading.forex_research_status import ForexHistoricalResearchGate
 from app.trading.forex_scanner import (
     ForexMarketScanner,
     ForexPairAssessment,
@@ -65,6 +66,7 @@ __all__ = [
     "ForexHistoricalPolicy",
     "ForexHistoricalSignal",
     "ForexHistoricalWalkForwardValidator",
+    "ForexHistoricalResearchGate",
     "ForexMarketScanner",
     "ForexPair",
     "ForexPairAssessment",

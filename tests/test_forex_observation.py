@@ -180,7 +180,7 @@ class ForexObservationTests(unittest.TestCase):
         self.assertFalse(summary["audit_chain_valid"])
         self.assertFalse(summary["paper_promotion_ready"])
 
-    def test_paper_promotion_is_advisory_and_never_automatic(self) -> None:
+    def test_observation_threshold_is_advisory_and_research_gate_stays_closed(self) -> None:
         journal = ForexObservationJournal(self.root)
         for index in range(20):
             observed = self.now + timedelta(days=index % 3, minutes=index)
@@ -208,11 +208,16 @@ class ForexObservationTests(unittest.TestCase):
         self.assertTrue(summary["paper_promotion_ready"])
         self.assertFalse(summary["automatic_promotion"])
         self.assertEqual(summary["qualified_market_day_count"], 3)
-        rendered = TradingControlCenter(self.root).format_status()
+        control_center = TradingControlCenter(self.root)
+        status = control_center.status()
+        self.assertFalse(status["forex"]["opening_gate_ready"])
+        self.assertFalse(status["forex"]["historical_research"]["strategy_candidate_ready"])
+        self.assertFalse(status["forex"]["automatic_paper_execution"])
+        rendered = control_center.format_status()
         self.assertIn("kwalifikowane 20/20", rendered)
         self.assertIn("dni rynkowe 3/3", rendered)
-        self.assertIn("Bramka PAPER: GOTOWA DO PRZEGLĄDU", rendered)
-        self.assertIn("PAPER nie został uruchomiony", rendered)
+        self.assertIn("Bramka PAPER: ZABLOKOWANA", rendered)
+        self.assertIn("strategia historyczna", rendered)
 
     def test_review_aggregates_evidence_and_remains_read_only(self) -> None:
         service = self.service()

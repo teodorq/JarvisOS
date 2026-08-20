@@ -14,6 +14,7 @@ from app.trading.backtest import HistoricalPaperBacktester
 from app.trading.forex_coordinator import ForexPaperCoordinator
 from app.trading.forex_models import MAJOR_FOREX_PAIRS
 from app.trading.forex_observation import ForexObservationJournal
+from app.trading.forex_research_status import ForexHistoricalResearchGate
 from app.trading.forex_risk import ForexPaperPolicy
 from app.trading.forex_scanner import ForexMarketScanner
 from app.trading.paper_broker import PaperTradingEngine
@@ -36,15 +37,18 @@ class TradingControlCenter:
         self.forex = ForexPaperCoordinator(self.forex_policy)
         self.forex_data = ForexDataSettings.from_environment()
         self.forex_observations = ForexObservationJournal(self.project_root)
+        self.forex_research = ForexHistoricalResearchGate(self.project_root)
 
     def status(self) -> dict[str, Any]:
         account = self.engine.status()
         data_readiness = self.forex_data.readiness()
         observations = self.forex_observations.summary()
+        research = self.forex_research.status()
         opening_gate_ready = bool(
             data_readiness["complete"]
             and observations["paper_promotion_ready"]
             and observations["audit_chain_valid"]
+            and research["strategy_candidate_ready"]
         )
         return {
             "status": "PAPER_FOUNDATION_READY",
@@ -61,6 +65,9 @@ class TradingControlCenter:
                 "mt5_demo_closed_m15_history_export": True,
                 "historical_dataset_fingerprint_recheck": True,
                 "historical_m15_quality_audit": True,
+                "forex_historical_strategy_candidate": research[
+                    "strategy_candidate_ready"
+                ],
                 "multi_pair_forex_scanner": True,
                 "forex_currency_portfolio_risk": True,
                 "forex_paper_decision_coordinator": True,
@@ -90,6 +97,7 @@ class TradingControlCenter:
                 "data_configuration_complete": data_readiness["complete"],
                 "data_configuration": data_readiness,
                 "observation": observations,
+                "historical_research": research,
             },
             "account": account,
             "limits": self.policy.status(),
@@ -149,6 +157,7 @@ class TradingControlCenter:
         account = snapshot["account"]
         data = snapshot["forex"]["data_configuration"]
         observation = snapshot["forex"]["observation"]
+        research = snapshot["forex"]["historical_research"]
         kill_switch = (
             "AKTYWNY — nowe symulowane zlecenia są zatrzymane"
             if account["kill_switch_active"]
@@ -170,6 +179,18 @@ class TradingControlCenter:
                 "PAPER pozostaje wyłączony"
             )
             next_step = "sprawdzić i naprawić lokalny dziennik obserwacji"
+        elif (
+            observation["paper_promotion_ready"]
+            and not research["strategy_candidate_ready"]
+        ):
+            gate = (
+                "ZABLOKOWANA - obserwacje sa gotowe, ale strategia historyczna "
+                "nie spelnia jeszcze pelnej zgodnosci PAPER"
+            )
+            next_step = (
+                "domknac pozycjonowanie portfelowe i take-profit w PAPER, "
+                "a potem ponowic badanie"
+            )
         elif observation["paper_promotion_ready"]:
             gate = (
                 "GOTOWA DO PRZEGLĄDU — automatyczna promocja jest wyłączona, "

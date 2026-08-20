@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime, timezone
+from decimal import Decimal
 import json
 import os
 from pathlib import Path
@@ -80,6 +81,15 @@ def main() -> int:
                 "quote_currency": result["quote_currency"],
                 "window_count": result["window_count"],
                 "out_of_sample_trade_count": result["out_of_sample_trade_count"],
+                "out_of_sample_stop_loss_exit_count": result[
+                    "out_of_sample_stop_loss_exit_count"
+                ],
+                "out_of_sample_take_profit_exit_count": result[
+                    "out_of_sample_take_profit_exit_count"
+                ],
+                "out_of_sample_ambiguous_bar_count": result[
+                    "out_of_sample_ambiguous_bar_count"
+                ],
                 "profitable_out_of_sample_window_count": result[
                     "profitable_out_of_sample_window_count"
                 ],
@@ -94,6 +104,22 @@ def main() -> int:
                 ],
                 "details": result,
             })
+        positive_pairs = [
+            str(item["pair"])
+            for item in pair_results
+            if Decimal(str(item["average_out_of_sample_return_pct"])) > 0
+        ]
+        non_positive_pairs = [
+            str(item["pair"])
+            for item in pair_results
+            if Decimal(str(item["average_out_of_sample_return_pct"])) <= 0
+        ]
+        candidate_blocks = [
+            "PAPER_POSITION_SIZING_NOT_REPLAYED",
+            "TAKE_PROFIT_NOT_IMPLEMENTED_IN_PAPER",
+        ]
+        if non_positive_pairs:
+            candidate_blocks.append("PAIR_SELECTION_POLICY_NOT_VALIDATED")
         report: dict[str, object] = {
             "status": "FOREX_MULTI_PAIR_RESEARCH_COMPLETED",
             "mode": "LOCAL_HISTORICAL_RESEARCH_ONLY",
@@ -103,12 +129,21 @@ def main() -> int:
             "source_quality_ready": True,
             "pair_count": len(pair_results),
             "pairs": pair_results,
+            "positive_average_pair_count": len(positive_pairs),
+            "positive_average_pairs": positive_pairs,
+            "non_positive_average_pairs": non_positive_pairs,
+            "strategy_candidate_ready": False,
+            "strategy_candidate_blocks": candidate_blocks,
             "portfolio_pln_aggregation_performed": False,
             "result_currency_note": (
                 "Each pair is reported in its own quote currency; results are not "
                 "summed into a PLN portfolio without historical conversion rates."
             ),
             "parameter_optimization_performed": False,
+            "stop_loss_formula_matches_paper_coordinator": True,
+            "position_sizing_matches_paper_coordinator": False,
+            "take_profit_research_only": True,
+            "ambiguous_stop_target_bar_uses_stop_first": True,
             "strategy_performance_validated": False,
             "automatic_paper_promotion": False,
             "broker_connection_used": False,
@@ -127,9 +162,18 @@ def main() -> int:
                 {key: value for key, value in item.items() if key != "details"}
                 for item in pair_results
             ],
+            "positive_average_pair_count": len(positive_pairs),
+            "positive_average_pairs": positive_pairs,
+            "non_positive_average_pairs": non_positive_pairs,
+            "strategy_candidate_ready": False,
+            "strategy_candidate_blocks": candidate_blocks,
             "report_path": str(report_path),
             "portfolio_pln_aggregation_performed": False,
             "parameter_optimization_performed": False,
+            "stop_loss_formula_matches_paper_coordinator": True,
+            "position_sizing_matches_paper_coordinator": False,
+            "take_profit_research_only": True,
+            "ambiguous_stop_target_bar_uses_stop_first": True,
             "strategy_performance_validated": False,
             "automatic_paper_promotion": False,
             "broker_connection_used": False,

@@ -50,6 +50,25 @@ def oscillating(count: int) -> tuple[MarketBar, ...]:
     return bars(prices)
 
 
+def ohlc_bars(
+    rows: list[tuple[str, str, str, str]],
+) -> tuple[MarketBar, ...]:
+    start = datetime(2026, 1, 5, 0, 0, tzinfo=UTC)
+    return tuple(
+        MarketBar.create(
+            symbol="EUR_USD",
+            timestamp=start + timedelta(minutes=15 * index),
+            open=open_price,
+            high=high,
+            low=low,
+            close=close,
+            volume="100",
+            currency="USD",
+        )
+        for index, (open_price, high, low, close) in enumerate(rows)
+    )
+
+
 class ForexSignalGeneratorTests(unittest.TestCase):
     def test_signals_use_closed_past_bars_and_are_deterministic(self) -> None:
         policy = ForexHistoricalPolicy(fast_window=2, slow_window=4)
@@ -99,7 +118,7 @@ class ForexSignalGeneratorTests(unittest.TestCase):
 
 
 class ForexHistoricalBacktesterTests(unittest.TestCase):
-    def test_long_short_reversals_fill_only_on_next_bar(self) -> None:
+    def test_opposite_crossover_closes_without_same_bar_reentry(self) -> None:
         series = bars([
             "1.0000", "1.0100", "1.0200", "1.0300", "1.0200", "1.0100",
         ])
@@ -121,10 +140,16 @@ class ForexHistoricalBacktesterTests(unittest.TestCase):
                 slow_average="1.0",
             ),
         )
-        result = BidirectionalForexHistoricalBacktester().run(series, signals)
+        result = BidirectionalForexHistoricalBacktester(
+            ForexHistoricalPolicy(
+                minimum_stop_pips=Decimal("100"),
+                maximum_stop_pips=Decimal("100"),
+                take_profit_reward_risk=Decimal("5"),
+            )
+        ).run(series, signals)
 
         self.assertEqual(result["status"], "FOREX_HISTORICAL_BACKTEST_COMPLETED")
-        self.assertEqual(result["trade_count"], 2)
+        self.assertEqual(result["trade_count"], 1)
         self.assertTrue(result["long_and_short_supported"])
         self.assertTrue(result["same_bar_execution_blocked"])
         self.assertTrue(result["synthetic_cost_model"])
@@ -132,11 +157,38 @@ class ForexHistoricalBacktesterTests(unittest.TestCase):
         self.assertFalse(result["broker_connection_used"])
         self.assertFalse(result["paper_orders_sent"])
         self.assertFalse(result["live_orders_sent"])
+        self.assertTrue(result["stop_loss_formula_matches_paper_coordinator"])
+        self.assertFalse(result["position_sizing_matches_paper_coordinator"])
+        self.assertTrue(result["take_profit_research_only"])
         self.assertGreater(
             result["fills"][0]["filled_at"],
             signals[0].timestamp.isoformat(),
         )
-        self.assertEqual(result["trades"][-1]["exit_reason"], "FORCED_WINDOW_CLOSE")
+        self.assertEqual(result["trades"][-1]["exit_reason"], "OPPOSITE_CROSSOVER")
+        self.assertFalse(any(
+            fill["action"] == "OPEN_SHORT" for fill in result["fills"]
+        ))
+
+    def test_short_position_can_open_from_flat_and_close_at_window_end(self) -> None:
+        series = bars(["1.0000", "1.0000", "1.0000"])
+        selected = ForexHistoricalSignal(
+            signal_id="flat-short",
+            symbol="EUR_USD",
+            action="OPEN_SHORT",
+            timestamp=series[0].timestamp,
+            fast_average="0.9",
+            slow_average="1.0",
+        )
+        result = BidirectionalForexHistoricalBacktester(
+            ForexHistoricalPolicy(
+                minimum_stop_pips=Decimal("100"),
+                maximum_stop_pips=Decimal("100"),
+                take_profit_reward_risk=Decimal("5"),
+            )
+        ).run(series, (selected,))
+        self.assertEqual(result["trade_count"], 1)
+        self.assertEqual(result["trades"][0]["side"], "SHORT")
+        self.assertEqual(result["trades"][0]["exit_reason"], "FORCED_WINDOW_CLOSE")
 
     def test_last_bar_signal_is_rejected(self) -> None:
         series = bars(["1.0000", "1.0100", "1.0200"])
@@ -190,18 +242,118 @@ class ForexHistoricalBacktesterTests(unittest.TestCase):
             ForexHistoricalPolicy(
                 assumed_spread_pips=Decimal("0"),
                 assumed_slippage_pips=Decimal("0"),
+                minimum_stop_pips=Decimal("100"),
+                maximum_stop_pips=Decimal("100"),
+                take_profit_reward_risk=Decimal("5"),
             )
         ).run(series, (selected,))
-        with_costs = BidirectionalForexHistoricalBacktester().run(
-            series,
-            (selected,),
-        )
+        with_costs = BidirectionalForexHistoricalBacktester(
+            ForexHistoricalPolicy(
+                minimum_stop_pips=Decimal("100"),
+                maximum_stop_pips=Decimal("100"),
+                take_profit_reward_risk=Decimal("5"),
+            )
+        ).run(series, (selected,))
         self.assertEqual(without_costs["net_profit_quote"], "0.00")
         self.assertLess(Decimal(with_costs["net_profit_quote"]), Decimal("0"))
         self.assertGreater(
             Decimal(with_costs["estimated_spread_slippage_cost_quote"]),
             Decimal("0"),
         )
+
+    def test_stop_target_and_ambiguous_bar_use_conservative_order(self) -> None:
+        scenarios = (
+            (
+                "stop",
+                ("1.0000", "1.0005", "0.9985", "0.9995"),
+                "STOP_LOSS_TRIGGERED",
+            ),
+            (
+                "target",
+                ("1.0000", "1.0025", "0.9995", "1.0020"),
+                "TAKE_PROFIT_TRIGGERED",
+            ),
+            (
+                "both",
+                ("1.0000", "1.0030", "0.9980", "1.0000"),
+                "STOP_LOSS_AMBIGUOUS_BAR",
+            ),
+        )
+        policy = ForexHistoricalPolicy(
+            assumed_spread_pips=Decimal("0"),
+            assumed_slippage_pips=Decimal("0"),
+            minimum_stop_pips=Decimal("10"),
+            maximum_stop_pips=Decimal("10"),
+            take_profit_reward_risk=Decimal("2"),
+        )
+        for name, trigger_bar, expected_reason in scenarios:
+            with self.subTest(name=name):
+                series = ohlc_bars([
+                    ("1.0000", "1.0001", "0.9999", "1.0000"),
+                    trigger_bar,
+                    (trigger_bar[3], trigger_bar[3], trigger_bar[3], trigger_bar[3]),
+                ])
+                selected = ForexHistoricalSignal(
+                    signal_id=f"risk-{name}",
+                    symbol="EUR_USD",
+                    action="OPEN_LONG",
+                    timestamp=series[0].timestamp,
+                    fast_average="1.1",
+                    slow_average="1.0",
+                )
+                result = BidirectionalForexHistoricalBacktester(policy).run(
+                    series,
+                    (selected,),
+                )
+                self.assertEqual(result["trade_count"], 1)
+                self.assertEqual(result["trades"][0]["exit_reason"], expected_reason)
+                self.assertEqual(result["trades"][0]["stop_loss"], "0.999000")
+                self.assertEqual(result["trades"][0]["take_profit"], "1.002000")
+        self.assertTrue(result["ambiguous_stop_target_bar_uses_stop_first"])
+
+    def test_stop_gap_uses_worse_open_and_blocks_same_cycle_entry(self) -> None:
+        series = ohlc_bars([
+            ("1.0000", "1.0001", "0.9999", "1.0000"),
+            ("1.0000", "1.0005", "0.9995", "1.0000"),
+            ("0.9950", "0.9960", "0.9940", "0.9950"),
+        ])
+        signals = (
+            ForexHistoricalSignal(
+                signal_id="gap-long",
+                symbol="EUR_USD",
+                action="OPEN_LONG",
+                timestamp=series[0].timestamp,
+                fast_average="1.1",
+                slow_average="1.0",
+            ),
+            ForexHistoricalSignal(
+                signal_id="gap-short",
+                symbol="EUR_USD",
+                action="OPEN_SHORT",
+                timestamp=series[1].timestamp,
+                fast_average="0.9",
+                slow_average="1.0",
+            ),
+        )
+        policy = ForexHistoricalPolicy(
+            assumed_spread_pips=Decimal("0"),
+            assumed_slippage_pips=Decimal("0"),
+            minimum_stop_pips=Decimal("10"),
+            maximum_stop_pips=Decimal("10"),
+        )
+        result = BidirectionalForexHistoricalBacktester(policy).run(
+            series,
+            signals,
+        )
+        self.assertEqual(result["trades"][0]["exit_reason"], "STOP_LOSS_GAP")
+        self.assertEqual(result["trades"][0]["exit_execution_price"], "0.995000")
+        self.assertIn(
+            {"signal_id": "gap-short", "code": "RISK_EXIT_PRIORITY"},
+            result["rejections"],
+        )
+        self.assertFalse(any(
+            fill["action"] == "OPEN_SHORT" for fill in result["fills"]
+        ))
 
 
 class ForexWalkForwardTests(unittest.TestCase):

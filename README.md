@@ -146,6 +146,18 @@ complete historical PLN conversion series. The ignored detailed report is
 written to `data/trading/research/latest.json`. This command cannot connect to
 the broker or promote PAPER/LIVE trading, and its results are research rather
 than a prediction of future profit.
+
+Historical entries use the same volatility-based 10-to-100-pip stop-loss
+formula as the local PAPER coordinator. Position sizing is still a separate
+single-pair research assumption because these datasets do not provide a full
+historical PLN conversion portfolio. Research also evaluates a fixed 2:1
+take-profit. Since the current PAPER executor does not yet store a take-profit,
+the report marks both differences explicitly and cannot use the result to
+promote PAPER.
+If one M15 candle touches both stop and target, the backtest records the stop
+first. Gaps through a stop use the worse opening execution price, while target
+gaps are capped at the target. These deliberately conservative assumptions
+avoid selecting a strategy from unknowable intrabar price order.
 Then copy `config/forex.env.example` to the ignored `config/forex.env` and fill
 in:
 

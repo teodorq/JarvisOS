@@ -8,6 +8,7 @@ from decimal import Decimal, ROUND_HALF_UP
 import re
 from typing import Any, Iterable
 
+from app.trading.forex_coordinator import ForexPaperCoordinator
 from app.trading.forex_models import ForexPair, major_pair
 from app.trading.models import (
     MarketBar,
@@ -66,6 +67,9 @@ class ForexHistoricalPolicy:
     position_notional_pct: Decimal = Decimal("0.10")
     assumed_spread_pips: Decimal = Decimal("1.5")
     assumed_slippage_pips: Decimal = Decimal("0.2")
+    minimum_stop_pips: Decimal = ForexPaperCoordinator.MINIMUM_STOP_PIPS
+    maximum_stop_pips: Decimal = ForexPaperCoordinator.MAXIMUM_STOP_PIPS
+    take_profit_reward_risk: Decimal = Decimal("2")
 
     def __post_init__(self) -> None:
         if type(self.fast_window) is not int or type(self.slow_window) is not int:
@@ -84,16 +88,29 @@ class ForexHistoricalPolicy:
             "assumed_slippage_pips",
             allow_zero=True,
         )
+        minimum_stop = decimal_value(self.minimum_stop_pips, "minimum_stop_pips")
+        maximum_stop = decimal_value(self.maximum_stop_pips, "maximum_stop_pips")
+        reward_risk = decimal_value(
+            self.take_profit_reward_risk,
+            "take_profit_reward_risk",
+        )
         if equity < Decimal("1000") or equity > Decimal("100000000"):
             raise TradingValidationError("forex_history: invalid_initial_equity")
         if not Decimal("0.01") <= notional <= Decimal("0.50"):
             raise TradingValidationError("forex_history: unsafe_notional_pct")
         if spread > Decimal("10") or slippage > Decimal("5"):
             raise TradingValidationError("forex_history: unsafe_cost_assumption")
+        if not Decimal("5") <= minimum_stop <= maximum_stop <= Decimal("200"):
+            raise TradingValidationError("forex_history: unsafe_stop_range")
+        if not Decimal("1") <= reward_risk <= Decimal("5"):
+            raise TradingValidationError("forex_history: unsafe_reward_risk")
         object.__setattr__(self, "initial_equity_quote", equity)
         object.__setattr__(self, "position_notional_pct", notional)
         object.__setattr__(self, "assumed_spread_pips", spread)
         object.__setattr__(self, "assumed_slippage_pips", slippage)
+        object.__setattr__(self, "minimum_stop_pips", minimum_stop)
+        object.__setattr__(self, "maximum_stop_pips", maximum_stop)
+        object.__setattr__(self, "take_profit_reward_risk", reward_risk)
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,6 +121,7 @@ class ForexHistoricalSignal:
     timestamp: object
     fast_average: Decimal
     slow_average: Decimal
+    volatility_pct: Decimal = Decimal("0")
 
     def __post_init__(self) -> None:
         identifier = str(self.signal_id or "").strip()
@@ -125,6 +143,15 @@ class ForexHistoricalSignal:
             self,
             "slow_average",
             decimal_value(self.slow_average, "slow_average"),
+        )
+        object.__setattr__(
+            self,
+            "volatility_pct",
+            decimal_value(
+                self.volatility_pct,
+                "volatility_pct",
+                allow_zero=True,
+            ),
         )
 
 
@@ -154,6 +181,11 @@ class FixedForexCrossoverSignalGenerator:
             previous_slow = self._mean(
                 window[-self.policy.slow_window - 1:-1]
             )
+            returns = tuple(
+                abs(current / previous - Decimal("1"))
+                for previous, current in zip(window, window[1:])
+            )
+            volatility_pct = self._mean(returns) * Decimal("100")
             action = ""
             if previous_fast <= previous_slow and fast > slow:
                 action = "OPEN_LONG"
@@ -172,6 +204,7 @@ class FixedForexCrossoverSignalGenerator:
                     timestamp=timestamp,
                     fast_average=fast,
                     slow_average=slow,
+                    volatility_pct=volatility_pct,
                 ))
         if len(signals) > _MAX_SIGNALS:
             raise TradingValidationError("forex_history: signal_limit_exceeded")
@@ -185,6 +218,7 @@ class FixedForexCrossoverSignalGenerator:
             "closed_bars_only": True,
             "current_or_past_bars_only": True,
             "future_bar_access": False,
+            "volatility_uses_same_closed_window_as_live_scanner": True,
             "parameter_optimization_performed": False,
             "paper_orders_sent": False,
             "live_orders_sent": False,
@@ -201,6 +235,8 @@ class _Position:
     units: Decimal
     entry_execution_price: Decimal
     entry_reference_price: Decimal
+    stop_loss: Decimal
+    take_profit: Decimal
     signal_id: str
     signal_at: object
     filled_at: object
@@ -265,8 +301,63 @@ class BidirectionalForexHistoricalBacktester:
         maximum_drawdown = Decimal("0")
         estimated_cost = Decimal("0")
 
+        def close_active(
+            *,
+            reference_price: Decimal,
+            closed_at: object,
+            reason: str,
+            trigger_signal_id: str = "",
+        ) -> None:
+            nonlocal balance, estimated_cost, position
+            if position is None:
+                raise TradingValidationError(
+                    "forex_history: close_without_position"
+                )
+            closing_position = position
+            closed, cost = self._close_position(
+                pair=pair,
+                position=closing_position,
+                reference_price=reference_price,
+                closed_at=closed_at,
+                reason=reason,
+            )
+            balance += Decimal(str(closed["net_pnl_quote"]))
+            estimated_cost += cost
+            trades.append(closed)
+            fills.append({
+                "signal_id": trigger_signal_id or closing_position.signal_id,
+                "action": f"CLOSE_{closing_position.side}",
+                "filled_at": aware_utc(closed_at, "closed_at").isoformat(),
+                "price": str(closed["exit_execution_price"]),
+                "reason": reason,
+            })
+            position = None
+
         for index, bar in enumerate(bars):
+            risk_exit_at_open = False
+            if position is not None:
+                opening_exit = self._risk_exit(
+                    pair=pair,
+                    position=position,
+                    bar=bar,
+                    opening_gap_only=True,
+                )
+                if opening_exit is not None:
+                    reference_price, reason = opening_exit
+                    close_active(
+                        reference_price=reference_price,
+                        closed_at=bar.timestamp,
+                        reason=reason,
+                    )
+                    risk_exit_at_open = True
+
             for signal in scheduled.get(index, []):
+                if risk_exit_at_open:
+                    rejections.append({
+                        "signal_id": signal.signal_id,
+                        "code": "RISK_EXIT_PRIORITY",
+                    })
+                    continue
                 target_side = "LONG" if signal.action == "OPEN_LONG" else "SHORT"
                 if position is not None and position.side == target_side:
                     rejections.append({
@@ -275,23 +366,13 @@ class BidirectionalForexHistoricalBacktester:
                     })
                     continue
                 if position is not None:
-                    closed, cost = self._close_position(
-                        pair=pair,
-                        position=position,
+                    close_active(
                         reference_price=bar.open,
                         closed_at=bar.timestamp,
                         reason="OPPOSITE_CROSSOVER",
+                        trigger_signal_id=signal.signal_id,
                     )
-                    balance += Decimal(str(closed["net_pnl_quote"]))
-                    estimated_cost += cost
-                    trades.append(closed)
-                    fills.append({
-                        "signal_id": signal.signal_id,
-                        "action": f"CLOSE_{position.side}",
-                        "filled_at": bar.timestamp.isoformat(),
-                        "price": str(closed["exit_execution_price"]),
-                    })
-                    position = None
+                    continue
                 position = self._open_position(
                     pair=pair,
                     side=target_side,
@@ -308,6 +389,21 @@ class BidirectionalForexHistoricalBacktester:
                     "price": _text(position.entry_execution_price, _PRICE),
                 })
 
+            if position is not None:
+                intrabar_exit = self._risk_exit(
+                    pair=pair,
+                    position=position,
+                    bar=bar,
+                    opening_gap_only=False,
+                )
+                if intrabar_exit is not None:
+                    reference_price, reason = intrabar_exit
+                    close_active(
+                        reference_price=reference_price,
+                        closed_at=bar.timestamp,
+                        reason=reason,
+                    )
+
             equity = balance
             if position is not None:
                 marked = self._exit_price(pair, position.side, bar.close)
@@ -318,27 +414,28 @@ class BidirectionalForexHistoricalBacktester:
                 maximum_drawdown = max(maximum_drawdown, (peak - equity) / peak)
 
         if position is not None:
-            closed, cost = self._close_position(
-                pair=pair,
-                position=position,
+            close_active(
                 reference_price=bars[-1].close,
                 closed_at=bars[-1].timestamp,
                 reason="FORCED_WINDOW_CLOSE",
             )
-            balance += Decimal(str(closed["net_pnl_quote"]))
-            estimated_cost += cost
-            trades.append(closed)
-            fills.append({
-                "signal_id": position.signal_id,
-                "action": f"CLOSE_{position.side}",
-                "filled_at": bars[-1].timestamp.isoformat(),
-                "price": str(closed["exit_execution_price"]),
-            })
             equity_curve[-1] = balance
 
         net_profit = balance - self.policy.initial_equity_quote
         winning = sum(Decimal(str(item["net_pnl_quote"])) > 0 for item in trades)
         win_rate = Decimal(winning) / Decimal(len(trades)) if trades else Decimal("0")
+        stop_loss_exit_count = sum(
+            str(item["exit_reason"]).startswith("STOP_LOSS")
+            for item in trades
+        )
+        take_profit_exit_count = sum(
+            str(item["exit_reason"]).startswith("TAKE_PROFIT")
+            for item in trades
+        )
+        ambiguous_bar_count = sum(
+            item["exit_reason"] == "STOP_LOSS_AMBIGUOUS_BAR"
+            for item in trades
+        )
         return {
             "status": "FOREX_HISTORICAL_BACKTEST_COMPLETED",
             "mode": "LOCAL_HISTORICAL_RESEARCH_ONLY",
@@ -359,6 +456,9 @@ class BidirectionalForexHistoricalBacktester:
             ),
             "max_drawdown_pct": _text(maximum_drawdown * Decimal("100"), _PERCENT),
             "win_rate_pct": _text(win_rate * Decimal("100"), _PERCENT),
+            "stop_loss_exit_count": stop_loss_exit_count,
+            "take_profit_exit_count": take_profit_exit_count,
+            "ambiguous_bar_count": ambiguous_bar_count,
             "trades": trades,
             "fills": fills,
             "rejections": rejections,
@@ -369,6 +469,17 @@ class BidirectionalForexHistoricalBacktester:
             "synthetic_cost_model": True,
             "assumed_spread_pips": str(self.policy.assumed_spread_pips),
             "assumed_slippage_pips": str(self.policy.assumed_slippage_pips),
+            "stop_loss_enabled": True,
+            "stop_loss_formula_matches_paper_coordinator": True,
+            "position_sizing_matches_paper_coordinator": False,
+            "minimum_stop_pips": str(self.policy.minimum_stop_pips),
+            "maximum_stop_pips": str(self.policy.maximum_stop_pips),
+            "take_profit_enabled": True,
+            "take_profit_reward_risk": str(
+                self.policy.take_profit_reward_risk
+            ),
+            "take_profit_research_only": True,
+            "ambiguous_stop_target_bar_uses_stop_first": True,
             "portfolio_pln_aggregation_performed": False,
             "automatic_paper_promotion": False,
             "broker_connection_used": False,
@@ -390,11 +501,34 @@ class BidirectionalForexHistoricalBacktester:
         notional = max(Decimal("0"), balance) * self.policy.position_notional_pct
         if execution <= 0 or notional <= 0:
             raise TradingValidationError("forex_history: nonpositive_execution_value")
+        volatility_distance = (
+            signal.volatility_pct / Decimal("100")
+        ) * execution * Decimal("2")
+        minimum = pair.pip_size * self.policy.minimum_stop_pips
+        maximum = pair.pip_size * self.policy.maximum_stop_pips
+        stop_distance = min(max(volatility_distance, minimum), maximum)
+        stop_loss = (
+            execution - stop_distance
+            if side == "LONG"
+            else execution + stop_distance
+        )
+        take_profit_distance = (
+            stop_distance * self.policy.take_profit_reward_risk
+        )
+        take_profit = (
+            execution + take_profit_distance
+            if side == "LONG"
+            else execution - take_profit_distance
+        )
+        if stop_loss <= 0 or take_profit <= 0:
+            raise TradingValidationError("forex_history: invalid_exit_levels")
         return _Position(
             side=side,
             units=notional / execution,
             entry_execution_price=execution,
             entry_reference_price=reference_price,
+            stop_loss=stop_loss,
+            take_profit=take_profit,
             signal_id=signal.signal_id,
             signal_at=signal.timestamp,
             filled_at=aware_utc(filled_at, "filled_at"),
@@ -425,6 +559,8 @@ class BidirectionalForexHistoricalBacktester:
             "closed_at": aware_utc(closed_at, "closed_at").isoformat(),
             "entry_execution_price": _text(position.entry_execution_price, _PRICE),
             "exit_execution_price": _text(execution, _PRICE),
+            "stop_loss": _text(position.stop_loss, _PRICE),
+            "take_profit": _text(position.take_profit, _PRICE),
             "units": _text(position.units, Decimal("0.01")),
             "gross_pnl_quote": _text(gross_pnl),
             "net_pnl_quote": _text(net_pnl),
@@ -432,6 +568,74 @@ class BidirectionalForexHistoricalBacktester:
             "exit_reason": reason,
             "profitable": net_pnl > 0,
         }, self._one_way_cost(pair, position.units))
+
+    def _risk_exit(
+        self,
+        *,
+        pair: ForexPair,
+        position: _Position,
+        bar: MarketBar,
+        opening_gap_only: bool,
+    ) -> tuple[Decimal, str] | None:
+        if opening_gap_only:
+            executable_open = self._exit_price(pair, position.side, bar.open)
+            if (
+                position.side == "LONG"
+                and executable_open <= position.stop_loss
+            ) or (
+                position.side == "SHORT"
+                and executable_open >= position.stop_loss
+            ):
+                return bar.open, "STOP_LOSS_GAP"
+            if (
+                position.side == "LONG"
+                and executable_open >= position.take_profit
+            ) or (
+                position.side == "SHORT"
+                and executable_open <= position.take_profit
+            ):
+                return (
+                    self._reference_for_exit_execution(
+                        pair,
+                        position.side,
+                        position.take_profit,
+                    ),
+                    "TAKE_PROFIT_GAP",
+                )
+            return None
+
+        executable_low = self._exit_price(pair, position.side, bar.low)
+        executable_high = self._exit_price(pair, position.side, bar.high)
+        if position.side == "LONG":
+            stop_hit = executable_low <= position.stop_loss
+            target_hit = executable_high >= position.take_profit
+        else:
+            stop_hit = executable_high >= position.stop_loss
+            target_hit = executable_low <= position.take_profit
+        if stop_hit:
+            reason = (
+                "STOP_LOSS_AMBIGUOUS_BAR"
+                if target_hit
+                else "STOP_LOSS_TRIGGERED"
+            )
+            return (
+                self._reference_for_exit_execution(
+                    pair,
+                    position.side,
+                    position.stop_loss,
+                ),
+                reason,
+            )
+        if target_hit:
+            return (
+                self._reference_for_exit_execution(
+                    pair,
+                    position.side,
+                    position.take_profit,
+                ),
+                "TAKE_PROFIT_TRIGGERED",
+            )
+        return None
 
     def _cost_per_unit(self, pair: ForexPair) -> Decimal:
         return pair.pip_size * (
@@ -449,6 +653,19 @@ class BidirectionalForexHistoricalBacktester:
     def _exit_price(self, pair: ForexPair, side: str, midpoint: Decimal) -> Decimal:
         cost = self._cost_per_unit(pair)
         return midpoint - cost if side == "LONG" else midpoint + cost
+
+    def _reference_for_exit_execution(
+        self,
+        pair: ForexPair,
+        side: str,
+        execution_price: Decimal,
+    ) -> Decimal:
+        cost = self._cost_per_unit(pair)
+        return (
+            execution_price + cost
+            if side == "LONG"
+            else execution_price - cost
+        )
 
     @staticmethod
     def _pnl(position: _Position, exit_price: Decimal) -> Decimal:
@@ -557,6 +774,18 @@ class ForexHistoricalWalkForwardValidator:
             "out_of_sample_trade_count": sum(
                 int(window["testing"]["trade_count"]) for window in windows
             ),
+            "out_of_sample_stop_loss_exit_count": sum(
+                int(window["testing"]["stop_loss_exit_count"])
+                for window in windows
+            ),
+            "out_of_sample_take_profit_exit_count": sum(
+                int(window["testing"]["take_profit_exit_count"])
+                for window in windows
+            ),
+            "out_of_sample_ambiguous_bar_count": sum(
+                int(window["testing"]["ambiguous_bar_count"])
+                for window in windows
+            ),
             "profitable_out_of_sample_window_count": sum(value > 0 for value in returns),
             "average_out_of_sample_return_pct": _text(sum(returns) / count, _PERCENT),
             "compounded_out_of_sample_return_pct": _text(
@@ -572,6 +801,10 @@ class ForexHistoricalWalkForwardValidator:
             "out_of_sample_windows_non_overlapping": True,
             "past_only_warmup_used": True,
             "same_bar_execution_blocked": True,
+            "stop_loss_formula_matches_paper_coordinator": True,
+            "position_sizing_matches_paper_coordinator": False,
+            "take_profit_research_only": True,
+            "ambiguous_stop_target_bar_uses_stop_first": True,
             "parameter_optimization_performed": False,
             "strategy_performance_validated": False,
             "research_only": True,
