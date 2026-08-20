@@ -23,6 +23,7 @@ from app.trading.forex_historical import (  # noqa: E402
     ForexWalkForwardPolicy,
 )
 from app.trading.forex_models import MAJOR_FOREX_PAIRS  # noqa: E402
+from app.trading.forex_candidate_v2 import ForexRegimeFilteredScanner  # noqa: E402
 from app.trading.forex_portfolio_historical import (  # noqa: E402
     ForexPortfolioHistoricalWalkForwardValidator,
     ForexPortfolioWalkForwardPolicy,
@@ -135,6 +136,50 @@ def main() -> int:
                 step_bar_count=arguments.step_bars,
             ),
         ).run(histories)
+        candidate_scanner = ForexRegimeFilteredScanner()
+        candidate_portfolio = ForexPortfolioHistoricalWalkForwardValidator(
+            walk_forward_policy=ForexPortfolioWalkForwardPolicy(
+                training_bar_count=arguments.training_bars,
+                testing_bar_count=arguments.testing_bars,
+                step_bar_count=arguments.step_bars,
+            ),
+            scanner=candidate_scanner,
+        ).run(histories)
+        candidate_historical_checks_passed = bool(
+            candidate_portfolio["strategy_performance_validated"]
+        )
+        candidate_portfolio["historical_development_checks_passed"] = (
+            candidate_historical_checks_passed
+        )
+        candidate_portfolio["reused_source_data"] = True
+        candidate_portfolio["forward_validation_required"] = True
+        candidate_portfolio["strategy_performance_validated"] = False
+        candidate_portfolio["automatic_paper_promotion"] = False
+        candidate_portfolio["paper_orders_sent"] = False
+        candidate_portfolio["live_orders_sent"] = False
+        development_candidate_v2 = {
+            "status": "DEVELOPMENT_REPLAY_COMPLETED",
+            "candidate_id": candidate_scanner.candidate_policy.candidate_id,
+            "policy_fingerprint_sha256": (
+                candidate_scanner.candidate_policy.fingerprint_sha256
+            ),
+            "frozen_after": (
+                candidate_scanner.candidate_policy.frozen_after.isoformat()
+            ),
+            "reused_source_data": True,
+            "historical_development_checks_passed": (
+                candidate_historical_checks_passed
+            ),
+            "forward_validation_required": True,
+            "strategy_performance_validated": False,
+            "strategy_candidate_ready": False,
+            "strategy_candidate_blocks": ["FORWARD_OBSERVATION_REQUIRED"],
+            "portfolio": candidate_portfolio,
+            "automatic_paper_promotion": False,
+            "broker_connection_used": False,
+            "paper_orders_sent": False,
+            "live_orders_sent": False,
+        }
         block_by_check = {
             "average_return_positive": "PORTFOLIO_AVERAGE_RETURN_NOT_POSITIVE",
             "compounded_return_positive": "PORTFOLIO_COMPOUNDED_RETURN_NOT_POSITIVE",
@@ -163,6 +208,7 @@ def main() -> int:
             "strategy_candidate_ready": candidate_ready,
             "strategy_candidate_blocks": candidate_blocks,
             "portfolio": portfolio,
+            "development_candidate_v2": development_candidate_v2,
             "portfolio_pln_aggregation_performed": True,
             "historical_pln_conversion_series_verified": True,
             "result_currency_note": (
@@ -207,6 +253,18 @@ def main() -> int:
                 key: value
                 for key, value in portfolio.items()
                 if key != "windows"
+            },
+            "development_candidate_v2": {
+                **{
+                    key: value
+                    for key, value in development_candidate_v2.items()
+                    if key != "portfolio"
+                },
+                "portfolio": {
+                    key: value
+                    for key, value in candidate_portfolio.items()
+                    if key != "windows"
+                },
             },
             "parameter_optimization_performed": False,
             "stop_loss_formula_matches_paper_coordinator": True,

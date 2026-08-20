@@ -29,6 +29,7 @@ from app.trading.models import TradingValidationError, aware_utc
 
 @dataclass(frozen=True, slots=True)
 class ForexDataGatePolicy:
+    primary_closed_bar_count: int = 211
     max_primary_age_seconds: int = 10
     max_independent_age_seconds: int = 180
     max_source_deviation_pct: Decimal = Decimal("0.002")
@@ -38,6 +39,8 @@ class ForexDataGatePolicy:
     event_block_after_minutes: int = 30
 
     def __post_init__(self) -> None:
+        if not 31 <= self.primary_closed_bar_count <= 499:
+            raise TradingValidationError("forex_data_gate: unsafe_primary_bar_count")
         if not 1 <= self.max_primary_age_seconds <= 30:
             raise TradingValidationError("forex_data_gate: unsafe_primary_age")
         if not 5 <= self.max_independent_age_seconds <= 300:
@@ -147,6 +150,7 @@ class ForexReadOnlyDataGateway:
                 "primary_provider": self.settings.primary_provider,
                 "collected_at": selected_now.isoformat(),
                 "primary_pair_count": len(quotes),
+                "primary_closed_bar_count": self.policy.primary_closed_bar_count,
                 "cross_checked_pairs": tuple(cross_checked),
                 "calendar_ready": calendar_ready,
                 "high_impact_event_count": sum(
@@ -165,14 +169,24 @@ class ForexReadOnlyDataGateway:
             return Mt5DemoReadOnlySource(
                 symbol_suffix=self.settings.mt5_symbol_suffix,
                 module=self._mt5_module,
-            ).fetch_market(self.universe, now=now)
+            ).fetch_market(
+                self.universe,
+                bar_count=self.policy.primary_closed_bar_count,
+                now=now,
+            )
         source = OandaPracticeReadOnlySource(
             account_id=self.settings.oanda_practice_account_id,
             token=self.settings.oanda_practice_token,
             transport=self._transport,
         )
         quotes = source.fetch_quotes(self.universe)
-        bars = {pair.symbol: source.fetch_bars(pair) for pair in self.universe}
+        bars = {
+            pair.symbol: source.fetch_bars(
+                pair,
+                count=self.policy.primary_closed_bar_count,
+            )
+            for pair in self.universe
+        }
         return quotes, bars
 
     def _sources_agree(

@@ -60,8 +60,8 @@ class FakeForexTransport:
                 return {"prices": [self._oanda_price(pair) for pair in MAJOR_FOREX_PAIRS]}
             if parsed.path.endswith("/candles"):
                 symbol = parsed.path.split("/")[-2]
-                self.assert_requested_candle(query)
-                return {"candles": self._candles(symbol)}
+                requested = self.assert_requested_candle(query)
+                return {"candles": self._candles(symbol, requested)}
         if parsed.hostname == TwelveDataReadOnlySource.HOST:
             symbol = query["symbol"][0].replace("/", "_")
             rate = PRICES[symbol]
@@ -96,11 +96,16 @@ class FakeForexTransport:
         raise AssertionError(request.public_summary())
 
     @staticmethod
-    def assert_requested_candle(query: dict[str, list[str]]) -> None:
+    def assert_requested_candle(query: dict[str, list[str]]) -> int:
         if query.get("price") != ["M"] or query.get("granularity") != ["M15"]:
             raise AssertionError(query)
-        if query.get("count") != ["32"]:
+        try:
+            requested = int(query.get("count", [""])[0])
+        except ValueError as error:
+            raise AssertionError(query) from error
+        if not 32 <= requested <= 500:
             raise AssertionError(query)
+        return requested
 
     @staticmethod
     def _oanda_price(pair: object) -> dict[str, object]:
@@ -116,12 +121,12 @@ class FakeForexTransport:
         }
 
     @staticmethod
-    def _candles(symbol: str) -> list[dict[str, object]]:
+    def _candles(symbol: str, count: int) -> list[dict[str, object]]:
         pair = major_pair(symbol)
         price = PRICES[symbol]
         return [{
             "complete": True,
-            "time": (NOW - timedelta(minutes=(31 - index) * 15)).isoformat().replace("+00:00", "Z"),
+            "time": (NOW - timedelta(minutes=(count - 1 - index) * 15)).isoformat().replace("+00:00", "Z"),
             "volume": 100,
             "mid": {
                 "o": str(price),
@@ -129,7 +134,7 @@ class FakeForexTransport:
                 "l": str(price - pair.pip_size),
                 "c": str(price),
             },
-        } for index in range(32)]
+        } for index in range(count)]
 
 
 def ready_settings() -> ForexDataSettings:
@@ -390,6 +395,7 @@ class ForexDataGatewayTests(unittest.TestCase):
         bundle = ForexReadOnlyDataGateway(ready_settings(), transport=fake).collect(now=NOW)
         self.assertEqual(len(bundle.quotes), 7)
         self.assertEqual(len(bundle.bars), 7)
+        self.assertTrue(all(len(series) == 211 for series in bundle.bars.values()))
         self.assertEqual(len(bundle.conversion_quotes), 1)
         self.assertTrue(all(context.independent_source_count == 2 for context in bundle.contexts.values()))
         self.assertTrue(all(not context.opening_blocks for context in bundle.contexts.values()))

@@ -126,6 +126,12 @@ class ForexObservationTests(unittest.TestCase):
         self.assertEqual(result["proposed_plan"]["status"], "ENTRIES_READY")
         self.assertEqual(result["would_open_count"], 1)
         self.assertEqual(result["execution"]["status"], "NOT_EXECUTED")
+        candidate = result["development_candidate_v2"]
+        self.assertEqual(candidate["status"], "FORWARD_OBSERVATION_RECORDED")
+        self.assertFalse(candidate["forward_eligible"])
+        self.assertEqual(candidate["execution"]["status"], "NOT_EXECUTED")
+        self.assertFalse(candidate["paper_orders_sent"])
+        self.assertFalse(candidate["live_orders_sent"])
         self.assertTrue(result["positions_unchanged"])
         self.assertFalse(result["paper_orders_sent"])
         self.assertFalse(result["live_orders_sent"])
@@ -249,6 +255,23 @@ class ForexObservationTests(unittest.TestCase):
         self.assertFalse(review["safety"]["live_orders_detected"])
         self.assertFalse(review["paper_execution_enabled"])
         self.assertFalse(review["live_execution_enabled"])
+
+    def test_review_counts_only_safe_post_freeze_candidate_evidence(self) -> None:
+        service = self.service()
+        observed = datetime(2026, 8, 21, 10, 0, tzinfo=UTC)
+        service.observe_once(
+            observation_id="forex-candidate-forward-0001",
+            now=observed,
+        )
+
+        candidate = service.journal.review()["development_candidate_v2"]
+
+        self.assertEqual(candidate["valid_forward_observation_count"], 1)
+        self.assertEqual(candidate["valid_forward_market_day_count"], 1)
+        self.assertTrue(candidate["evidence_valid"])
+        self.assertFalse(candidate["strategy_performance_validated"])
+        self.assertFalse(candidate["paper_execution_enabled"])
+        self.assertFalse(candidate["live_execution_enabled"])
 
     def test_review_blocks_incomplete_safety_evidence(self) -> None:
         journal = ForexObservationJournal(self.root)

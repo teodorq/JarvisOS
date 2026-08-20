@@ -4,6 +4,10 @@ from app.trading.backtest import HistoricalPaperBacktester
 from app.trading.control_center import TradingControlCenter
 from app.trading.dataset import HistoricalCsvLoader, HistoricalDataset
 from app.trading.forex_coordinator import ForexPaperCoordinator, ForexPaperInstruction
+from app.trading.forex_candidate_v2 import (
+    ForexRegimeCandidatePolicy,
+    ForexRegimeFilteredScanner,
+)
 from app.trading.forex_autopilot import ForexPaperAutopilot
 from app.trading.forex_executor import ForexPaperExecutionEngine
 from app.trading.forex_historical import (
@@ -90,6 +94,8 @@ __all__ = [
     "ForexPosition",
     "ForexQuote",
     "ForexRateBook",
+    "ForexRegimeCandidatePolicy",
+    "ForexRegimeFilteredScanner",
     "ForexRiskDecision",
     "ForexSafetyContext",
     "ForexScannerPolicy",

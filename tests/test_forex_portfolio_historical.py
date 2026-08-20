@@ -12,6 +12,7 @@ from app.trading.forex_portfolio_historical import (
     ForexPortfolioWalkForwardPolicy,
 )
 from app.trading.forex_scanner import ForexScannerPolicy
+from app.trading.forex_candidate_v2 import ForexRegimeFilteredScanner
 from app.trading.models import MarketBar, TradingValidationError
 
 
@@ -134,6 +135,20 @@ class ForexPortfolioHistoricalTests(unittest.TestCase):
         self.assertFalse(result["parameter_optimization_performed"])
         self.assertFalse(result["automatic_paper_promotion"])
         self.assertFalse(result["broker_connection_used"])
+        self.assertFalse(result["paper_orders_sent"])
+        self.assertFalse(result["live_orders_sent"])
+
+    def test_frozen_candidate_is_explicitly_not_the_paper_scanner(self) -> None:
+        result = ForexPortfolioHistoricalBacktester(
+            scanner=ForexRegimeFilteredScanner(),
+        ).run(_histories(220))
+
+        self.assertFalse(result["scanner_matches_paper"])
+        self.assertEqual(
+            result["scanner_audit"]["policy"]["candidate_id"],
+            "FOREX_REGIME_V2_20260820",
+        )
+        self.assertFalse(result["automatic_paper_promotion"])
         self.assertFalse(result["paper_orders_sent"])
         self.assertFalse(result["live_orders_sent"])
 

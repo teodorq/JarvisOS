@@ -102,9 +102,25 @@ class ForexPortfolioHistoricalPolicy:
 class ForexPortfolioHistoricalBacktester:
     """Replay all pairs together without a broker, network, or order API."""
 
-    def __init__(self, policy: ForexPortfolioHistoricalPolicy | None = None) -> None:
+    def __init__(
+        self,
+        policy: ForexPortfolioHistoricalPolicy | None = None,
+        *,
+        scanner: Any | None = None,
+    ) -> None:
         self.policy = policy or ForexPortfolioHistoricalPolicy()
-        self.scanner = ForexMarketScanner(policy=self.policy.scanner)
+        self.scanner = scanner or ForexMarketScanner(policy=self.policy.scanner)
+        if tuple(getattr(self.scanner, "universe", ())) != MAJOR_FOREX_PAIRS:
+            raise TradingValidationError("forex_portfolio_history: scanner_universe_mismatch")
+        if getattr(self.scanner, "policy", None) != self.policy.scanner:
+            raise TradingValidationError("forex_portfolio_history: scanner_policy_mismatch")
+        self.required_history_count = int(getattr(
+            self.scanner,
+            "required_history_count",
+            self.policy.scanner.slow_window + 1,
+        ))
+        if not self.policy.scanner.slow_window + 1 <= self.required_history_count <= 499:
+            raise TradingValidationError("forex_portfolio_history: invalid_scanner_history")
         self.coordinator = ForexPaperCoordinator(self.policy.paper)
 
     def run(
@@ -115,10 +131,10 @@ class ForexPortfolioHistoricalBacktester:
     ) -> dict[str, Any]:
         histories = _validated_histories(
             values,
-            minimum=self.policy.scanner.slow_window + 2,
+            minimum=self.required_history_count + 1,
         )
         timestamps = tuple(histories["EUR_USD"][index].timestamp for index in range(len(histories["EUR_USD"])))
-        start_index = self.policy.scanner.slow_window + 1
+        start_index = self.required_history_count
         if trading_start_at is not None:
             candidates = [index for index, stamp in enumerate(timestamps) if stamp >= trading_start_at]
             if not candidates:
@@ -147,7 +163,7 @@ class ForexPortfolioHistoricalBacktester:
             bars_for_scanner = {
                 symbol: tuple(
                     self._forex_bar(_PAIR_BY_SYMBOL[symbol], bar)
-                    for bar in series[index - self.policy.scanner.slow_window - 1:index]
+                    for bar in series[index - self.required_history_count:index]
                 )
                 for symbol, series in histories.items()
                 if symbol in _TRADABLE_SYMBOLS
@@ -292,6 +308,11 @@ class ForexPortfolioHistoricalBacktester:
             maximum_drawdown = max(maximum_drawdown, (peak - value) / peak)
         total_return = ((balance / self.policy.initial_equity_pln) - Decimal("1")) * Decimal("100")
         wins = sum(Decimal(trade["pnl_pln"]) > 0 for trade in closed_trades)
+        scanner_audit = (
+            self.scanner.audit()
+            if callable(getattr(self.scanner, "audit", None))
+            else {"strategy": "PAPER_BASE_SCANNER"}
+        )
         return {
             "status": "COMPLETED",
             "account_currency": "PLN",
@@ -309,7 +330,8 @@ class ForexPortfolioHistoricalBacktester:
             "fills": fills,
             "portfolio_pln_aggregation_performed": True,
             "historical_pln_conversion_series_verified": True,
-            "scanner_matches_paper": True,
+            "scanner_matches_paper": type(self.scanner) is ForexMarketScanner,
+            "scanner_audit": scanner_audit,
             "position_sizing_matches_paper_coordinator": True,
             "stop_loss_formula_matches_paper_coordinator": True,
             "take_profit_matches_paper": True,
@@ -465,9 +487,11 @@ class ForexPortfolioHistoricalWalkForwardValidator:
         *,
         historical_policy: ForexPortfolioHistoricalPolicy | None = None,
         walk_forward_policy: ForexPortfolioWalkForwardPolicy | None = None,
+        scanner: Any | None = None,
     ) -> None:
         self.historical_policy = historical_policy or ForexPortfolioHistoricalPolicy()
         self.walk_forward_policy = walk_forward_policy or ForexPortfolioWalkForwardPolicy()
+        self.scanner = scanner
 
     def run(self, values: Mapping[str, Iterable[MarketBar]]) -> dict[str, Any]:
         required = self.walk_forward_policy.training_bar_count + self.walk_forward_policy.testing_bar_count
@@ -481,7 +505,10 @@ class ForexPortfolioHistoricalWalkForwardValidator:
             testing_start = training_start + self.walk_forward_policy.training_bar_count
             testing_end = testing_start + self.walk_forward_policy.testing_bar_count
             sliced = {symbol: bars[training_start:testing_end] for symbol, bars in histories.items()}
-            result = ForexPortfolioHistoricalBacktester(self.historical_policy).run(
+            result = ForexPortfolioHistoricalBacktester(
+                self.historical_policy,
+                scanner=self.scanner,
+            ).run(
                 sliced,
                 trading_start_at=histories["EUR_USD"][testing_start].timestamp,
             )
@@ -513,6 +540,10 @@ class ForexPortfolioHistoricalWalkForwardValidator:
             "maximum_drawdown_within_limit": max(drawdowns) <= self.walk_forward_policy.maximum_drawdown_pct,
             "minimum_trade_count_met": trade_count >= self.walk_forward_policy.minimum_trade_count,
         }
+        scanner_audit = windows[0]["testing"]["scanner_audit"]
+        scanner_matches_paper = all(
+            window["testing"]["scanner_matches_paper"] for window in windows
+        )
         return {
             "status": "COMPLETED",
             "account_currency": "PLN",
@@ -530,7 +561,8 @@ class ForexPortfolioHistoricalWalkForwardValidator:
             "strategy_performance_validated": all(performance_checks.values()),
             "portfolio_pln_aggregation_performed": True,
             "historical_pln_conversion_series_verified": True,
-            "scanner_matches_paper": True,
+            "scanner_matches_paper": scanner_matches_paper,
+            "scanner_audit": scanner_audit,
             "position_sizing_matches_paper_coordinator": True,
             "stop_loss_formula_matches_paper_coordinator": True,
             "take_profit_research_only": False,

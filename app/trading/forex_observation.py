@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any, Mapping
 from app.core.json_store import JsonStore
 from app.core.project_paths import resolve_project_root
 from app.trading.forex_coordinator import ForexPaperCoordinator
+from app.trading.forex_candidate_v2 import ForexRegimeFilteredScanner
 from app.trading.forex_executor import ForexPaperExecutionEngine
 from app.trading.forex_models import MAJOR_FOREX_PAIRS, ForexQuote
 from app.trading.forex_risk import ForexPaperPolicy, ForexRateBook
@@ -151,6 +152,12 @@ class ForexObservationJournal:
         execution_statuses: Counter[str] = Counter()
         observed_times: list[datetime] = []
         expected_pairs = {pair.symbol for pair in MAJOR_FOREX_PAIRS}
+        expected_candidate = ForexRegimeFilteredScanner(MAJOR_FOREX_PAIRS)
+        candidate_forward_count = 0
+        candidate_market_days: Counter[str] = Counter()
+        candidate_assessment_actions: Counter[str] = Counter()
+        candidate_instruction_actions: Counter[str] = Counter()
+        candidate_evidence_valid = True
         qualified_pair_coverage_complete = True
         qualified_count = 0
         schema_issue_detected = False
@@ -179,6 +186,57 @@ class ForexObservationJournal:
                 if is_qualified:
                     qualified_count += 1
                     market_days.update((observed_at.date().isoformat(),))
+
+                raw_candidate = item.get("development_candidate_v2")
+                if isinstance(raw_candidate, Mapping) and raw_candidate.get(
+                    "forward_eligible"
+                ) is True:
+                    candidate = dict(raw_candidate)
+                    candidate_assessments = list(
+                        candidate.get("assessments", []) or []
+                    )
+                    candidate_plan = candidate.get("proposed_plan", {})
+                    candidate_instructions = list(
+                        candidate_plan.get("instructions", []) or []
+                    ) if isinstance(candidate_plan, Mapping) else []
+                    candidate_pairs = {
+                        str(assessment.get("pair", ""))
+                        for assessment in candidate_assessments
+                        if isinstance(assessment, Mapping)
+                        and assessment.get("pair")
+                    }
+                    candidate_execution = candidate.get("execution", {})
+                    candidate_safe = (
+                        is_qualified
+                        and candidate.get("candidate_id")
+                        == expected_candidate.candidate_policy.candidate_id
+                        and candidate.get("policy_fingerprint_sha256")
+                        == expected_candidate.candidate_policy.fingerprint_sha256
+                        and candidate_pairs == expected_pairs
+                        and isinstance(candidate_execution, Mapping)
+                        and candidate_execution.get("status") == "NOT_EXECUTED"
+                        and candidate.get("automatic_paper_promotion") is False
+                        and candidate.get("paper_orders_sent") is False
+                        and candidate.get("live_orders_sent") is False
+                    )
+                    candidate_evidence_valid = (
+                        candidate_evidence_valid and candidate_safe
+                    )
+                    if candidate_safe:
+                        candidate_forward_count += 1
+                        candidate_market_days.update(
+                            (observed_at.date().isoformat(),)
+                        )
+                        for assessment in candidate_assessments:
+                            if isinstance(assessment, Mapping):
+                                candidate_assessment_actions.update((str(
+                                    assessment.get("action", "UNKNOWN")
+                                ),))
+                        for instruction in candidate_instructions:
+                            if isinstance(instruction, Mapping):
+                                candidate_instruction_actions.update((str(
+                                    instruction.get("action", "UNKNOWN")
+                                ),))
 
             raw_blocks = item.get("opening_blocks", [])
             if isinstance(raw_blocks, (list, tuple)):
@@ -327,6 +385,28 @@ class ForexObservationJournal:
                 "proposed_instruction_pairs": dict(sorted(instruction_pairs.items())),
                 "assessed_pairs": dict(sorted(assessed_pairs.items())),
             },
+            "development_candidate_v2": {
+                "candidate_id": expected_candidate.candidate_policy.candidate_id,
+                "policy_fingerprint_sha256": (
+                    expected_candidate.candidate_policy.fingerprint_sha256
+                ),
+                "frozen_after": (
+                    expected_candidate.candidate_policy.frozen_after.isoformat()
+                ),
+                "valid_forward_observation_count": candidate_forward_count,
+                "valid_forward_market_day_count": len(candidate_market_days),
+                "evidence_valid": candidate_evidence_valid,
+                "assessment_actions": dict(sorted(
+                    candidate_assessment_actions.items()
+                )),
+                "proposed_instruction_actions": dict(sorted(
+                    candidate_instruction_actions.items()
+                )),
+                "strategy_performance_validated": False,
+                "automatic_paper_promotion": False,
+                "paper_execution_enabled": False,
+                "live_execution_enabled": False,
+            },
             "safety": {
                 "all_positions_unchanged": not position_change_detected,
                 "qualified_pair_coverage_complete": qualified_pair_coverage_complete,
@@ -420,6 +500,7 @@ class ForexObservationService:
             project_root, policy=self.policy
         )
         self.scanner = ForexMarketScanner(MAJOR_FOREX_PAIRS)
+        self.development_scanner = ForexRegimeFilteredScanner(MAJOR_FOREX_PAIRS)
         self.coordinator = ForexPaperCoordinator(self.policy)
 
     def observe_once(
@@ -468,6 +549,28 @@ class ForexObservationService:
                 daily_pnl_pln=account["daily_pnl_pln"],
                 now=selected_now,
             )
+            development_assessments = self.development_scanner.scan(
+                quotes=bundle.quotes,
+                bars=bundle.bars,
+                contexts=bundle.contexts,
+                positions={
+                    symbol: position.side
+                    for symbol, position in positions.items()
+                },
+                now=selected_now,
+            )
+            development_plan = self.coordinator.plan(
+                assessments=development_assessments,
+                quotes=bundle.quotes,
+                positions=positions,
+                rates=rates,
+                equity_pln=account["equity_pln"],
+                daily_pnl_pln=account["daily_pnl_pln"],
+                now=selected_now,
+            )
+            development_instructions = list(
+                development_plan.get("instructions", []) or []
+            )
             diagnostics = self._diagnostics(bundle.diagnostics)
             market_open = bool(bundle.contexts) and all(
                 context.market_open for context in bundle.contexts.values()
@@ -492,6 +595,43 @@ class ForexObservationService:
                 "data": diagnostics,
                 "assessments": [item.as_dict() for item in assessments],
                 "proposed_plan": plan,
+                "development_candidate_v2": {
+                    "status": "FORWARD_OBSERVATION_RECORDED",
+                    "candidate_id": (
+                        self.development_scanner.candidate_policy.candidate_id
+                    ),
+                    "policy_fingerprint_sha256": (
+                        self.development_scanner.candidate_policy.fingerprint_sha256
+                    ),
+                    "forward_eligible": (
+                        self.development_scanner.candidate_policy.forward_eligible(
+                            selected_now
+                        )
+                    ),
+                    "audit": self.development_scanner.audit(),
+                    "assessments": [
+                        item.as_dict() for item in development_assessments
+                    ],
+                    "proposed_plan": development_plan,
+                    "proposed_instruction_count": len(
+                        development_instructions
+                    ),
+                    "would_open_count": sum(
+                        str(item.get("action", "")).startswith("OPEN_")
+                        for item in development_instructions
+                    ),
+                    "would_close_count": sum(
+                        item.get("action") == "CLOSE_POSITION"
+                        for item in development_instructions
+                    ),
+                    "execution": {
+                        "status": "NOT_EXECUTED",
+                        "reason": "DEVELOPMENT_OBSERVATION_ONLY",
+                    },
+                    "automatic_paper_promotion": False,
+                    "paper_orders_sent": False,
+                    "live_orders_sent": False,
+                },
                 "proposed_instruction_count": len(instructions),
                 "would_open_count": sum(
                     str(item.get("action", "")).startswith("OPEN_")
@@ -538,6 +678,9 @@ class ForexObservationService:
         return {
             "primary_provider": str(value.get("primary_provider", "")),
             "primary_pair_count": int(value.get("primary_pair_count", 0) or 0),
+            "primary_closed_bar_count": int(
+                value.get("primary_closed_bar_count", 0) or 0
+            ),
             "cross_checked_pair_count": len(cross_checked),
             "calendar_ready": bool(value.get("calendar_ready")),
             "high_impact_event_count": int(

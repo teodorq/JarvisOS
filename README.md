@@ -72,8 +72,9 @@ absent by default, so the opening gate remains closed. No broker order route or
 continuous background feed is exposed.
 
 Before PAPER execution is enabled, use the observation-only cycle. It reads all
-configured sources, calculates the same assessment and proposed plan, then stops
-before the execution boundary. Evidence is kept in the ignored, tamper-evident
+configured sources and 211 closed M15 bars per pair, calculates the same
+assessment and proposed plan, then stops before the execution boundary.
+Evidence is kept in the ignored, tamper-evident
 `data/trading/forex_observations.json` journal and never promotes itself:
 
 ```powershell
@@ -103,6 +104,15 @@ Use `Raport obserwacji Forex` for a deeper read-only review. It aggregates every
 recorded cycle, market-day coverage, blocked reasons, proposed but unexecuted
 actions, all seven-pair coverage and order-safety invariants. The report cannot
 promote or enable PAPER or LIVE execution.
+
+Each new observation also evaluates the frozen development candidate
+`FOREX_REGIME_V2_20260820`. It keeps the 10/30 M15 crossover but allows a new
+entry only when a 20/50 H1 trend, aggregated exclusively from complete closed
+M15 bars, agrees with it. The policy, freeze time and SHA-256 fingerprint are
+recorded with every eligible observation. Existing-position exits are never
+blocked by the H1 filter. This candidate is research-only, sends no order and
+cannot promote itself; observations made before its freeze time do not count as
+forward evidence.
 
 ## Optional Forex PAPER data
 
@@ -156,6 +166,10 @@ sizing therefore follows the same per-trade, total-risk, currency-exposure and
 two-position limits as PAPER. PAPER and research both store a fixed 2:1
 take-profit. Even a fully passing report cannot start PAPER automatically; a
 separate explicit activation and review remain required.
+The same report contains an isolated `development_candidate_v2` replay. It
+marks the already-known history as reused development data and always requires
+new post-freeze evidence, so repeatedly running the report cannot turn an
+overfit result into validation.
 If one M15 candle touches both stop and target, the backtest records the stop
 first. Gaps through a stop use the worse opening execution price, while target
 gaps are capped at the target. These deliberately conservative assumptions
