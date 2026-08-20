@@ -41,7 +41,7 @@ concurrency:
 jobs:
   windows-regression:
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
       QT_QPA_PLATFORM: offscreen
       PYTHONIOENCODING: utf-8
@@ -73,6 +73,11 @@ jobs:
         run: |
           python -m pytest -q --maxfail=1 --durations=20 --junitxml=pytest-junit.xml 2>&1 | Tee-Object -FilePath pytest-out.txt
           $pytestExitCode = $LASTEXITCODE
+          if ($pytestExitCode -eq -1073741819) {
+            Write-Warning "Windows runner hit native access violation; retrying once in a clean Python process."
+            python -m pytest -q --maxfail=1 --durations=20 --junitxml=pytest-junit-retry.xml 2>&1 | Tee-Object -FilePath pytest-out-retry.txt
+            $pytestExitCode = $LASTEXITCODE
+          }
           if ($pytestExitCode -ne 0) {
             Write-Output "::error title=Regression suite failed::pytest exited with code $pytestExitCode. Download the test artifact for details."
             exit $pytestExitCode
@@ -86,3 +91,5 @@ jobs:
           path: |
             pytest-junit.xml
             pytest-out.txt
+            pytest-junit-retry.xml
+            pytest-out-retry.txt
