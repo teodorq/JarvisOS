@@ -28,6 +28,7 @@ class ForexPaperPolicy:
     minimum_units: Decimal = Decimal("100")
     maximum_units: Decimal = Decimal("10000")
     max_conversion_age_seconds: int = 30
+    take_profit_reward_risk: Decimal = Decimal("2")
     live_trading_enabled: bool = field(default=False, init=False)
     leverage_enabled: bool = field(default=False, init=False)
     martingale_enabled: bool = field(default=False, init=False)
@@ -64,6 +65,11 @@ class ForexPaperPolicy:
             raise TradingValidationError("forex_policy: unsafe_unit_limits")
         if not 1 <= self.max_conversion_age_seconds <= 300:
             raise TradingValidationError("forex_policy: unsafe_conversion_age")
+        if not (
+            isinstance(self.take_profit_reward_risk, Decimal)
+            and Decimal("1") <= self.take_profit_reward_risk <= Decimal("5")
+        ):
+            raise TradingValidationError("forex_policy: unsafe_take_profit_reward_risk")
 
 
 class ForexRateBook:

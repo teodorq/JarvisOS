@@ -27,6 +27,7 @@ class ForexPaperInstruction:
     stop_loss: Decimal
     score: Decimal
     reason_codes: tuple[str, ...]
+    take_profit: Decimal | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -35,6 +36,9 @@ class ForexPaperInstruction:
             "units": str(self.units),
             "intended_price": str(self.intended_price),
             "stop_loss": str(self.stop_loss),
+            "take_profit": (
+                str(self.take_profit) if self.take_profit is not None else ""
+            ),
             "score": str(self.score),
             "reason_codes": list(self.reason_codes),
             "mode": "FOREX_PAPER_ONLY",
@@ -74,24 +78,30 @@ class ForexPaperCoordinator:
         for symbol, position in current.items():
             assessment = assessment_by_pair.get(symbol)
             quote = quotes.get(symbol)
-            if assessment is None or assessment.status != "READY" or quote is None:
+            if quote is None or quote.pair != position.pair:
                 continue
             stop_hit = (
                 position.side == "LONG" and quote.bid <= position.stop_loss
             ) or (
                 position.side == "SHORT" and quote.ask >= position.stop_loss
             )
-            if not stop_hit:
+            target_hit = position.take_profit is not None and (
+                (position.side == "LONG" and quote.bid >= position.take_profit)
+                or (position.side == "SHORT" and quote.ask <= position.take_profit)
+            )
+            if not stop_hit and not target_hit:
                 continue
             closing_price = quote.bid if position.side == "LONG" else quote.ask
+            reason = "STOP_LOSS_TRIGGERED" if stop_hit else "TAKE_PROFIT_TRIGGERED"
             exits.append(ForexPaperInstruction(
                 action="CLOSE_POSITION",
                 pair=symbol,
                 units=position.units,
                 intended_price=closing_price,
                 stop_loss=position.stop_loss,
+                take_profit=position.take_profit,
                 score=Decimal("100"),
-                reason_codes=("STOP_LOSS_TRIGGERED",),
+                reason_codes=(reason,),
             ))
             exit_pairs.add(symbol)
         for assessment in ordered:
@@ -114,6 +124,7 @@ class ForexPaperCoordinator:
                 units=position.units,
                 intended_price=closing_price,
                 stop_loss=position.stop_loss,
+                take_profit=position.take_profit,
                 score=assessment.score,
                 reason_codes=assessment.reason_codes,
             ))
@@ -150,6 +161,12 @@ class ForexPaperCoordinator:
             maximum = assessment.pair.pip_size * self.MAXIMUM_STOP_PIPS
             stop_distance = min(max(volatility_distance, minimum), maximum)
             stop = entry - stop_distance if side == "LONG" else entry + stop_distance
+            target_distance = stop_distance * self.policy.take_profit_reward_risk
+            target = (
+                entry + target_distance
+                if side == "LONG"
+                else entry - target_distance
+            )
             decision = self.risk.evaluate_open(
                 pair=assessment.pair,
                 side=side,
@@ -173,6 +190,7 @@ class ForexPaperCoordinator:
                 units=decision.units,
                 intended_price=entry,
                 stop_loss=stop,
+                take_profit=target,
                 score=assessment.score,
                 reason_codes=assessment.reason_codes + (decision.code,),
             )
@@ -185,6 +203,7 @@ class ForexPaperCoordinator:
                 current_price=entry,
                 stop_loss=stop,
                 opened_at=selected_now,
+                take_profit=target,
             ))
             if len(working) >= self.policy.max_open_positions:
                 break

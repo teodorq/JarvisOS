@@ -153,7 +153,10 @@ class Mt5DemoReadOnlySource:
             or len(set(symbols)) != len(symbols)
             or type(bar_count) is not int
             or not 200 <= bar_count <= 50_000
-            or any(not pair.tradable for pair in selected)
+            or any(
+                not pair.tradable and pair.symbol != "USD_PLN"
+                for pair in selected
+            )
         ):
             raise TradingValidationError("mt5_demo: invalid_history_request")
 

@@ -116,15 +116,18 @@ to a DEMO account and install the optional local package:
 JARVIS does not store the MT5 login or password. It uses the terminal's current
 session and rejects real and contest accounts before reading the first price.
 
-Export a local research snapshot of 5,000 closed M15 bars for all seven pairs:
+Export a local research snapshot of 5,000 closed M15 bars for all seven
+tradable pairs plus the non-tradable USD/PLN conversion series:
 
 ```powershell
 .\.venv\Scripts\python.exe .\tools\export_mt5_history.py --bars 5000
 .\.venv\Scripts\python.exe .\tools\export_mt5_history.py --verify-latest
 ```
 
-The export is stored under ignored `data/trading/history/`. Every pair gets a
-validated CSV and SHA-256 fingerprint in a secret-free manifest. Verification
+The export is stored under ignored `data/trading/history/`. Every series gets a
+validated CSV and SHA-256 fingerprint in a secret-free manifest. USD/PLN is
+available only to value historical portfolio risk and profit in PLN; the
+trading universe remains the seven major pairs. Verification
 re-reads every CSV and fails if a file, fingerprint, pair set or safety flag has
 changed. It also checks timestamp alignment across pairs, positive tick volume
 and distinguishes regular weekend closures from unexpected intraday gaps. MT5
@@ -140,20 +143,19 @@ export:
 
 The test generates every signal from current and earlier closed bars and fills
 it only at the next M15 open. It uses isolated chronological walk-forward
-windows plus a conservative synthetic spread/slippage model. Results remain
-separate in each pair's quote currency because the export does not contain a
-complete historical PLN conversion series. The ignored detailed report is
-written to `data/trading/research/latest.json`. This command cannot connect to
-the broker or promote PAPER/LIVE trading, and its results are research rather
-than a prediction of future profit.
+windows plus a conservative synthetic spread/slippage model. Individual-pair
+results remain diagnostic, while candidate readiness is decided by one aligned
+multi-pair portfolio valued in PLN through the exported USD/PLN series. The
+ignored detailed report is written to `data/trading/research/latest.json`.
+This command cannot connect to the broker or promote PAPER/LIVE trading, and
+its results are research rather than a prediction of future profit.
 
-Historical entries use the same volatility-based 10-to-100-pip stop-loss
-formula as the local PAPER coordinator. Position sizing is still a separate
-single-pair research assumption because these datasets do not provide a full
-historical PLN conversion portfolio. Research also evaluates a fixed 2:1
-take-profit. Since the current PAPER executor does not yet store a take-profit,
-the report marks both differences explicitly and cannot use the result to
-promote PAPER.
+Historical entries reuse the local PAPER scanner, pair ranking, PLN portfolio
+risk engine and volatility-based 10-to-100-pip stop-loss formula. Position
+sizing therefore follows the same per-trade, total-risk, currency-exposure and
+two-position limits as PAPER. PAPER and research both store a fixed 2:1
+take-profit. Even a fully passing report cannot start PAPER automatically; a
+separate explicit activation and review remain required.
 If one M15 candle touches both stop and target, the backtest records the stop
 first. Gaps through a stop use the worse opening execution price, while target
 gaps are capped at the target. These deliberately conservative assumptions

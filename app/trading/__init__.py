@@ -15,6 +15,12 @@ from app.trading.forex_historical import (
     ForexWalkForwardPolicy,
 )
 from app.trading.forex_ledger import ForexPaperLedger
+from app.trading.forex_portfolio_historical import (
+    ForexPortfolioHistoricalBacktester,
+    ForexPortfolioHistoricalPolicy,
+    ForexPortfolioHistoricalWalkForwardValidator,
+    ForexPortfolioWalkForwardPolicy,
+)
 from app.trading.forex_models import (
     ForexBar,
     ForexPair,
@@ -77,6 +83,10 @@ __all__ = [
     "ForexPaperLedger",
     "ForexPaperPolicy",
     "ForexPortfolioRiskEngine",
+    "ForexPortfolioHistoricalBacktester",
+    "ForexPortfolioHistoricalPolicy",
+    "ForexPortfolioHistoricalWalkForwardValidator",
+    "ForexPortfolioWalkForwardPolicy",
     "ForexPosition",
     "ForexQuote",
     "ForexRateBook",

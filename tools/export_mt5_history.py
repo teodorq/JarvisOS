@@ -18,7 +18,10 @@ from app.market_data.forex_environment import (  # noqa: E402
 )
 from app.market_data.mt5_demo import Mt5DemoReadOnlySource  # noqa: E402
 from app.market_data.mt5_history import Mt5DemoHistoricalExporter  # noqa: E402
-from app.trading.forex_models import MAJOR_FOREX_PAIRS, major_pair  # noqa: E402
+from app.trading.forex_models import (  # noqa: E402
+    HISTORICAL_FOREX_PAIRS,
+    major_pair,
+)
 from app.trading.models import TradingValidationError  # noqa: E402
 
 
@@ -49,7 +52,7 @@ def main() -> int:
         pairs = (
             tuple(major_pair(value) for value in arguments.pair)
             if arguments.pair
-            else MAJOR_FOREX_PAIRS
+            else HISTORICAL_FOREX_PAIRS
         )
         exporter = Mt5DemoHistoricalExporter(
             PROJECT_ROOT,

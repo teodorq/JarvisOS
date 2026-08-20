@@ -22,6 +22,11 @@ from app.trading.forex_historical import (  # noqa: E402
     ForexHistoricalWalkForwardValidator,
     ForexWalkForwardPolicy,
 )
+from app.trading.forex_models import MAJOR_FOREX_PAIRS  # noqa: E402
+from app.trading.forex_portfolio_historical import (  # noqa: E402
+    ForexPortfolioHistoricalWalkForwardValidator,
+    ForexPortfolioWalkForwardPolicy,
+)
 from app.trading.models import TradingValidationError  # noqa: E402
 
 
@@ -61,6 +66,10 @@ def main() -> int:
         verified = Mt5DemoHistoricalExporter(PROJECT_ROOT).verify_latest()
         if verified.get("research_quality_ready") is not True:
             raise TradingValidationError("forex_research: history_quality_not_ready")
+        if verified.get("historical_pln_conversion_ready") is not True:
+            raise TradingValidationError(
+                "forex_research: historical_pln_conversion_not_ready"
+            )
         export_path = Path(str(verified["export_path"]))
         window_policy = ForexWalkForwardPolicy(
             training_bar_count=arguments.training_bars,
@@ -71,10 +80,15 @@ def main() -> int:
             walk_forward_policy=window_policy,
         )
         loader = HistoricalCsvLoader()
+        major_symbols = frozenset(pair.symbol for pair in MAJOR_FOREX_PAIRS)
+        histories = {}
         pair_results = []
         for raw in verified["datasets"]:
             pair = str(raw["pair"])
             dataset = loader.load(export_path / f"{pair.lower()}_m15.csv")
+            histories[pair] = dataset.bars
+            if pair not in major_symbols:
+                continue
             result = validator.run(dataset.bars)
             pair_results.append({
                 "pair": pair,
@@ -114,12 +128,26 @@ def main() -> int:
             for item in pair_results
             if Decimal(str(item["average_out_of_sample_return_pct"])) <= 0
         ]
+        portfolio = ForexPortfolioHistoricalWalkForwardValidator(
+            walk_forward_policy=ForexPortfolioWalkForwardPolicy(
+                training_bar_count=arguments.training_bars,
+                testing_bar_count=arguments.testing_bars,
+                step_bar_count=arguments.step_bars,
+            ),
+        ).run(histories)
+        block_by_check = {
+            "average_return_positive": "PORTFOLIO_AVERAGE_RETURN_NOT_POSITIVE",
+            "compounded_return_positive": "PORTFOLIO_COMPOUNDED_RETURN_NOT_POSITIVE",
+            "profitable_window_ratio_met": "PORTFOLIO_PROFITABLE_WINDOW_RATIO_NOT_MET",
+            "maximum_drawdown_within_limit": "PORTFOLIO_DRAWDOWN_LIMIT_EXCEEDED",
+            "minimum_trade_count_met": "PORTFOLIO_MINIMUM_TRADE_COUNT_NOT_MET",
+        }
         candidate_blocks = [
-            "PAPER_POSITION_SIZING_NOT_REPLAYED",
-            "TAKE_PROFIT_NOT_IMPLEMENTED_IN_PAPER",
+            block_by_check[key]
+            for key, passed in portfolio["performance_checks"].items()
+            if passed is not True
         ]
-        if non_positive_pairs:
-            candidate_blocks.append("PAIR_SELECTION_POLICY_NOT_VALIDATED")
+        candidate_ready = not candidate_blocks
         report: dict[str, object] = {
             "status": "FOREX_MULTI_PAIR_RESEARCH_COMPLETED",
             "mode": "LOCAL_HISTORICAL_RESEARCH_ONLY",
@@ -132,19 +160,24 @@ def main() -> int:
             "positive_average_pair_count": len(positive_pairs),
             "positive_average_pairs": positive_pairs,
             "non_positive_average_pairs": non_positive_pairs,
-            "strategy_candidate_ready": False,
+            "strategy_candidate_ready": candidate_ready,
             "strategy_candidate_blocks": candidate_blocks,
-            "portfolio_pln_aggregation_performed": False,
+            "portfolio": portfolio,
+            "portfolio_pln_aggregation_performed": True,
+            "historical_pln_conversion_series_verified": True,
             "result_currency_note": (
-                "Each pair is reported in its own quote currency; results are not "
-                "summed into a PLN portfolio without historical conversion rates."
+                "Individual pair results are diagnostic. Candidate readiness is "
+                "decided only by the aligned, multi-pair PLN portfolio replay."
             ),
             "parameter_optimization_performed": False,
             "stop_loss_formula_matches_paper_coordinator": True,
-            "position_sizing_matches_paper_coordinator": False,
-            "take_profit_research_only": True,
+            "position_sizing_matches_paper_coordinator": True,
+            "take_profit_research_only": False,
+            "take_profit_matches_paper": True,
             "ambiguous_stop_target_bar_uses_stop_first": True,
-            "strategy_performance_validated": False,
+            "strategy_performance_validated": portfolio[
+                "strategy_performance_validated"
+            ],
             "automatic_paper_promotion": False,
             "broker_connection_used": False,
             "paper_orders_sent": False,
@@ -165,16 +198,25 @@ def main() -> int:
             "positive_average_pair_count": len(positive_pairs),
             "positive_average_pairs": positive_pairs,
             "non_positive_average_pairs": non_positive_pairs,
-            "strategy_candidate_ready": False,
+            "strategy_candidate_ready": candidate_ready,
             "strategy_candidate_blocks": candidate_blocks,
             "report_path": str(report_path),
-            "portfolio_pln_aggregation_performed": False,
+            "portfolio_pln_aggregation_performed": True,
+            "historical_pln_conversion_series_verified": True,
+            "portfolio": {
+                key: value
+                for key, value in portfolio.items()
+                if key != "windows"
+            },
             "parameter_optimization_performed": False,
             "stop_loss_formula_matches_paper_coordinator": True,
-            "position_sizing_matches_paper_coordinator": False,
-            "take_profit_research_only": True,
+            "position_sizing_matches_paper_coordinator": True,
+            "take_profit_research_only": False,
+            "take_profit_matches_paper": True,
             "ambiguous_stop_target_bar_uses_stop_first": True,
-            "strategy_performance_validated": False,
+            "strategy_performance_validated": portfolio[
+                "strategy_performance_validated"
+            ],
             "automatic_paper_promotion": False,
             "broker_connection_used": False,
             "paper_orders_sent": False,

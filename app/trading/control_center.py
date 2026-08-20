@@ -185,11 +185,11 @@ class TradingControlCenter:
         ):
             gate = (
                 "ZABLOKOWANA - obserwacje sa gotowe, ale strategia historyczna "
-                "nie spelnia jeszcze pelnej zgodnosci PAPER"
+                "nie spelnia jeszcze progow portfela w PLN"
             )
             next_step = (
-                "domknac pozycjonowanie portfelowe i take-profit w PAPER, "
-                "a potem ponowic badanie"
+                "ulepszyc strategie bez strojenia pod te same dane, a potem "
+                "powtorzyc walk-forward na nowej probce"
             )
         elif observation["paper_promotion_ready"]:
             gate = (

@@ -9,7 +9,11 @@ import unittest
 
 from app.market_data.mt5_history import Mt5DemoHistoricalExporter
 from app.trading.dataset import HistoricalCsvLoader
-from app.trading.forex_models import ForexBar, MAJOR_FOREX_PAIRS
+from app.trading.forex_models import (
+    ForexBar,
+    HISTORICAL_FOREX_PAIRS,
+    MAJOR_FOREX_PAIRS,
+)
 from app.trading.models import TradingValidationError
 
 
@@ -23,6 +27,7 @@ BASE = {
     "AUD_USD": Decimal("0.6600"),
     "USD_CAD": Decimal("1.3500"),
     "NZD_USD": Decimal("0.6100"),
+    "USD_PLN": Decimal("4.0000"),
 }
 
 
@@ -119,12 +124,25 @@ class Mt5HistoryExportTests(unittest.TestCase):
         self.assertTrue(verified["all_fingerprints_match"])
         self.assertTrue(verified["timestamps_aligned_across_pairs"])
         self.assertTrue(verified["research_quality_ready"])
+        self.assertFalse(verified["historical_pln_conversion_ready"])
         self.assertFalse(verified["strategy_performance_validated"])
         self.assertEqual(verified["quality_issues"], [])
         self.assertTrue(all(item["matches_manifest"] for item in verified["datasets"]))
         self.assertTrue(all(item["positive_tick_volume_ratio"] == "1.000000" for item in verified["datasets"]))
         self.assertTrue(all(item["unexpected_gap_count"] == 0 for item in verified["datasets"]))
         self.assertFalse((self.root / "data/trading/forex_paper_ledger.json").exists())
+
+    def test_portfolio_export_includes_non_tradable_usd_pln_history(self) -> None:
+        result = Mt5DemoHistoricalExporter(
+            self.root,
+            source=FakeHistorySource(),  # type: ignore[arg-type]
+        ).export(HISTORICAL_FOREX_PAIRS, bar_count=200, now=NOW)
+        self.assertEqual(result["pair_count"], 8)
+        self.assertEqual(result["tradable_pair_count"], 7)
+        self.assertTrue(result["conversion_pair_included"])
+        verified = Mt5DemoHistoricalExporter(self.root).verify_latest()
+        self.assertTrue(verified["historical_pln_conversion_ready"])
+        self.assertEqual(verified["tradable_pair_count"], 7)
 
     def test_verification_detects_a_changed_csv(self) -> None:
         exporter = Mt5DemoHistoricalExporter(

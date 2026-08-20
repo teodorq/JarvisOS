@@ -10,6 +10,13 @@ from app.trading.forex_research_status import ForexHistoricalResearchGate
 
 
 def report(*, candidate: bool = False) -> dict:
+    checks = {
+        "average_return_positive": candidate,
+        "compounded_return_positive": candidate,
+        "profitable_window_ratio_met": candidate,
+        "maximum_drawdown_within_limit": True,
+        "minimum_trade_count_met": True,
+    }
     return {
         "status": "FOREX_MULTI_PAIR_RESEARCH_COMPLETED",
         "mode": "LOCAL_HISTORICAL_RESEARCH_ONLY",
@@ -26,12 +33,28 @@ def report(*, candidate: bool = False) -> dict:
             }
             for index, pair in enumerate(MAJOR_FOREX_PAIRS)
         ],
-        "portfolio_pln_aggregation_performed": False,
+        "portfolio_pln_aggregation_performed": True,
+        "historical_pln_conversion_series_verified": True,
+        "portfolio": {
+            "status": "COMPLETED",
+            "account_currency": "PLN",
+            "portfolio_pln_aggregation_performed": True,
+            "historical_pln_conversion_series_verified": True,
+            "position_sizing_matches_paper_coordinator": True,
+            "take_profit_matches_paper": True,
+            "performance_checks": checks,
+            "strategy_performance_validated": all(checks.values()),
+            "broker_connection_used": False,
+            "paper_orders_sent": False,
+            "live_orders_sent": False,
+        },
         "parameter_optimization_performed": False,
         "stop_loss_formula_matches_paper_coordinator": True,
         "position_sizing_matches_paper_coordinator": candidate,
         "take_profit_research_only": not candidate,
+        "take_profit_matches_paper": candidate,
         "strategy_performance_validated": candidate,
+        "automatic_paper_promotion": False,
         "broker_connection_used": False,
         "paper_orders_sent": False,
         "live_orders_sent": False,
@@ -62,7 +85,7 @@ class ForexHistoricalResearchGateTests(unittest.TestCase):
         self.assertEqual(malformed["status"], "INVALID")
         self.assertFalse(malformed["strategy_candidate_ready"])
 
-    def test_current_research_mismatches_keep_paper_blocked(self) -> None:
+    def test_performance_and_parity_mismatches_keep_paper_blocked(self) -> None:
         self.write(report())
         status = ForexHistoricalResearchGate(self.root).status()
         self.assertEqual(status["status"], "BLOCKED")
@@ -75,7 +98,19 @@ class ForexHistoricalResearchGateTests(unittest.TestCase):
             "TAKE_PROFIT_NOT_IMPLEMENTED_IN_PAPER",
             status["strategy_candidate_blocks"],
         )
+        self.assertIn(
+            "STRATEGY_PERFORMANCE_NOT_VALIDATED",
+            status["strategy_candidate_blocks"],
+        )
         self.assertFalse(status["automatic_paper_promotion"])
+
+    def test_individually_negative_pairs_do_not_override_portfolio_result(self) -> None:
+        value = report(candidate=True)
+        value["pairs"][0]["average_out_of_sample_return_pct"] = "-0.0100"
+        self.write(value)
+        status = ForexHistoricalResearchGate(self.root).status()
+        self.assertEqual(status["status"], "READY")
+        self.assertIn("EUR_USD", status["non_positive_average_pairs"])
         self.assertFalse(status["paper_orders_sent"])
         self.assertFalse(status["live_orders_sent"])
 

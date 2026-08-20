@@ -73,6 +73,9 @@ MAJOR_FOREX_PAIRS: tuple[ForexPair, ...] = tuple(
     )
 )
 USD_PLN_CONVERSION_PAIR = ForexPair.create("USD_PLN", tradable=False)
+HISTORICAL_FOREX_PAIRS: tuple[ForexPair, ...] = (
+    MAJOR_FOREX_PAIRS + (USD_PLN_CONVERSION_PAIR,)
+)
 
 
 def major_pair(symbol: object) -> ForexPair:
@@ -182,6 +185,7 @@ class ForexPosition:
     current_price: Decimal
     stop_loss: Decimal
     opened_at: datetime
+    take_profit: Decimal | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.pair, ForexPair):
@@ -193,15 +197,25 @@ class ForexPosition:
         entry = decimal_value(self.entry_price, "entry_price")
         current = decimal_value(self.current_price, "current_price")
         stop = decimal_value(self.stop_loss, "stop_loss")
+        target = (
+            None
+            if self.take_profit is None
+            else decimal_value(self.take_profit, "take_profit")
+        )
         if side == "LONG" and stop >= entry:
             raise TradingValidationError("forex_position: long_stop_must_be_lower")
         if side == "SHORT" and stop <= entry:
             raise TradingValidationError("forex_position: short_stop_must_be_higher")
+        if side == "LONG" and target is not None and target <= entry:
+            raise TradingValidationError("forex_position: long_target_must_be_higher")
+        if side == "SHORT" and target is not None and target >= entry:
+            raise TradingValidationError("forex_position: short_target_must_be_lower")
         object.__setattr__(self, "side", side)
         object.__setattr__(self, "units", units)
         object.__setattr__(self, "entry_price", entry)
         object.__setattr__(self, "current_price", current)
         object.__setattr__(self, "stop_loss", stop)
+        object.__setattr__(self, "take_profit", target)
         object.__setattr__(self, "opened_at", aware_utc(self.opened_at, "opened_at"))
 
 
@@ -250,6 +264,7 @@ __all__ = [
     "ForexPosition",
     "ForexQuote",
     "ForexSafetyContext",
+    "HISTORICAL_FOREX_PAIRS",
     "MAJOR_FOREX_PAIRS",
     "USD_PLN_CONVERSION_PAIR",
     "major_pair",

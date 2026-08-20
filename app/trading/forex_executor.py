@@ -10,6 +10,7 @@ import re
 from typing import Any, Mapping
 from uuid import uuid4
 
+from app.trading.forex_coordinator import ForexPaperCoordinator
 from app.trading.forex_ledger import ForexPaperLedger
 from app.trading.forex_models import ForexPosition, ForexQuote, major_pair
 from app.trading.forex_risk import (
@@ -32,6 +33,12 @@ def _decimal(value: object) -> Decimal:
     except Exception:
         return Decimal("0")
     return result if result.is_finite() else Decimal("0")
+
+
+def _optional_decimal(value: object) -> Decimal | None:
+    if value is None or str(value).strip() == "":
+        return None
+    return _decimal(value)
 
 
 def _text(value: Decimal, quantum: Decimal = _MONEY) -> str:
@@ -123,7 +130,14 @@ class ForexPaperExecutionEngine:
                     rejections.append({"pair": pair.symbol, "code": "QUOTE_MISSING"})
                     continue
                 if action == "CLOSE_POSITION":
-                    result = self._close(state, pair.symbol, quote, rates, selected_now)
+                    result = self._close(
+                        state,
+                        pair.symbol,
+                        quote,
+                        rates,
+                        selected_now,
+                        instruction,
+                    )
                 elif action in {"OPEN_LONG", "OPEN_SHORT"}:
                     if bool(dict(state.get("kill_switch", {}) or {}).get("active")):
                         result = {"status": "REJECTED", "code": "KILL_SWITCH_ACTIVE"}
@@ -197,6 +211,38 @@ class ForexPaperExecutionEngine:
         entry = quote.ask if side == "LONG" else quote.bid
         requested_units = decimal_value(instruction.get("units"), "units")
         stop = decimal_value(instruction.get("stop_loss"), "stop_loss")
+        raw_target = instruction.get("take_profit")
+        if raw_target is None or str(raw_target).strip() == "":
+            return {"status": "REJECTED", "code": "TAKE_PROFIT_REQUIRED"}
+        target = decimal_value(raw_target, "take_profit")
+        if (side == "LONG" and stop >= entry) or (
+            side == "SHORT" and stop <= entry
+        ):
+            return {"status": "REJECTED", "code": "INVALID_STOP"}
+        stop_pips = abs(entry - stop) / quote.pair.pip_size
+        if not (
+            ForexPaperCoordinator.MINIMUM_STOP_PIPS
+            <= stop_pips
+            <= ForexPaperCoordinator.MAXIMUM_STOP_PIPS
+        ):
+            return {
+                "status": "REJECTED",
+                "code": "STOP_DISTANCE_POLICY_MISMATCH",
+            }
+        if (side == "LONG" and target <= entry) or (
+            side == "SHORT" and target >= entry
+        ):
+            return {"status": "REJECTED", "code": "INVALID_TAKE_PROFIT"}
+        expected_target_distance = (
+            abs(entry - stop) * self.policy.take_profit_reward_risk
+        )
+        if abs(abs(target - entry) - expected_target_distance) > (
+            quote.pair.pip_size / Decimal("1000")
+        ):
+            return {
+                "status": "REJECTED",
+                "code": "TAKE_PROFIT_POLICY_MISMATCH",
+            }
         balance = _decimal(state.get("balance_pln"))
         equity = balance + self._unrealized_pln(positions, {}, rates)
         decision = self.risk.evaluate_open(
@@ -222,6 +268,7 @@ class ForexPaperExecutionEngine:
             current_price=entry,
             stop_loss=stop,
             opened_at=now,
+            take_profit=target,
         )
         stored = {
             "pair": position.pair.symbol,
@@ -230,6 +277,7 @@ class ForexPaperExecutionEngine:
             "entry_price": _text(position.entry_price, _PRICE),
             "current_price": _text(position.current_price, _PRICE),
             "stop_loss": _text(position.stop_loss, _PRICE),
+            "take_profit": _text(target, _PRICE),
             "opened_at": position.opened_at.isoformat(),
         }
         raw_positions = dict(state.get("positions", {}) or {})
@@ -252,6 +300,7 @@ class ForexPaperExecutionEngine:
         quote: ForexQuote,
         rates: ForexRateBook,
         now: datetime,
+        instruction: Mapping[str, Any],
     ) -> dict[str, Any]:
         positions = self._positions(state)
         position = positions.get(pair_name)
@@ -280,6 +329,16 @@ class ForexPaperExecutionEngine:
             "units": str(position.units),
             "entry_price": _text(position.entry_price, _PRICE),
             "exit_price": _text(exit_price, _PRICE),
+            "stop_loss": _text(position.stop_loss, _PRICE),
+            "take_profit": (
+                _text(position.take_profit, _PRICE)
+                if position.take_profit is not None
+                else ""
+            ),
+            "reason_codes": [
+                str(value)[:80]
+                for value in list(instruction.get("reason_codes", []) or [])[:8]
+            ],
             "realized_pnl_pln": _text(pnl_pln),
             "filled_at": now.isoformat(),
         }
@@ -311,6 +370,12 @@ class ForexPaperExecutionEngine:
             "equity_pln": _text(balance + unrealized),
             "daily_pnl_pln": _text(_decimal(state.get("daily_pnl_pln"))),
             "position_count": len(positions),
+            "take_profit_protected_position_count": sum(
+                position.take_profit is not None for position in positions.values()
+            ),
+            "legacy_position_without_take_profit_count": sum(
+                position.take_profit is None for position in positions.values()
+            ),
             "fill_count": len(list(state.get("fills", []) or [])),
             "kill_switch_active": bool(
                 dict(state.get("kill_switch", {}) or {}).get("active")
@@ -376,6 +441,7 @@ class ForexPaperExecutionEngine:
                 current_price=_decimal(value.get("current_price")),
                 stop_loss=_decimal(value.get("stop_loss")),
                 opened_at=datetime.fromisoformat(str(value.get("opened_at", ""))),
+                take_profit=_optional_decimal(value.get("take_profit")),
             )
         return result
 

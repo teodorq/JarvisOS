@@ -129,11 +129,16 @@ class ForexPaperAutopilotTests(unittest.TestCase):
             first["execution"]["executions"][0]["fill"]["action"],
             "OPEN_LONG",
         )
+        self.assertTrue(
+            first["execution"]["executions"][0]["fill"]["take_profit"]
+        )
         self.assertFalse(first["live_orders_sent"])
         self.assertFalse(first["network_access"])
         self.assertTrue(replay["execution"]["idempotent_replay"])
         status = self.autopilot.executor.status()
         self.assertEqual(status["position_count"], 1)
+        self.assertEqual(status["take_profit_protected_position_count"], 1)
+        self.assertEqual(status["legacy_position_without_take_profit_count"], 0)
         self.assertEqual(status["fill_count"], 1)
         self.assertTrue(status["audit_chain_valid"])
 
@@ -208,6 +213,7 @@ class ForexPaperAutopilotTests(unittest.TestCase):
                 "pair": "EUR_USD",
                 "units": "999999",
                 "stop_loss": "1.1000",
+                "take_profit": "1.10615",
             }],
         }
         result = self.autopilot.executor.apply_plan(
@@ -245,6 +251,37 @@ class ForexPaperAutopilotTests(unittest.TestCase):
                 now=stale_now,
             )
 
+    def test_executor_rejects_a_forged_take_profit_ratio(self) -> None:
+        quotes, _bars, _contexts, conversion = market(
+            self.now, eur_direction="UP"
+        )
+        rates = ForexRateBook(
+            list(quotes.values()) + conversion,
+            now=self.now,
+        )
+        result = self.autopilot.executor.apply_plan(
+            {
+                "mode": "FOREX_PAPER_ONLY",
+                "live_orders_sent": False,
+                "instructions": [{
+                    "action": "OPEN_LONG",
+                    "pair": "EUR_USD",
+                    "units": "100",
+                    "stop_loss": "1.1000",
+                    "take_profit": "1.1040",
+                }],
+            },
+            quotes=quotes,
+            rates=rates,
+            cycle_id="forex-cycle-target-policy",
+            now=self.now,
+        )
+        self.assertEqual(result["status"], "NO_EXECUTION")
+        self.assertEqual(
+            result["rejections"][0]["code"],
+            "TAKE_PROFIT_POLICY_MISMATCH",
+        )
+
     def test_live_execution_method_is_unconditionally_blocked(self) -> None:
         with self.assertRaises(LiveTradingBlockedError):
             ForexPaperExecutionEngine.submit_live_order({"pair": "EUR_USD"})
@@ -265,6 +302,7 @@ class ForexPaperAutopilotTests(unittest.TestCase):
                 "pair": "EUR_USD",
                 "units": "100",
                 "stop_loss": "1.1000",
+                "take_profit": "1.10615",
             }],
         }
         engines = (

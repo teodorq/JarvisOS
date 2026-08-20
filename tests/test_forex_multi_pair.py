@@ -382,6 +382,11 @@ class ForexCoordinatorTests(unittest.TestCase):
         self.assertEqual(result["status"], "ENTRIES_READY")
         self.assertEqual(result["instructions"][0]["pair"], "EUR_USD")
         self.assertEqual(result["instructions"][0]["action"], "OPEN_LONG")
+        instruction = result["instructions"][0]
+        entry = Decimal(instruction["intended_price"])
+        stop = Decimal(instruction["stop_loss"])
+        target = Decimal(instruction["take_profit"])
+        self.assertEqual(target - entry, (entry - stop) * Decimal("2"))
         self.assertFalse(result["live_orders_sent"])
         self.assertFalse(result["network_access"])
 
@@ -471,6 +476,47 @@ class ForexCoordinatorTests(unittest.TestCase):
         self.assertEqual(
             result["instructions"][0]["reason_codes"],
             ["STOP_LOSS_TRIGGERED"],
+        )
+
+    def test_take_profit_closes_even_without_an_assessment(self) -> None:
+        pair = major_pair("EUR_USD")
+        quote = ForexQuote.create(
+            pair=pair,
+            bid="1.1041",
+            ask="1.1043",
+            timestamp=self.now,
+        )
+        position = ForexPosition(
+            pair=pair,
+            side="LONG",
+            units=Decimal("1000"),
+            entry_price=Decimal("1.1000"),
+            current_price=Decimal("1.1041"),
+            stop_loss=Decimal("1.0980"),
+            opened_at=self.now - timedelta(hours=1),
+            take_profit=Decimal("1.1040"),
+        )
+        result = self.coordinator.plan(
+            assessments=(),
+            quotes={pair.symbol: quote},
+            positions={pair.symbol: position},
+            rates=ForexRateBook([
+                quote,
+                ForexQuote.create(
+                    pair=USD_PLN_CONVERSION_PAIR,
+                    bid="3.999",
+                    ask="4.001",
+                    timestamp=self.now,
+                ),
+            ], now=self.now),
+            equity_pln="100000",
+            daily_pnl_pln="0",
+            now=self.now,
+        )
+        self.assertEqual(result["status"], "CLOSES_READY")
+        self.assertEqual(
+            result["instructions"][0]["reason_codes"],
+            ["TAKE_PROFIT_TRIGGERED"],
         )
 
     def test_owner_status_reports_forex_readiness_and_client_is_blocked(self) -> None:

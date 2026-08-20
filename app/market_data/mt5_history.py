@@ -15,11 +15,18 @@ from typing import Any, Iterable
 from app.core.project_paths import resolve_project_root
 from app.market_data.mt5_demo import Mt5DemoReadOnlySource
 from app.trading.dataset import HistoricalCsvLoader
-from app.trading.forex_models import ForexBar, ForexPair, MAJOR_FOREX_PAIRS
+from app.trading.forex_models import (
+    ForexBar,
+    ForexPair,
+    HISTORICAL_FOREX_PAIRS,
+    MAJOR_FOREX_PAIRS,
+    USD_PLN_CONVERSION_PAIR,
+)
 from app.trading.models import TradingValidationError, aware_utc
 
 
 _MAJOR_SYMBOLS = frozenset(pair.symbol for pair in MAJOR_FOREX_PAIRS)
+_HISTORICAL_SYMBOLS = frozenset(pair.symbol for pair in HISTORICAL_FOREX_PAIRS)
 _EXPORT_DIRECTORY = re.compile(r"^mt5-demo-m15-[0-9]{8}T[0-9]{12}Z$")
 _FINGERPRINT = re.compile(r"^[0-9a-f]{64}$")
 
@@ -46,7 +53,7 @@ class Mt5DemoHistoricalExporter:
 
     def export(
         self,
-        pairs: Iterable[ForexPair] = MAJOR_FOREX_PAIRS,
+        pairs: Iterable[ForexPair] = HISTORICAL_FOREX_PAIRS,
         *,
         bar_count: int = 5_000,
         now: datetime | None = None,
@@ -58,7 +65,7 @@ class Mt5DemoHistoricalExporter:
         if (
             not selected
             or len(set(symbols)) != len(symbols)
-            or any(symbol not in _MAJOR_SYMBOLS for symbol in symbols)
+            or any(symbol not in _HISTORICAL_SYMBOLS for symbol in symbols)
             or type(bar_count) is not int
             or not 200 <= bar_count <= 50_000
         ):
@@ -119,6 +126,10 @@ class Mt5DemoHistoricalExporter:
                 "timeframe": "M15",
                 "exported_at": selected_now.isoformat(),
                 "pair_count": len(selected),
+                "tradable_pair_count": sum(pair.tradable for pair in selected),
+                "conversion_pair_included": (
+                    USD_PLN_CONVERSION_PAIR.symbol in symbols
+                ),
                 "bar_count_per_pair": bar_count,
                 "pair_symbols": list(symbols),
                 "datasets": datasets,
@@ -222,7 +233,7 @@ class Mt5DemoHistoricalExporter:
         if (
             not datasets
             or len(datasets) != pair_count
-            or len(datasets) > len(MAJOR_FOREX_PAIRS)
+            or len(datasets) > len(HISTORICAL_FOREX_PAIRS)
             or not 200 <= bars_per_pair <= 50_000
         ):
             raise TradingValidationError("mt5_history: invalid_manifest_datasets")
@@ -237,7 +248,7 @@ class Mt5DemoHistoricalExporter:
             file_name = str(raw.get("file", ""))
             fingerprint = str(raw.get("fingerprint_sha256", ""))
             if (
-                pair not in _MAJOR_SYMBOLS
+                pair not in _HISTORICAL_SYMBOLS
                 or pair in seen_pairs
                 or not file_name
                 or Path(file_name).name != file_name
@@ -318,6 +329,13 @@ class Mt5DemoHistoricalExporter:
             "export_id": target.name,
             "export_path": str(target),
             "pair_count": len(verified),
+            "tradable_pair_count": len(seen_pairs & _MAJOR_SYMBOLS),
+            "conversion_pair_included": (
+                USD_PLN_CONVERSION_PAIR.symbol in seen_pairs
+            ),
+            "historical_pln_conversion_ready": (
+                USD_PLN_CONVERSION_PAIR.symbol in seen_pairs
+            ),
             "bar_count_per_pair": bars_per_pair,
             "datasets": verified,
             "all_fingerprints_match": True,
