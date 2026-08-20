@@ -68,6 +68,8 @@ jobs:
           az bicep build --file infra/azure/subscription.bicep --stdout | Out-Null
 
       - name: Run regression suite
+        env:
+          PYTHONFAULTHANDLER: "1"
         run: |
           python -m pytest -q --maxfail=1 --durations=20 --junitxml=pytest-junit.xml 2>&1 | Tee-Object -FilePath pytest-out.txt
           $pytestExitCode = $LASTEXITCODE
