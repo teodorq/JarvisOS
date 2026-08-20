@@ -60,8 +60,8 @@ $definition = New-ScheduledTask `
     -Principal $principal `
     -Settings $settings `
     -Description (
-        "Starts OANDA TMS MT5 after sign-in and records read-only JARVIS OS " +
-        "Forex observations every 15 minutes. It cannot execute orders."
+        "Starts OANDA TMS MT5 after sign-in and runs autonomous local JARVIS OS " +
+        "Forex PAPER cycles every 15 minutes. It cannot send broker orders."
     )
 
 Register-ScheduledTask `
@@ -69,4 +69,4 @@ Register-ScheduledTask `
     -InputObject $definition `
     -Force | Out-Null
 Start-ScheduledTask -TaskName $taskName
-Write-Output "JARVIS OS Forex Observer autostart installed and started."
+Write-Output "JARVIS OS Forex local PAPER autostart installed and started."

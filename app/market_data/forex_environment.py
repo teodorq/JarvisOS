@@ -12,6 +12,7 @@ MAX_FOREX_ENV_BYTES = 16_384
 ALLOWED_FOREX_ENVIRONMENT_KEYS = frozenset(
     {
         "JARVIS_OS_FOREX_DATA_ENABLED",
+        "JARVIS_OS_FOREX_PAPER_AUTOPILOT_ENABLED",
         "JARVIS_OS_FOREX_PRIMARY_PROVIDER",
         "JARVIS_OS_MT5_SYMBOL_SUFFIX",
         "JARVIS_OS_OANDA_PRACTICE_ACCOUNT_ID",
@@ -53,6 +54,7 @@ def load_forex_environment(project_root: str | Path) -> tuple[str, ...]:
 @dataclass(frozen=True, slots=True)
 class ForexDataSettings:
     enabled: bool
+    paper_autopilot_enabled: bool = False
     primary_provider: str = "MT5_DEMO"
     mt5_symbol_suffix: str = ""
     oanda_practice_account_id: str = field(default="", repr=False)
@@ -75,6 +77,9 @@ class ForexDataSettings:
         return cls(
             enabled=os.getenv("JARVIS_OS_FOREX_DATA_ENABLED", "").strip().lower()
             == "true",
+            paper_autopilot_enabled=os.getenv(
+                "JARVIS_OS_FOREX_PAPER_AUTOPILOT_ENABLED", ""
+            ).strip().lower() == "true",
             primary_provider=os.getenv("JARVIS_OS_FOREX_PRIMARY_PROVIDER", "MT5_DEMO"),
             mt5_symbol_suffix=os.getenv("JARVIS_OS_MT5_SYMBOL_SUFFIX", ""),
             oanda_practice_account_id=os.getenv(
@@ -114,6 +119,7 @@ class ForexDataSettings:
     def readiness(self) -> dict[str, object]:
         return {
             "enabled": self.enabled,
+            "paper_autopilot_enabled": self.paper_autopilot_enabled,
             "primary_provider": self.primary_provider,
             "mt5_demo": bool(self.enabled and self.primary_provider == "MT5_DEMO"),
             "oanda_practice": self.oanda_ready,

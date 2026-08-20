@@ -37,9 +37,9 @@ def test_watchdog_has_bounded_interval_and_single_instance() -> None:
     assert "$utcNow.Hour -ge 22" in WATCHDOG
 
 
-def test_watchdog_calls_only_the_observation_entry_point() -> None:
-    assert '"tools\\run_forex_observation.py"' in WATCHDOG
-    assert "forex_observer_last.json" in WATCHDOG
+def test_watchdog_calls_only_the_local_paper_entry_point() -> None:
+    assert '"tools\\run_forex_paper_cycle.py"' in WATCHDOG
+    assert "forex_paper_last.json" in WATCHDOG
     assert "ForexPaperExecutionEngine" not in WATCHDOG
     assert "apply_plan" not in WATCHDOG
     assert "submit_live_order" not in WATCHDOG
@@ -50,4 +50,5 @@ def test_watchdog_starts_only_the_configured_mt5_binary() -> None:
     assert "[IO.Path]::GetFullPath($Mt5Path)" in WATCHDOG
     assert "-FilePath $terminalPath" in WATCHDOG
     assert "Get-CimInstance Win32_Process" in WATCHDOG
-    assert "OBSERVATION_ONLY" in WATCHDOG
+    assert "AUTONOMOUS_LOCAL_PAPER" in WATCHDOG
+    assert "no broker order execution is available" in WATCHDOG

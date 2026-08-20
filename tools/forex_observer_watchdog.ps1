@@ -13,11 +13,11 @@ $ErrorActionPreference = "Stop"
 $projectPath = [IO.Path]::GetFullPath($ProjectRoot)
 $terminalPath = [IO.Path]::GetFullPath($Mt5Path)
 $pythonPath = Join-Path $projectPath ".venv\Scripts\python.exe"
-$runnerPath = Join-Path $projectPath "tools\run_forex_observation.py"
+$runnerPath = Join-Path $projectPath "tools\run_forex_paper_cycle.py"
 $dataPath = Join-Path $projectPath "data\trading"
-$logPath = Join-Path $dataPath "forex_observer_watchdog.log"
-$outputPath = Join-Path $dataPath "forex_observer_last.json"
-$errorPath = Join-Path $dataPath "forex_observer_last.error.log"
+$logPath = Join-Path $dataPath "forex_paper_watchdog.log"
+$outputPath = Join-Path $dataPath "forex_paper_last.json"
+$errorPath = Join-Path $dataPath "forex_paper_last.error.log"
 
 foreach ($requiredPath in @($terminalPath, $pythonPath, $runnerPath)) {
     if (-not (Test-Path -LiteralPath $requiredPath -PathType Leaf)) {
@@ -88,7 +88,7 @@ function Start-Mt5IfNeeded {
     return $process
 }
 
-function Invoke-ForexObservation {
+function Invoke-ForexPaperCycle {
     Remove-Item -LiteralPath $outputPath -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $errorPath -Force -ErrorAction SilentlyContinue
     $runnerArgument = '"' + $runnerPath + '"'
@@ -102,23 +102,31 @@ function Invoke-ForexObservation {
         -Wait `
         -PassThru
     if (-not (Test-Path -LiteralPath $outputPath -PathType Leaf)) {
-        Write-ObserverLog "Observation produced no result; exit $($process.ExitCode)."
+        Write-ObserverLog "PAPER cycle produced no result; exit $($process.ExitCode)."
         return
     }
     try {
         $result = Get-Content -LiteralPath $outputPath -Raw -Encoding UTF8 |
             ConvertFrom-Json
-        $blocks = @($result.opening_blocks) -join ","
+        $executionCount = 0
+        $positionCount = ""
+        $reason = ""
+        if ($result.PSObject.Properties.Name -contains "reason") {
+            $reason = $result.reason
+        }
+        if ($result.PSObject.Properties.Name -contains "paper") {
+            $executionCount = @($result.paper.execution.executions).Count
+            $positionCount = $result.paper.account.position_count
+        }
         Write-ObserverLog (
-            "Observation $($result.status); blocks=$blocks; " +
-            "proposed=$($result.proposed_instruction_count); " +
-            "positions_unchanged=$($result.positions_unchanged); " +
-            "paper_orders_sent=$($result.paper_orders_sent); " +
+            "PAPER cycle $($result.status); reason=$reason; " +
+            "executions=$executionCount; positions=$positionCount; " +
+            "broker_orders_sent=$($result.broker_orders_sent); " +
             "live_orders_sent=$($result.live_orders_sent)."
         )
     }
     catch {
-        Write-ObserverLog "Observation result could not be parsed; exit $($process.ExitCode)."
+        Write-ObserverLog "PAPER result could not be parsed; exit $($process.ExitCode)."
     }
 }
 
@@ -135,7 +143,7 @@ try {
     if (-not $ownsMutex) {
         exit 0
     }
-    Write-ObserverLog "Forex observer started in OBSERVATION_ONLY mode."
+    Write-ObserverLog "Forex runtime started in AUTONOMOUS_LOCAL_PAPER mode."
     while ($true) {
         try {
             if (-not (Test-ForexMarketWindow)) {
@@ -144,15 +152,15 @@ try {
             else {
                 $mt5 = Start-Mt5IfNeeded
                 if ($null -eq $mt5) {
-                    Write-ObserverLog "MT5 did not become available; no observation run."
+                    Write-ObserverLog "MT5 did not become available; no PAPER cycle run."
                 }
                 else {
-                    Invoke-ForexObservation
+                    Invoke-ForexPaperCycle
                 }
             }
         }
         catch {
-            Write-ObserverLog "Cycle failed safely; no order execution is available."
+            Write-ObserverLog "Cycle failed safely; no broker order execution is available."
         }
         Start-Sleep -Seconds ($IntervalMinutes * 60)
     }

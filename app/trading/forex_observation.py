@@ -508,6 +508,7 @@ class ForexObservationService:
         *,
         observation_id: object,
         now: datetime | None = None,
+        bundle: Any | None = None,
     ) -> dict[str, Any]:
         selected_id = str(observation_id or "").strip()
         if not _OBSERVATION_ID.fullmatch(selected_id):
@@ -515,7 +516,7 @@ class ForexObservationService:
         selected_now = aware_utc(now or datetime.now(timezone.utc), "now")
         positions_before = self.executor.positions()
         try:
-            bundle = self.gateway.collect(now=selected_now)
+            bundle = bundle or self.gateway.collect(now=selected_now)
             all_quotes: dict[str, ForexQuote] = dict(bundle.quotes)
             for quote in bundle.conversion_quotes:
                 if quote.pair.symbol in all_quotes:

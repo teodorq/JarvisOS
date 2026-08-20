@@ -82,16 +82,31 @@ Evidence is kept in the ignored, tamper-evident
 .\.venv\Scripts\python.exe .\tools\run_forex_observation.py --status
 ```
 
-On Windows, install the observation-only autostart once:
+On Windows, install the local PAPER autostart once:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\install_forex_observer_autostart.ps1
 ```
 
 The limited interactive task starts only the configured OANDA TMS MT5 terminal,
-waits for it to connect and records an observation every 15 minutes while the
-Forex market is open. It opens no web pages and exposes no order route. Remove
-the task with the same command plus `-Remove`.
+waits for it to connect and runs one local PAPER cycle every 15 minutes while
+the Forex market is open. Set
+`JARVIS_OS_FOREX_PAPER_AUTOPILOT_ENABLED=true` in the ignored
+`config/forex.env` to explicitly activate it. Every cycle records its
+observation before it may update the local PAPER ledger. The runtime requires
+the `MT5_DEMO` primary source, opens no web pages and exposes no broker order
+route. Positions are visible in JARVIS OS, not in MetaTrader. Remove the task
+with the same command plus `-Remove`.
+
+Run one enabled cycle manually with:
+
+```powershell
+.\.venv\Scripts\python.exe .\tools\run_forex_paper_cycle.py
+```
+
+This explicit demo override may test an unvalidated strategy, but it still
+enforces 0.25% risk per trade, 0.5% total open risk, a 1% daily loss stop and at
+most two local PAPER positions. It cannot send MT5, broker or real-money orders.
 
 In owner mode, say or type `Ile obserwacji Forex?`,
 `Status obserwatora Forex` or `Czy PAPER jest gotowy?`. JARVIS reads the local

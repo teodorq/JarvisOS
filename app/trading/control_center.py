@@ -50,6 +50,13 @@ class TradingControlCenter:
             and observations["audit_chain_valid"]
             and research["strategy_candidate_ready"]
         )
+        demo_paper_override_active = bool(
+            self.forex_data.paper_autopilot_enabled
+            and self.forex_data.primary_provider == "MT5_DEMO"
+            and data_readiness["complete"]
+            and observations["paper_promotion_ready"]
+            and observations["audit_chain_valid"]
+        )
         return {
             "status": "PAPER_FOUNDATION_READY",
             "mode": "PAPER_ONLY",
@@ -91,8 +98,13 @@ class TradingControlCenter:
                 "pair_count": len(MAJOR_FOREX_PAIRS),
                 "bidirectional_paper_signals": True,
                 "automatic_paper_execution_available": True,
-                "automatic_paper_execution": False,
-                "continuous_runtime_active": False,
+                "automatic_paper_execution": demo_paper_override_active,
+                "continuous_runtime_configured": (
+                    self.forex_data.paper_autopilot_enabled
+                ),
+                "unvalidated_strategy_demo_override": (
+                    demo_paper_override_active
+                ),
                 "opening_gate_ready": opening_gate_ready,
                 "data_configuration_complete": data_readiness["complete"],
                 "data_configuration": data_readiness,
@@ -158,6 +170,22 @@ class TradingControlCenter:
         data = snapshot["forex"]["data_configuration"]
         observation = snapshot["forex"]["observation"]
         research = snapshot["forex"]["historical_research"]
+        automatic_paper = bool(
+            snapshot["forex"]["automatic_paper_execution"]
+        )
+        autopilot_text = (
+            "AKTYWNE W TRYBIE DEMO"
+            if automatic_paper
+            else "dostępne, lecz wykonanie pozostaje WYŁĄCZONE"
+        )
+        automatic_entry_text = (
+            "automatyczne PAPER: AKTYWNE"
+            if automatic_paper
+            else (
+                "automatyczne wejścia pozostają zablokowane i wymagają również "
+                "ukończenia bramki obserwacji"
+            )
+        )
         kill_switch = (
             "AKTYWNY — nowe symulowane zlecenia są zatrzymane"
             if account["kill_switch_active"]
@@ -219,8 +247,7 @@ class TradingControlCenter:
             "• Forex: skaner 7 głównych par, ranking i wspólne limity walutowe "
             "— gotowe lokalnie.\n"
             "• Silnik autopilota PAPER: lokalne otwieranie, zamykanie, ponowna "
-            "kontrola ryzyka i ochrona przed duplikatem — dostępne, lecz wykonanie "
-            "pozostaje WYŁĄCZONE.\n"
+            f"kontrola ryzyka i ochrona przed duplikatem — {autopilot_text}.\n"
             f"• Konto demo: {account['equity']} {account['base_currency']}; "
             f"pozycje: {account['position_count']}; wypełnienia: {account['fill_count']}.\n"
             f"• Audyt: {audit}; wyłącznik awaryjny: {kill_switch}.\n"
@@ -233,8 +260,7 @@ class TradingControlCenter:
             "Twelve Data, NBP i publiczny kalendarz Forex Factory oraz kontrola "
             "rozbieżności są gotowe.\n"
             f"• Konfiguracja źródeł: {'kompletna' if data['complete'] else 'niekompletna — sprawdź lokalny plik config/forex.env'}; "
-            "automatyczne wejścia pozostają zablokowane i wymagają również "
-            "ukończenia bramki obserwacji.\n"
+            f"{automatic_entry_text}.\n"
             "• Sygnały LONG/SHORT istnieją tylko w planie PAPER. Prawdziwe "
             "zlecenia, dźwignia, sieć i dostęp do "
             "pieniędzy: twardo zablokowane.\n"
