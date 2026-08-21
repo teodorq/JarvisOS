@@ -13,6 +13,7 @@ from app.market_data.forex_environment import (
 )
 from app.trading.backtest import HistoricalPaperBacktester
 from app.trading.forex_coordinator import ForexPaperCoordinator
+from app.trading.forex_activity import ForexPaperActivityFeed
 from app.trading.forex_executor import ForexPaperExecutionEngine
 from app.trading.forex_models import MAJOR_FOREX_PAIRS
 from app.trading.forex_observation import ForexObservationJournal
@@ -42,6 +43,10 @@ class TradingControlCenter:
             policy=self.forex_policy,
         )
         self.forex_data = ForexDataSettings.from_environment()
+        self.forex_activity = ForexPaperActivityFeed(
+            self.project_root,
+            settings=self.forex_data,
+        )
         self.forex_observations = ForexObservationJournal(self.project_root)
         self.forex_research = ForexHistoricalResearchGate(self.project_root)
 

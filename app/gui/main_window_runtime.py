@@ -16,11 +16,35 @@ def connect_main_runtime(window: Any) -> None:
             window.voice.start()
         window._voice_runtime_connected = True
     connect_remote_command_runtime(window)
+    _connect_forex_activity_runtime(window)
     if not window._interface_ready or hasattr(window, "timer"):
         return
     window.timer = QTimer(window)
     window.timer.timeout.connect(window.update_system_status)
     window.timer.start(1000)
+
+
+def _connect_forex_activity_runtime(window: Any) -> None:
+    if hasattr(window, "_forex_activity_timer"):
+        return
+    window._forex_activity_timer = QTimer(window)
+    window._forex_activity_timer.timeout.connect(
+        lambda: _show_forex_paper_activity(window)
+    )
+    window._forex_activity_timer.start(5000)
+
+
+def _show_forex_paper_activity(window: Any) -> None:
+    try:
+        event = window.assistant.trading.forex_activity.poll()
+    except Exception:
+        return
+    if not isinstance(event, dict):
+        return
+    message = str(event.get("message", "")).strip()
+    if window._interface_ready and message:
+        window.console_page.append(f"Jarvis: {message}")
+    window.client_event_signal.emit(event)
 
 
 def prepare_owner_interface(window: Any) -> None:

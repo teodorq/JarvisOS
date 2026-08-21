@@ -119,6 +119,12 @@ closed positions, processed cycle count, latest decision and data-block reasons.
 It loads the ignored `config/forex.env` through the allowlisted loader but never
 shows a key or token.
 
+While the local MT5 DEMO autopilot is explicitly enabled, the JARVIS owner UI
+also polls the bounded watchdog result and displays a deduplicated notification
+for simulated opens, closes, the first data-block transition and recovery. It
+does not speak these alerts, repeat an already-seen cycle, expose credentials or
+add any broker-order capability.
+
 Use `Raport obserwacji Forex` for a deeper read-only review. It aggregates every
 recorded cycle, market-day coverage, blocked reasons, proposed but unexecuted
 actions, all seven-pair coverage and order-safety invariants. The report cannot

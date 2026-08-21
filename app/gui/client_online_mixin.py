@@ -4,18 +4,15 @@ from PySide6.QtCore import QTimer
 
 from app.gui.client_live_conflict_refresh import ClientLiveConflictRefreshRuntime
 from app.gui.client_safe_proactivity import ClientSafeProactivityRuntime
-from app.gui.client_startup_conflict_runtime import ClientStartupConflictRuntime; from app.jarvis_experience.isolation import ClientIsolationPolicy
-
+from app.gui.client_startup_conflict_runtime import ClientStartupConflictRuntime
+from app.gui.client_forex_activity import arm_client_forex_activity
+from app.jarvis_experience.isolation import ClientIsolationPolicy
 
 class ClientOnlineMixin:
     """B126-B130 client-mode status and Stable RC confirmation."""
 
-    def _online_assistant(self):
-        assistant = getattr(self.owner_window, "assistant", None)
-        return getattr(assistant, "online", None)
-
     def _sync_online_status(self) -> None:
-        controller = self._online_assistant()
+        controller = getattr(getattr(self.owner_window, "assistant", None), "online", None)
         if controller is None:
             return
         status = controller.status()
@@ -47,6 +44,7 @@ class ClientOnlineMixin:
             self._proactive_timer.setInterval(15 * 60 * 1000)
             self._proactive_timer.timeout.connect(self._show_proactive_brief)
             self._proactive_timer.start()
+        arm_client_forex_activity(self)
         self._startup_conflict_runtime().arm()
         self._live_conflict_refresh_runtime().arm()
 
@@ -111,7 +109,7 @@ class ClientOnlineMixin:
             self._live_conflict_refresh_runtime().arm()
 
     def _run_or_confirm_online_rc(self) -> None:
-        controller = self._online_assistant()
+        controller = getattr(getattr(self.owner_window, "assistant", None), "online", None)
         if controller is None:
             self.online_text.setText("Asystent online nie jest dostępny.")
             return
