@@ -356,6 +356,40 @@ class ForexPaperExecutionEngine:
     ) -> dict[str, Any]:
         state = self.ledger.snapshot()
         positions = self._positions(state)
+        fills = list(state.get("fills", []) or [])
+        closed_fills = [
+            dict(item)
+            for item in fills
+            if str(dict(item or {}).get("action", "")).startswith("CLOSE_")
+        ]
+        realized = sum(
+            (_decimal(item.get("realized_pnl_pln")) for item in closed_fills),
+            Decimal("0"),
+        )
+        winning_trades = sum(
+            _decimal(item.get("realized_pnl_pln")) > 0 for item in closed_fills
+        )
+        losing_trades = sum(
+            _decimal(item.get("realized_pnl_pln")) < 0 for item in closed_fills
+        )
+        breakeven_trades = len(closed_fills) - winning_trades - losing_trades
+        win_rate = (
+            Decimal(winning_trades) * Decimal("100") / Decimal(len(closed_fills))
+            if closed_fills
+            else Decimal("0")
+        )
+        processed_cycles = dict(state.get("processed_cycles", {}) or {})
+        latest_cycle_id = next(reversed(processed_cycles), "")
+        latest_outcome = dict(processed_cycles.get(latest_cycle_id, {}) or {})
+        latest_created_at = ""
+        for event in reversed(list(state.get("audit", []) or [])):
+            details = dict(dict(event or {}).get("details", {}) or {})
+            if (
+                event.get("event_type") == "FOREX_PAPER_CYCLE"
+                and details.get("cycle_id") == latest_cycle_id
+            ):
+                latest_created_at = str(event.get("created_at", ""))
+                break
         unrealized = (
             self._unrealized_pln(positions, dict(quotes or {}), rates)
             if rates is not None
@@ -369,14 +403,54 @@ class ForexPaperExecutionEngine:
             "unrealized_pnl_pln": _text(unrealized),
             "equity_pln": _text(balance + unrealized),
             "daily_pnl_pln": _text(_decimal(state.get("daily_pnl_pln"))),
+            "realized_pnl_pln": _text(realized),
             "position_count": len(positions),
+            "open_positions": [
+                {
+                    "pair": position.pair.symbol,
+                    "side": position.side,
+                    "units": str(position.units),
+                    "entry_price": _text(position.entry_price, _PRICE),
+                    "current_price": _text(position.current_price, _PRICE),
+                    "stop_loss": _text(position.stop_loss, _PRICE),
+                    "take_profit": (
+                        _text(position.take_profit, _PRICE)
+                        if position.take_profit is not None
+                        else ""
+                    ),
+                    "opened_at": position.opened_at.isoformat(),
+                }
+                for position in sorted(
+                    positions.values(), key=lambda item: item.pair.symbol
+                )
+            ],
             "take_profit_protected_position_count": sum(
                 position.take_profit is not None for position in positions.values()
             ),
             "legacy_position_without_take_profit_count": sum(
                 position.take_profit is None for position in positions.values()
             ),
-            "fill_count": len(list(state.get("fills", []) or [])),
+            "fill_count": len(fills),
+            "closed_trade_count": len(closed_fills),
+            "winning_trade_count": winning_trades,
+            "losing_trade_count": losing_trades,
+            "breakeven_trade_count": breakeven_trades,
+            "win_rate_pct": _text(win_rate),
+            "processed_cycle_count": len(processed_cycles),
+            "rejection_count": len(list(state.get("rejections", []) or [])),
+            "last_cycle": {
+                "cycle_id": latest_cycle_id,
+                "status": str(latest_outcome.get("status", "")),
+                "created_at": latest_created_at,
+                "execution_count": len(
+                    list(latest_outcome.get("executions", []) or [])
+                ),
+                "rejection_codes": [
+                    str(dict(item or {}).get("code", ""))
+                    for item in list(latest_outcome.get("rejections", []) or [])
+                    if str(dict(item or {}).get("code", ""))
+                ],
+            },
             "kill_switch_active": bool(
                 dict(state.get("kill_switch", {}) or {}).get("active")
             ),

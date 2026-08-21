@@ -5,6 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+import json
 import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -19,6 +20,7 @@ from app.trading import (
     HistoricalCsvLoader,
     LiveTradingBlockedError,
     MarketBar,
+    MAJOR_FOREX_PAIRS,
     MarketQuote,
     PaperOrder,
     PaperTradingEngine,
@@ -435,6 +437,86 @@ class TradingControlAndRoutingTests(unittest.TestCase):
         self.assertIn("Konfiguracja źródeł: kompletna", rendered)
         self.assertNotIn("placeholder", rendered)
         self.assertNotIn("placeholder", repr(status))
+
+    def test_status_summarizes_last_autonomous_forex_paper_cycle(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            result_path = root / "data" / "trading" / "forex_paper_last.json"
+            result_path.parent.mkdir(parents=True)
+            result_path.write_text(
+                json.dumps({
+                    "status": "PAPER_CYCLE_COMPLETED",
+                    "observed_at": "2026-08-21T09:03:45+00:00",
+                    "paper": {
+                        "status": "CYCLE_COMPLETED",
+                        "assessments": [
+                            {
+                                "pair": pair.symbol,
+                                "status": "READY",
+                                "action": "WATCH",
+                                "reason_codes": ["NO_NEW_CROSSOVER"],
+                            }
+                            for pair in MAJOR_FOREX_PAIRS
+                        ],
+                        "execution": {"status": "NO_EXECUTION", "executions": []},
+                    },
+                    "broker_orders_sent": False,
+                    "live_orders_sent": False,
+                    "real_money_access": False,
+                }),
+                encoding="utf-8",
+            )
+            center = TradingControlCenter(root)
+            status = center.status()
+            rendered = center.format_status()
+
+        runtime = status["forex"]["last_runtime_cycle"]
+        self.assertEqual(runtime["decision"], "NO_ENTRY_SIGNAL")
+        self.assertEqual(runtime["ready_pair_count"], 7)
+        self.assertFalse(runtime["live_orders_sent"])
+        self.assertIn("gotowe pary 7/7", rendered)
+        self.assertIn("Konto PAPER Forex: 100000.00 PLN", rendered)
+
+    def test_status_labels_explicit_unvalidated_demo_override(self) -> None:
+        with TemporaryDirectory() as directory:
+            center = TradingControlCenter(directory)
+            snapshot = center.status()
+            snapshot["forex"]["automatic_paper_execution"] = True
+            snapshot["forex"]["observation"]["paper_promotion_ready"] = True
+            snapshot["forex"]["historical_research"][
+                "strategy_candidate_ready"
+            ] = False
+            with patch.object(center, "status", return_value=snapshot):
+                rendered = center.format_status()
+
+        self.assertIn("EKSPERYMENTALNY PAPER DEMO", rendered)
+        self.assertIn("LIVE pozostaje zablokowany", rendered)
+        self.assertIn("zbierać wyniki PAPER bez zmiany parametrów", rendered)
+
+    def test_status_reports_a_watchdog_cycle_block_reason(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            result_path = root / "data" / "trading" / "forex_paper_last.json"
+            result_path.parent.mkdir(parents=True)
+            result_path.write_text(
+                json.dumps({
+                    "status": "PAPER_CYCLE_BLOCKED",
+                    "reason": "CURRENT_OBSERVATION_BLOCKED",
+                    "broker_orders_sent": False,
+                    "live_orders_sent": False,
+                    "real_money_access": False,
+                }),
+                encoding="utf-8",
+            )
+            center = TradingControlCenter(root)
+            runtime = center.status()["forex"]["last_runtime_cycle"]
+            rendered = center.format_status()
+
+        self.assertEqual(runtime["decision"], "DATA_BLOCKED")
+        self.assertEqual(
+            runtime["reason_codes"], {"CURRENT_OBSERVATION_BLOCKED": 1}
+        )
+        self.assertIn("CURRENT_OBSERVATION_BLOCKED: 1", rendered)
 
     def test_observation_progress_phrases_are_owner_only_read_only_status(self) -> None:
         variants = (

@@ -247,6 +247,53 @@ class ForexScannerTests(unittest.TestCase):
                 self.assertEqual(result.status, "BLOCKED")
                 self.assertIn(expected, result.reason_codes)
 
+    def test_previous_closed_mt5_bar_is_accepted_for_full_m15_window(self) -> None:
+        pair = major_pair("EUR_USD")
+        bars = series(pair, self.now, direction="UP")
+        for age_seconds in (900, 1_799, 1_860):
+            shifted = [
+                ForexBar.create(
+                    pair=bar.pair,
+                    timestamp=bar.timestamp - timedelta(seconds=age_seconds),
+                    open=bar.open,
+                    high=bar.high,
+                    low=bar.low,
+                    close=bar.close,
+                    tick_volume=bar.tick_volume,
+                )
+                for bar in bars
+            ]
+            with self.subTest(age_seconds=age_seconds):
+                result = self.scanner.assess(
+                    pair=pair,
+                    quote=quote_for(pair, self.now, price=shifted[-1].close),
+                    bars=shifted,
+                    context=ready_context(self.now),
+                    now=self.now,
+                )
+                self.assertNotIn("STALE_CLOSED_BAR", result.reason_codes)
+
+        too_old = [
+            ForexBar.create(
+                pair=bar.pair,
+                timestamp=bar.timestamp - timedelta(seconds=1_861),
+                open=bar.open,
+                high=bar.high,
+                low=bar.low,
+                close=bar.close,
+                tick_volume=bar.tick_volume,
+            )
+            for bar in bars
+        ]
+        blocked = self.scanner.assess(
+            pair=pair,
+            quote=quote_for(pair, self.now, price=too_old[-1].close),
+            bars=too_old,
+            context=ready_context(self.now),
+            now=self.now,
+        )
+        self.assertIn("STALE_CLOSED_BAR", blocked.reason_codes)
+
     def test_exit_is_ranked_before_a_new_entry(self) -> None:
         quotes, bars, contexts = complete_market(
             self.now,

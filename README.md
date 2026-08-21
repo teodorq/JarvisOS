@@ -69,7 +69,7 @@ adapter remains an alternative for regions where v20 is available. Twelve Data
 cross-checks prices, NBP supplies the public USD/PLN reference and the public
 weekly Forex Factory export supplies the economic calendar. Configuration is
 absent by default, so the opening gate remains closed. No broker order route or
-continuous background feed is exposed.
+real-money execution surface is exposed.
 
 Before PAPER execution is enabled, use the observation-only cycle. It reads all
 configured sources and 211 closed M15 bars per pair, calculates the same
@@ -90,7 +90,9 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\install_forex_ob
 
 The limited interactive task starts only the configured OANDA TMS MT5 terminal,
 waits for it to connect and runs one local PAPER cycle every 15 minutes while
-the Forex market is open. Set
+the Forex market is open. MT5 stamps each candle at its opening time, so JARVIS
+accepts the previous fully closed M15 candle for at most two M15 periods plus a
+one-minute synchronization allowance; older data still fails closed. Set
 `JARVIS_OS_FOREX_PAPER_AUTOPILOT_ENABLED=true` in the ignored
 `config/forex.env` to explicitly activate it. Every cycle records its
 observation before it may update the local PAPER ledger. The runtime requires
@@ -111,8 +113,10 @@ most two local PAPER positions. It cannot send MT5, broker or real-money orders.
 In owner mode, say or type `Ile obserwacji Forex?`,
 `Status obserwatora Forex` or `Czy PAPER jest gotowy?`. JARVIS reads the local
 tamper-evident journal and reports qualified observations, distinct market days,
-the remaining gate and whether PAPER execution is actually enabled. The status
-loads the ignored `config/forex.env` through the allowlisted loader but never
+the remaining gate and whether PAPER execution is actually enabled. The same
+status also reports the local Forex PAPER balance, realized result, open and
+closed positions, processed cycle count, latest decision and data-block reasons.
+It loads the ignored `config/forex.env` through the allowlisted loader but never
 shows a key or token.
 
 Use `Raport obserwacji Forex` for a deeper read-only review. It aggregates every

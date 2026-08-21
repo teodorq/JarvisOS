@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +13,7 @@ from app.market_data.forex_environment import (
 )
 from app.trading.backtest import HistoricalPaperBacktester
 from app.trading.forex_coordinator import ForexPaperCoordinator
+from app.trading.forex_executor import ForexPaperExecutionEngine
 from app.trading.forex_models import MAJOR_FOREX_PAIRS
 from app.trading.forex_observation import ForexObservationJournal
 from app.trading.forex_research_status import ForexHistoricalResearchGate
@@ -35,6 +37,10 @@ class TradingControlCenter:
         self.forex_policy = ForexPaperPolicy()
         self.forex_scanner = ForexMarketScanner()
         self.forex = ForexPaperCoordinator(self.forex_policy)
+        self.forex_executor = ForexPaperExecutionEngine(
+            self.project_root,
+            policy=self.forex_policy,
+        )
         self.forex_data = ForexDataSettings.from_environment()
         self.forex_observations = ForexObservationJournal(self.project_root)
         self.forex_research = ForexHistoricalResearchGate(self.project_root)
@@ -44,6 +50,8 @@ class TradingControlCenter:
         data_readiness = self.forex_data.readiness()
         observations = self.forex_observations.summary()
         research = self.forex_research.status()
+        forex_account = self.forex_executor.status()
+        runtime_cycle = self._last_runtime_cycle()
         opening_gate_ready = bool(
             data_readiness["complete"]
             and observations["paper_promotion_ready"]
@@ -110,6 +118,8 @@ class TradingControlCenter:
                 "data_configuration": data_readiness,
                 "observation": observations,
                 "historical_research": research,
+                "paper_account": forex_account,
+                "last_runtime_cycle": runtime_cycle,
             },
             "account": account,
             "limits": self.policy.status(),
@@ -120,6 +130,91 @@ class TradingControlCenter:
                 "leverage_enabled": False,
                 "real_money_access": False,
             },
+        }
+
+    def _last_runtime_cycle(self) -> dict[str, Any]:
+        """Read a bounded, secret-free summary of the watchdog's last result."""
+        path = self.project_root / "data" / "trading" / "forex_paper_last.json"
+        empty = {
+            "available": False,
+            "status": "NO_RESULT",
+            "observed_at": "",
+            "decision": "NO_RECORDED_CYCLE",
+            "ready_pair_count": 0,
+            "blocked_pair_count": 0,
+            "execution_count": 0,
+            "reason_codes": {},
+            "broker_orders_sent": False,
+            "live_orders_sent": False,
+            "real_money_access": False,
+        }
+        try:
+            if not path.is_file() or path.stat().st_size > 2_000_000:
+                return empty
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            return {**empty, "status": "INVALID_RESULT"}
+        if not isinstance(payload, dict):
+            return {**empty, "status": "INVALID_RESULT"}
+        paper = payload.get("paper")
+        paper = dict(paper) if isinstance(paper, dict) else {}
+        assessments = [
+            dict(item)
+            for item in list(paper.get("assessments", []) or [])[:20]
+            if isinstance(item, dict)
+        ]
+        execution = paper.get("execution")
+        execution = dict(execution) if isinstance(execution, dict) else {}
+        executions = [
+            dict(item)
+            for item in list(execution.get("executions", []) or [])[:20]
+            if isinstance(item, dict)
+        ]
+        reasons: dict[str, int] = {}
+        top_reason = str(payload.get("reason", "")).strip().upper()[:80]
+        if top_reason:
+            reasons[top_reason] = 1
+        for assessment in assessments:
+            for raw_code in list(assessment.get("reason_codes", []) or [])[:8]:
+                code = str(raw_code or "").strip().upper()[:80]
+                if code:
+                    reasons[code] = reasons.get(code, 0) + 1
+        ready_count = sum(item.get("status") == "READY" for item in assessments)
+        blocked_count = sum(item.get("status") == "BLOCKED" for item in assessments)
+        outer_status = str(payload.get("status", ""))
+        if executions:
+            decision = "PAPER_EXECUTED"
+        elif (
+            outer_status != "PAPER_CYCLE_COMPLETED"
+            or str(paper.get("status", "")) == "DATA_BLOCKED"
+        ):
+            decision = "DATA_BLOCKED"
+        elif blocked_count and not ready_count:
+            decision = "PAIR_DATA_BLOCKED"
+        else:
+            decision = "NO_ENTRY_SIGNAL"
+        unsafe = any(
+            payload.get(key) is not False
+            for key in (
+                "broker_orders_sent",
+                "live_orders_sent",
+                "real_money_access",
+            )
+        )
+        return {
+            "available": True,
+            "status": "SAFETY_VIOLATION" if unsafe else outer_status,
+            "observed_at": str(payload.get("observed_at", ""))[:64],
+            "decision": decision,
+            "ready_pair_count": ready_count,
+            "blocked_pair_count": blocked_count,
+            "execution_count": len(executions),
+            "reason_codes": dict(
+                sorted(reasons.items(), key=lambda item: (-item[1], item[0]))
+            ),
+            "broker_orders_sent": payload.get("broker_orders_sent") is True,
+            "live_orders_sent": payload.get("live_orders_sent") is True,
+            "real_money_access": payload.get("real_money_access") is True,
         }
 
     def format_observation_review(self) -> str:
@@ -166,7 +261,8 @@ class TradingControlCenter:
 
     def format_status(self) -> str:
         snapshot = self.status()
-        account = snapshot["account"]
+        forex_account = snapshot["forex"]["paper_account"]
+        runtime_cycle = snapshot["forex"]["last_runtime_cycle"]
         data = snapshot["forex"]["data_configuration"]
         observation = snapshot["forex"]["observation"]
         research = snapshot["forex"]["historical_research"]
@@ -188,10 +284,31 @@ class TradingControlCenter:
         )
         kill_switch = (
             "AKTYWNY — nowe symulowane zlecenia są zatrzymane"
-            if account["kill_switch_active"]
+            if forex_account["kill_switch_active"]
             else "gotowy"
         )
-        audit = "prawidłowy" if account["audit_chain_valid"] else "USZKODZONY"
+        audit = (
+            "prawidłowy" if forex_account["audit_chain_valid"] else "USZKODZONY"
+        )
+        if not runtime_cycle["available"]:
+            latest_cycle_text = "brak zapisanego wyniku watchdogu"
+        elif runtime_cycle["decision"] == "PAPER_EXECUTED":
+            latest_cycle_text = (
+                f"wykonano {runtime_cycle['execution_count']} lokalnych operacji PAPER"
+            )
+        elif runtime_cycle["decision"] == "NO_ENTRY_SIGNAL":
+            latest_cycle_text = (
+                "brak nowego sygnału wejścia; "
+                f"gotowe pary {runtime_cycle['ready_pair_count']}/7"
+            )
+        elif runtime_cycle["decision"] in {"DATA_BLOCKED", "PAIR_DATA_BLOCKED"}:
+            reason_text = ", ".join(
+                f"{code}: {count}"
+                for code, count in runtime_cycle["reason_codes"].items()
+            ) or "niepełne dane"
+            latest_cycle_text = f"cykl bez transakcji — blokady danych: {reason_text}"
+        else:
+            latest_cycle_text = "cykl zakończony bez transakcji"
         qualified = int(observation["qualified_market_open_count"])
         required = int(observation["minimum_market_open_observations"])
         days = int(observation["qualified_market_day_count"])
@@ -211,14 +328,25 @@ class TradingControlCenter:
             observation["paper_promotion_ready"]
             and not research["strategy_candidate_ready"]
         ):
-            gate = (
-                "ZABLOKOWANA - obserwacje sa gotowe, ale strategia historyczna "
-                "nie spelnia jeszcze progow portfela w PLN"
-            )
-            next_step = (
-                "ulepszyc strategie bez strojenia pod te same dane, a potem "
-                "powtorzyc walk-forward na nowej probce"
-            )
+            if automatic_paper:
+                gate = (
+                    "EKSPERYMENTALNY PAPER DEMO — obserwacje są gotowe, lecz "
+                    "strategia historyczna nie spełnia jeszcze progów portfela "
+                    "w PLN; LIVE pozostaje zablokowany"
+                )
+                next_step = (
+                    "zbierać wyniki PAPER bez zmiany parametrów, a ocenę "
+                    "walk-forward powtórzyć dopiero na nowej próbce"
+                )
+            else:
+                gate = (
+                    "ZABLOKOWANA - obserwacje sa gotowe, ale strategia historyczna "
+                    "nie spelnia jeszcze progow portfela w PLN"
+                )
+                next_step = (
+                    "ulepszyc strategie bez strojenia pod te same dane, a potem "
+                    "powtorzyc walk-forward na nowej probce"
+                )
         elif observation["paper_promotion_ready"]:
             gate = (
                 "GOTOWA DO PRZEGLĄDU — automatyczna promocja jest wyłączona, "
@@ -248,8 +376,12 @@ class TradingControlCenter:
             "— gotowe lokalnie.\n"
             "• Silnik autopilota PAPER: lokalne otwieranie, zamykanie, ponowna "
             f"kontrola ryzyka i ochrona przed duplikatem — {autopilot_text}.\n"
-            f"• Konto demo: {account['equity']} {account['base_currency']}; "
-            f"pozycje: {account['position_count']}; wypełnienia: {account['fill_count']}.\n"
+            f"• Konto PAPER Forex: {forex_account['equity_pln']} PLN; "
+            f"wynik zrealizowany: {forex_account['realized_pnl_pln']} PLN; "
+            f"pozycje: {forex_account['position_count']}; zamknięte transakcje: "
+            f"{forex_account['closed_trade_count']}.\n"
+            f"• Cykle autopilota: {forex_account['processed_cycle_count']}; "
+            f"ostatnia decyzja: {latest_cycle_text}.\n"
             f"• Audyt: {audit}; wyłącznik awaryjny: {kill_switch}.\n"
             f"• Obserwacje Forex: kwalifikowane {qualified}/{required}; dni "
             f"rynkowe {days}/{required_days}; wszystkie wpisy "

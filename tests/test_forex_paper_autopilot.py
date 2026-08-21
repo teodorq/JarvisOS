@@ -159,6 +159,13 @@ class ForexPaperAutopilotTests(unittest.TestCase):
         status = self.autopilot.executor.status()
         self.assertEqual(status["position_count"], 0)
         self.assertEqual(status["fill_count"], 2)
+        self.assertEqual(status["processed_cycle_count"], 2)
+        self.assertEqual(status["last_cycle"]["cycle_id"], "forex-cycle-close")
+        self.assertEqual(status["closed_trade_count"], 1)
+        self.assertEqual(status["winning_trade_count"], 0)
+        self.assertEqual(status["losing_trade_count"], 1)
+        self.assertLess(Decimal(status["realized_pnl_pln"]), 0)
+        self.assertEqual(status["open_positions"], [])
 
     def test_missing_second_source_produces_no_execution(self) -> None:
         result = self.run_cycle("forex-cycle-data", sources=1)

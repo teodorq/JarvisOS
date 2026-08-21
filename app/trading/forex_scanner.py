@@ -23,7 +23,11 @@ class ForexScannerPolicy:
     slow_window: int = 30
     max_quote_age_seconds: int = 10
     max_context_age_seconds: int = 30
-    max_closed_bar_age_seconds: int = 1_200
+    # MT5 timestamps a candle at its opening time. Because the adapter reads
+    # only the previous, fully closed M15 candle, its timestamp is normally
+    # between 15 and 30 minutes old. Keep a small synchronization allowance
+    # without accepting a candle older than two M15 periods plus one minute.
+    max_closed_bar_age_seconds: int = 1_860
     expected_bar_seconds: int = 900
     max_gap_factor: int = 3
     max_spread_pips: Decimal = Decimal("2.5")
