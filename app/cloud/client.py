@@ -2,13 +2,19 @@ from __future__ import annotations
 
 import json
 import os
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from typing import Any
 
-from app.cloud.contracts import SCHEMA_VERSION, normalize_command, validate_cloud_plan
+from app.cloud.contracts import (
+    REMOTE_POWER_KINDS,
+    SCHEMA_VERSION,
+    normalize_command,
+    validate_cloud_plan,
+)
 from app.cloud.privacy import CloudPrivacyError, ensure_cloud_safe_command
 
 
@@ -239,8 +245,17 @@ class CloudPlannerClient:
             raise CloudPlannerUnavailable("invalid remote command id")
         if not command or len(command) > 4_000:
             raise CloudPlannerUnavailable("invalid remote command")
-        if kind not in {"command", "probe"}:
+        if kind not in {"command", "probe", *REMOTE_POWER_KINDS}:
             raise CloudPlannerUnavailable("invalid remote command kind")
+        if kind in REMOTE_POWER_KINDS:
+            try:
+                expires_at = int(record.get("expires_at", 0) or 0)
+            except (TypeError, ValueError) as error:
+                raise CloudPlannerUnavailable(
+                    "invalid remote power expiry"
+                ) from error
+            if expires_at <= int(time.time()):
+                raise CloudPlannerUnavailable("remote power command expired")
         record.update(
             id=command_id,
             command=command,

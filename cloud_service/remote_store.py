@@ -8,6 +8,8 @@ import time
 import uuid
 from typing import Any, Protocol
 
+from app.cloud.contracts import REMOTE_POWER_KINDS
+
 COMMAND_TTL_SECONDS = 86_400
 CLAIM_LEASE_SECONDS = 120
 TERMINAL_STATUSES = frozenset({"completed", "failed", "cancelled", "expired"})
@@ -38,6 +40,7 @@ class RemoteCommandStore(Protocol):
         *,
         kind: str = "command",
         request_id: str | None = None,
+        ttl_seconds: int = COMMAND_TTL_SECONDS,
     ) -> dict[str, Any]: ...
 
     def claim_next(self, device_id: str) -> dict[str, Any] | None: ...
@@ -78,14 +81,26 @@ def normalize_event_status(value: object) -> str:
 
 def _validate_kind(value: object) -> str:
     kind = str(value or "").strip().lower()
-    if kind not in {"command", "probe"}:
+    if kind not in {"command", "probe", *REMOTE_POWER_KINDS}:
         raise ValueError("invalid command kind")
     return kind
+
+
+def _normalize_ttl(value: object) -> int:
+    try:
+        seconds = int(value)
+    except (TypeError, ValueError) as error:
+        raise ValueError("invalid command ttl") from error
+    if seconds < 30 or seconds > COMMAND_TTL_SECONDS:
+        raise ValueError("invalid command ttl")
+    return seconds
 
 
 def _queued_message(kind: str) -> str:
     if kind == "probe":
         return "Sprawdzam połączenie z komputerem."
+    if kind in REMOTE_POWER_KINDS:
+        return "Bezpieczne polecenie zasilania czeka na komputer."
     return "Polecenie czeka na komputer."
 
 
@@ -105,9 +120,11 @@ class MemoryRemoteCommandStore:
         *,
         kind: str = "command",
         request_id: str | None = None,
+        ttl_seconds: int = COMMAND_TTL_SECONDS,
     ) -> dict[str, Any]:
         device_id = normalize_device_id(device_id)
         kind = _validate_kind(kind)
+        ttl = _normalize_ttl(ttl_seconds)
         command_text = str(command)
         command_id = (
             normalize_command_id(request_id)
@@ -137,7 +154,7 @@ class MemoryRemoteCommandStore:
                 "message": _queued_message(kind),
                 "created_at": now,
                 "updated_at": now,
-                "expires_at": now + COMMAND_TTL_SECONDS,
+                "expires_at": now + ttl,
                 "lease_until": 0,
             }
             self._records[key] = record
@@ -293,9 +310,11 @@ class AzureTableRemoteCommandStore:
         *,
         kind: str = "command",
         request_id: str | None = None,
+        ttl_seconds: int = COMMAND_TTL_SECONDS,
     ) -> dict[str, Any]:
         device_id = normalize_device_id(device_id)
         kind = _validate_kind(kind)
+        ttl = _normalize_ttl(ttl_seconds)
         command_text = str(command)
         command_id = (
             normalize_command_id(request_id)
@@ -312,7 +331,7 @@ class AzureTableRemoteCommandStore:
             "Message": _queued_message(kind),
             "CreatedAt": now,
             "UpdatedAt": now,
-            "ExpiresAt": now + COMMAND_TTL_SECONDS,
+            "ExpiresAt": now + ttl,
             "LeaseUntil": 0,
         }
         self._cleanup(device_id, now)
@@ -334,11 +353,12 @@ class AzureTableRemoteCommandStore:
                 "device_id": device_id,
                 "command": command_text,
                 "kind": kind,
+                "expires_at": now + ttl,
             }
             try:
                 self.queue.send_message(
                     json.dumps(message, ensure_ascii=False),
-                    time_to_live=COMMAND_TTL_SECONDS,
+                    time_to_live=ttl,
                 )
             except Exception:
                 try:

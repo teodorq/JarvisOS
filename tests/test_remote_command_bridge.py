@@ -705,6 +705,26 @@ class RemoteCommandBridgeTests(unittest.TestCase):
 
 
 class AzureRemoteStoreIdempotencyTests(unittest.TestCase):
+    def test_power_request_uses_short_queue_ttl_and_expiry(self) -> None:
+        store = object.__new__(AzureTableRemoteCommandStore)
+        store._exists = FakeResourceExistsError
+        store.table = FakeAzureTable()
+        store.queue = FakeAzureSendQueue()
+
+        record = store.create(
+            "desktop-main",
+            "Wyłączenie komputera",
+            kind="power_shutdown",
+            request_id="9" * 32,
+            ttl_seconds=300,
+        )
+
+        self.assertEqual(record["expires_at"] - record["created_at"], 300)
+        self.assertEqual(store.queue.sent[0][1], 300)
+        queued = json.loads(store.queue.sent[0][0])
+        self.assertEqual(queued["kind"], "power_shutdown")
+        self.assertEqual(queued["expires_at"], record["expires_at"])
+
     def test_environment_uses_managed_identity_and_account_name(self) -> None:
         credential = object()
         environment = {

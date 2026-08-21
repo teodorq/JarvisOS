@@ -15,9 +15,13 @@ from urllib.parse import parse_qs, urlsplit
 
 from app.ai.planner_llm import PlannerLLM
 from app.cloud.contracts import (
+    REMOTE_POWER_TTL_SECONDS,
     SCHEMA_VERSION,
     CloudContractError,
+    RemotePowerConfirmationError,
+    looks_like_remote_power_command,
     normalize_command,
+    normalize_remote_power_request,
     validate_cloud_plan,
 )
 from app.cloud.privacy import CloudPrivacyError, ensure_cloud_safe_command
@@ -45,7 +49,7 @@ from cloud_service.remote_store import (
 
 
 SERVICE_NAME = "jarvis-os-cloud-planner"
-SERVICE_VERSION = "0.9.3"
+SERVICE_VERSION = "0.9.4"
 MAX_BODY_BYTES = 16_384
 
 
@@ -235,6 +239,9 @@ class JarvisOSCloudHandler(BaseHTTPRequestHandler):
         if parsed.path == "/v1/remote/probe":
             self._handle_remote_probe()
             return
+        if parsed.path == "/v1/remote/power":
+            self._handle_remote_power()
+            return
         parts = parsed.path.strip("/").split("/")
         if (
             len(parts) == 5
@@ -307,6 +314,15 @@ class JarvisOSCloudHandler(BaseHTTPRequestHandler):
             payload = self._read_payload()
             device_id = normalize_device_id(payload.get("device_id"))
             command = normalize_command(payload.get("command"))
+            if looks_like_remote_power_command(command):
+                self._json(
+                    HTTPStatus.UNPROCESSABLE_ENTITY,
+                    {
+                        "error": "dedicated_power_control_required",
+                        "message": "Użyj osobnej, potwierdzanej opcji zasilania.",
+                    },
+                )
+                return
             ensure_cloud_safe_command(command)
             record = self.server.remote_store.create(
                 device_id,
@@ -325,6 +341,74 @@ class JarvisOSCloudHandler(BaseHTTPRequestHandler):
             return
         except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
             self._json(HTTPStatus.BAD_REQUEST, {"error": "invalid_request"})
+            return
+        except Exception:
+            self._json(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"error": "remote_temporarily_unavailable"},
+            )
+            return
+        self._json(HTTPStatus.ACCEPTED, record)
+
+    def _handle_remote_power(self) -> None:
+        if not self._remote_ready():
+            self._reject_json(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"error": "remote_not_configured"},
+            )
+            return
+        if not self._phone_identity_authorized():
+            self._reject_json(
+                HTTPStatus.UNAUTHORIZED,
+                {"error": "owner_identity_required"},
+            )
+            return
+        if not hmac.compare_digest(
+            self.headers.get("X-JARVIS-POWER-CONTROL", ""), "owner-v1"
+        ):
+            self._reject_json(
+                HTTPStatus.BAD_REQUEST,
+                {"error": "power_control_header_required"},
+            )
+            return
+        allowed, retry_after = self.server.rate_limiter.allow(
+            "phone-power:" + self.client_address[0]
+        )
+        if not allowed:
+            self._reject_json(
+                HTTPStatus.TOO_MANY_REQUESTS,
+                {"error": "rate_limited"},
+                headers={"Retry-After": str(retry_after)},
+            )
+            return
+        try:
+            payload = self._read_payload()
+            device_id = normalize_device_id(payload.get("device_id"))
+            kind, command = normalize_remote_power_request(payload)
+            record = self.server.remote_store.create(
+                device_id,
+                command,
+                kind=kind,
+                request_id=self._request_id(payload),
+                ttl_seconds=REMOTE_POWER_TTL_SECONDS,
+            )
+        except RemoteStoreConflict:
+            self._json(
+                HTTPStatus.CONFLICT,
+                {"error": "request_id_conflict"},
+            )
+            return
+        except RemotePowerConfirmationError:
+            self._json(
+                HTTPStatus.UNPROCESSABLE_ENTITY,
+                {"error": "explicit_power_confirmation_required"},
+            )
+            return
+        except (CloudContractError, UnicodeDecodeError, json.JSONDecodeError, ValueError):
+            self._json(
+                HTTPStatus.BAD_REQUEST,
+                {"error": "invalid_power_request"},
+            )
             return
         except Exception:
             self._json(

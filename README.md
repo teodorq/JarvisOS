@@ -302,6 +302,15 @@ short-lived request identifier. Azure returns the original command instead of
 placing a duplicate in the desktop queue; command text is not persisted in
 browser storage.
 
+The phone page has a separate owner-only computer power card. Shutdown cannot
+be requested through the free-text command box: the owner must open the red
+control, type `WYLACZ` and press the second confirmation button. The dedicated
+request expires after five minutes. Once the desktop receives it, JARVIS keeps
+a local 60-second countdown and exposes `ANULUJ WYŁĄCZENIE` on the phone. The
+final Windows call uses `/t 0` without `/f`, so applications can still protect
+unsaved work. Closing JARVIS during the countdown cancels it, and no power
+request is restored after an application or computer restart.
+
 For a reliable iPhone start, open `/mobile-start` in full Safari (not the
 embedded browser of another app). It is a static page outside the phone Service
 Worker and never redirects or signs out automatically. `/mobile-logout` exposes

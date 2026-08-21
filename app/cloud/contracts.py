@@ -9,6 +9,52 @@ MAX_PLAN_STEPS = 20
 MAX_PLAN_ACTIONS = 10
 MAX_FIELD_CHARS = 4_000
 
+REMOTE_POWER_SHUTDOWN_KIND = "power_shutdown"
+REMOTE_POWER_CANCEL_KIND = "power_cancel"
+REMOTE_POWER_KINDS = frozenset(
+    {REMOTE_POWER_SHUTDOWN_KIND, REMOTE_POWER_CANCEL_KIND}
+)
+REMOTE_POWER_CONFIRMATION = "WYLACZ"
+REMOTE_POWER_TTL_SECONDS = 300
+
+
+class RemotePowerConfirmationError(ValueError):
+    """Raised when the phone did not provide the destructive-action phrase."""
+
+
+def normalize_remote_power_request(value: Any) -> tuple[str, str]:
+    """Return an isolated relay kind and display text for a phone power action."""
+    if not isinstance(value, dict):
+        raise CloudContractError("power request must be an object")
+    action = str(value.get("action", "")).strip().lower()
+    if action == "shutdown":
+        confirmation = str(value.get("confirmation", "")).strip().upper()
+        if confirmation != REMOTE_POWER_CONFIRMATION:
+            raise RemotePowerConfirmationError(
+                "explicit power confirmation is required"
+            )
+        return REMOTE_POWER_SHUTDOWN_KIND, "Wyłączenie komputera"
+    if action == "cancel_shutdown":
+        return REMOTE_POWER_CANCEL_KIND, "Anulowanie wyłączenia komputera"
+    raise CloudContractError("unsupported power action")
+
+
+def looks_like_remote_power_command(value: object) -> bool:
+    """Keep destructive computer power actions out of the free-text channel."""
+    folded = " ".join(str(value or "").casefold().split())
+    folded = folded.translate(str.maketrans("ąćęłńóśźż", "acelnoszz"))
+    phrases = (
+        "wylacz komputer",
+        "zamknij system",
+        "shutdown computer",
+        "shutdown windows",
+        "power off",
+        "poweroff",
+        "restart komputer",
+        "uruchom ponownie komputer",
+    )
+    return any(phrase in folded for phrase in phrases)
+
 # Phase one deliberately permits only low-risk, read-oriented plans. If the
 # cloud proposes anything else, the desktop client rejects it and plans the
 # command locally instead.

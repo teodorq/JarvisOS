@@ -6,6 +6,8 @@ from typing import Any, Callable
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, QTimer, Signal, Slot
 
 from app.cloud.client import CloudPlannerClient
+from app.cloud.contracts import REMOTE_POWER_KINDS
+from app.core.windows_power import WindowsPowerController
 
 class _RemoteSignals(QObject):
     done = Signal(object, object)
@@ -29,10 +31,16 @@ class RemoteCommandRuntime(QObject):
 
     TERMINAL_STATES = {"completed", "failed", "cancelled"}
 
-    def __init__(self, window: Any, client: CloudPlannerClient | None = None) -> None:
+    def __init__(
+        self,
+        window: Any,
+        client: CloudPlannerClient | None = None,
+        power: WindowsPowerController | None = None,
+    ) -> None:
         super().__init__(window)
         self.window = window
         self.client = client or CloudPlannerClient()
+        self.power = power or WindowsPowerController()
         self.pool = QThreadPool(self)
         self.pool.setMaxThreadCount(1)
         self.timer = QTimer(self)
@@ -56,6 +64,7 @@ class RemoteCommandRuntime(QObject):
     def shutdown(self) -> None:
         self._closed = True
         self.timer.stop()
+        self.power.close()
         self._callback = None
         self.pool.clear()
         self.pool.waitForDone(1200)
@@ -91,10 +100,29 @@ class RemoteCommandRuntime(QObject):
         if kind == "probe":
             self._queue_report("completed", "Komputer jest online.", True)
             return
+        if kind in REMOTE_POWER_KINDS:
+            self._submit(
+                lambda: self.power.execute(kind, command_id),
+                self._after_power_action,
+                lambda _error: self._queue_report(
+                    "failed", "Nie udało się wykonać polecenia zasilania.", True
+                ),
+            )
+            return
         try:
             self.window.process_client_command(command)
         except Exception:
             self._queue_report("failed", "Nie uda\u0142o si\u0119 rozpocz\u0105\u0107 polecenia na komputerze.", True)
+
+    def _after_power_action(self, raw_result: object) -> None:
+        result = dict(raw_result) if isinstance(raw_result, dict) else {}
+        ok = result.get("ok") is True
+        message = " ".join(str(result.get("message", "")).split())[:2_000]
+        self._queue_report(
+            "completed" if ok else "failed",
+            message or "Polecenie zasilania nie zwróciło wyniku.",
+            True,
+        )
 
     def _on_client_event(self, raw_event: object) -> None:
         if not self._active_id or not isinstance(raw_event, dict):
