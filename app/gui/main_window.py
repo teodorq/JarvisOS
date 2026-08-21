@@ -24,7 +24,7 @@ from app.gui.intelligence_center_page import IntelligenceCenterPage
 from app.gui.productivity_center_page import ProductivityCenterPage
 from app.gui.stability_beta_page import StabilityBetaPage
 from app.gui.assistant_v12_page import AssistantV12Page
-from app.gui.online_assistant_page import OnlineAssistantPage
+from app.gui.online_assistant_page import OnlineAssistantPage; from app.gui.forex_paper_page import ForexPaperPage
 from app.gui.business_theme import BusinessTheme
 from app.gui.business_widgets import MetricCard, NavigationButton, StatusPill
 from app.gui.business_status_snapshot import business_service_snapshot
@@ -185,7 +185,7 @@ class MainWindow(BusinessCommandRuntimeMixin, QMainWindow):
             ("ASYSTENT I CODZIENNA PRACA", "assistant"),
             ("CENTRUM INTELIGENCJI", "intelligence"),
             ("PRODUKTYWNOŚĆ I ORGANIZACJA", "productivity"),
-            ("STABILNOŚĆ I BUSINESS BETA", "stability"), ("ASYSTENT 1.2 BETA", "assistant_v12"), ("ASYSTENT ONLINE I RC", "online"),
+            ("STABILNOŚĆ I BUSINESS BETA", "stability"), ("FOREX PAPER", "forex"), ("ASYSTENT 1.2 BETA", "assistant_v12"), ("ASYSTENT ONLINE I RC", "online"),
         )
         for label, page_name in navigation:
             button = NavigationButton(label, page_name)
@@ -237,7 +237,7 @@ class MainWindow(BusinessCommandRuntimeMixin, QMainWindow):
         self.assistant_page = AssistantProductivityPage(self.assistant)
         self.intelligence_page = IntelligenceCenterPage(self.assistant.intelligence)
         self.productivity_page = ProductivityCenterPage(self.assistant.productivity)
-        self.stability_page = StabilityBetaPage(self.assistant.stability); self.assistant_v12_page = AssistantV12Page(self.assistant.assistant_v12); self.online_page = OnlineAssistantPage(self.assistant.online)
+        self.stability_page = StabilityBetaPage(self.assistant.stability); self.forex_page = ForexPaperPage(self.assistant.trading.forex_dashboard); self.assistant_v12_page = AssistantV12Page(self.assistant.assistant_v12); self.online_page = OnlineAssistantPage(self.assistant.online)
         self.pages = {
             "console": self.console_page,
             "settings": self.settings_page,
@@ -245,7 +245,7 @@ class MainWindow(BusinessCommandRuntimeMixin, QMainWindow):
             "platform": self.platform_page, "operations": self.operations_page,
             "release": self.release_page, "commercial": self.commercial_page,
             "assistant": self.assistant_page, "intelligence": self.intelligence_page,
-            "productivity": self.productivity_page, "stability": self.stability_page, "assistant_v12": self.assistant_v12_page, "online": self.online_page,
+            "productivity": self.productivity_page, "stability": self.stability_page, "forex": self.forex_page, "assistant_v12": self.assistant_v12_page, "online": self.online_page,
         }
         for page in self.pages.values():
             self.stack.addWidget(page)
@@ -304,7 +304,7 @@ class MainWindow(BusinessCommandRuntimeMixin, QMainWindow):
             "assistant": "ROZMOWA • PULPIT • PAMIĘĆ • GŁOS • CODZIENNA PRACA",
             "intelligence": "WIZJA • MÓZG • PULPIT • PAMIĘĆ • AUTONOMIA",
             "productivity": "POCZTA • KALENDARZ • DOKUMENTY • PRZYPOMNIENIA • RAPORT",
-            "stability": "SCENARIUSZE • WYDAJNOŚĆ • ODZYSKIWANIE • RESTART • BUSINESS BETA", "assistant_v12": "ROZMOWA • KONTEKST • WYBÓR NARZĘDZI • POSTĘP • BUSINESS 1.2 BETA", "online": "GOOGLE WORKSPACE • PRZEPŁYW PRACY • DOKUMENTY • STABLE RC • 1.3 BETA",
+            "stability": "SCENARIUSZE • WYDAJNOŚĆ • ODZYSKIWANIE • RESTART • BUSINESS BETA", "forex": "PAPER ONLY • POZYCJE • SL • TP • WYNIK", "assistant_v12": "ROZMOWA • KONTEKST • WYBÓR NARZĘDZI • POSTĘP • BUSINESS 1.2 BETA", "online": "GOOGLE WORKSPACE • PRZEPŁYW PRACY • DOKUMENTY • STABLE RC • 1.3 BETA",
         }
         page_context = getattr(self, "page_context", None)
         if page_context is not None:

@@ -125,6 +125,12 @@ for simulated opens, closes, the first data-block transition and recovery. It
 does not speak these alerts, repeat an already-seen cycle, expose credentials or
 add any broker-order capability.
 
+The owner sidebar now includes a `FOREX PAPER` page. It refreshes every five
+seconds and shows the sanitized local PAPER balance, equity, unrealized result,
+position count, pair, direction, units, entry, current price, stop loss and take
+profit. The page has no buy, sell or close controls and cannot route broker
+orders. The `status Forex` command also lists the currently open PAPER entries.
+
 Use `Raport obserwacji Forex` for a deeper read-only review. It aggregates every
 recorded cycle, market-day coverage, blocked reasons, proposed but unexecuted
 actions, all seven-pair coverage and order-safety invariants. The report cannot

@@ -14,6 +14,7 @@ from app.market_data.forex_environment import (
 from app.trading.backtest import HistoricalPaperBacktester
 from app.trading.forex_coordinator import ForexPaperCoordinator
 from app.trading.forex_activity import ForexPaperActivityFeed
+from app.trading.forex_dashboard import ForexPaperDashboard
 from app.trading.forex_executor import ForexPaperExecutionEngine
 from app.trading.forex_models import MAJOR_FOREX_PAIRS
 from app.trading.forex_observation import ForexObservationJournal
@@ -46,6 +47,10 @@ class TradingControlCenter:
         self.forex_activity = ForexPaperActivityFeed(
             self.project_root,
             settings=self.forex_data,
+        )
+        self.forex_dashboard = ForexPaperDashboard(
+            self.project_root,
+            executor=self.forex_executor,
         )
         self.forex_observations = ForexObservationJournal(self.project_root)
         self.forex_research = ForexHistoricalResearchGate(self.project_root)
@@ -287,6 +292,11 @@ class TradingControlCenter:
                 "ukończenia bramki obserwacji"
             )
         )
+        position_details = "; ".join(
+            f"{item['pair'].replace('_', '/')} {item['side']} po {item['entry_price']} "
+            f"(SL {item['stop_loss']}, TP {item['take_profit']})"
+            for item in forex_account["open_positions"]
+        ) or "brak"
         kill_switch = (
             "AKTYWNY — nowe symulowane zlecenia są zatrzymane"
             if forex_account["kill_switch_active"]
@@ -385,6 +395,7 @@ class TradingControlCenter:
             f"wynik zrealizowany: {forex_account['realized_pnl_pln']} PLN; "
             f"pozycje: {forex_account['position_count']}; zamknięte transakcje: "
             f"{forex_account['closed_trade_count']}.\n"
+            f"• Otwarte pozycje PAPER: {position_details}.\n"
             f"• Cykle autopilota: {forex_account['processed_cycle_count']}; "
             f"ostatnia decyzja: {latest_cycle_text}.\n"
             f"• Audyt: {audit}; wyłącznik awaryjny: {kill_switch}.\n"
