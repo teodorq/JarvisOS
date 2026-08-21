@@ -118,11 +118,13 @@ function Invoke-ForexPaperCycle {
             $executionCount = @($result.paper.execution.executions).Count
             $positionCount = $result.paper.account.position_count
         }
+        $historyStatus = $result.activity_history_status
         Write-ObserverLog (
             "PAPER cycle $($result.status); reason=$reason; " +
             "executions=$executionCount; positions=$positionCount; " +
             "broker_orders_sent=$($result.broker_orders_sent); " +
-            "live_orders_sent=$($result.live_orders_sent)."
+            "live_orders_sent=$($result.live_orders_sent); " +
+            "activity_history=$historyStatus."
         )
     }
     catch {

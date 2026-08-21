@@ -5,6 +5,7 @@ from app.trading.control_center import TradingControlCenter
 from app.trading.dataset import HistoricalCsvLoader, HistoricalDataset
 from app.trading.forex_coordinator import ForexPaperCoordinator, ForexPaperInstruction
 from app.trading.forex_activity import ForexPaperActivityFeed
+from app.trading.forex_activity_journal import ForexPaperActivityJournal
 from app.trading.forex_dashboard import ForexPaperDashboard
 from app.trading.forex_candidate_v2 import (
     ForexRegimeCandidatePolicy,
@@ -84,6 +85,7 @@ __all__ = [
     "ForexPairAssessment",
     "ForexPaperCoordinator",
     "ForexPaperActivityFeed",
+    "ForexPaperActivityJournal",
     "ForexPaperDashboard",
     "ForexPaperAutopilot",
     "ForexPaperExecutionEngine",

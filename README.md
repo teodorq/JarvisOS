@@ -131,6 +131,13 @@ position count, pair, direction, units, entry, current price, stop loss and take
 profit. The page has no buy, sell or close controls and cannot route broker
 orders. The `status Forex` command also lists the currently open PAPER entries.
 
+Every watchdog cycle also appends safe open, close, first data-block and recovery
+events to the bounded, ignored `data/trading/forex_paper_activity_history.json`.
+This happens in the hidden observer process, not in the GUI. When JARVIS starts
+again it drains unread events in sequence without repeating delivered entries;
+the `FOREX PAPER` page keeps the latest 50 entries in its `HISTORIA ZDARZEŃ` tab.
+Old ledger fills are visible as history but are not replayed as new alerts.
+
 Use `Raport obserwacji Forex` for a deeper read-only review. It aggregates every
 recorded cycle, market-day coverage, blocked reasons, proposed but unexecuted
 actions, all seven-pair coverage and order-safety invariants. The report cannot

@@ -44,6 +44,7 @@ def test_watchdog_calls_only_the_local_paper_entry_point() -> None:
     assert "apply_plan" not in WATCHDOG
     assert "submit_live_order" not in WATCHDOG
     assert "order_send" not in WATCHDOG
+    assert "activity_history" in WATCHDOG
 
 
 def test_watchdog_starts_only_the_configured_mt5_binary() -> None:

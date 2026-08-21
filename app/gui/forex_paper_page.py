@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QTabWidget,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -29,16 +30,21 @@ class ForexPaperPage(QWidget):
 
     REFRESH_INTERVAL_MS = 5000
     HEADERS = ("PARA", "KIERUNEK", "JEDNOSTKI", "WEJŚCIE", "CENA", "STOP LOSS", "TAKE PROFIT")
+    HISTORY_HEADERS = ("CZAS", "ZDARZENIE", "WIADOMOŚĆ", "STATUS")
 
-    def __init__(self, dashboard: Any) -> None:
+    def __init__(self, dashboard: Any, *, activity: Any | None = None) -> None:
         super().__init__()
         self.dashboard = dashboard
+        self.activity = activity
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(10)
         root.addWidget(self._toolbar())
         root.addLayout(self._metrics())
-        root.addWidget(self._positions_card(), 1)
+        self.tabs = QTabWidget()
+        self.tabs.addTab(self._positions_card(), "OTWARTE POZYCJE")
+        self.tabs.addTab(self._history_card(), "HISTORIA ZDARZEŃ")
+        root.addWidget(self.tabs, 1)
         root.addWidget(self._safety_card())
         self.timer = QTimer(self)
         self.timer.setInterval(self.REFRESH_INTERVAL_MS)
@@ -90,7 +96,36 @@ class ForexPaperPage(QWidget):
         )
         self.table = QTableWidget(0, len(self.HEADERS))
         self.table.setObjectName("ForexPaperPositions")
-        self.table.setStyleSheet("""
+        self._configure_table(self.table)
+        self.table.setHorizontalHeaderLabels(self.HEADERS)
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        card.content_layout.addWidget(self.table)
+        self.updated = QLabel("Ostatnia aktualizacja: —")
+        self.updated.setObjectName("Muted")
+        card.content_layout.addWidget(self.updated)
+        return card
+
+    def _history_card(self) -> SectionCard:
+        card = SectionCard(
+            "Trwała historia powiadomień",
+            "Zdarzenia są zapisywane przez observer także wtedy, gdy okno JARVIS jest wyłączone.",
+        )
+        self.history_table = QTableWidget(0, len(self.HISTORY_HEADERS))
+        self.history_table.setObjectName("ForexPaperHistory")
+        self._configure_table(self.history_table)
+        self.history_table.setHorizontalHeaderLabels(self.HISTORY_HEADERS)
+        header = self.history_table.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.Stretch)
+        card.content_layout.addWidget(self.history_table)
+        self.pending_history = QLabel("Nieodczytane zdarzenia: 0")
+        self.pending_history.setObjectName("Muted")
+        card.content_layout.addWidget(self.pending_history)
+        return card
+
+    @staticmethod
+    def _configure_table(table: QTableWidget) -> None:
+        table.setStyleSheet("""
             QTableWidget {
                 background-color: #08101C;
                 alternate-background-color: #0B1626;
@@ -119,20 +154,13 @@ class ForexPaperPage(QWidget):
                 border: none;
             }
         """)
-        self.table.setHorizontalHeaderLabels(self.HEADERS)
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.table.verticalHeader().setVisible(False)
-        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.table.setAlternatingRowColors(True)
-        self.table.setShowGrid(False)
-        self.table.verticalHeader().setDefaultSectionSize(42)
-        self.table.setMinimumHeight(190)
-        card.content_layout.addWidget(self.table)
-        self.updated = QLabel("Ostatnia aktualizacja: —")
-        self.updated.setObjectName("Muted")
-        card.content_layout.addWidget(self.updated)
-        return card
+        table.verticalHeader().setVisible(False)
+        table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        table.setAlternatingRowColors(True)
+        table.setShowGrid(False)
+        table.verticalHeader().setDefaultSectionSize(42)
+        table.setMinimumHeight(190)
 
     def _safety_card(self) -> SectionCard:
         card = SectionCard("Bezpieczeństwo", "Prawdziwe zlecenia pozostają twardo wyłączone.")
@@ -169,10 +197,53 @@ class ForexPaperPage(QWidget):
         positions = [dict(item) for item in raw_positions[:5] if isinstance(item, dict)]
         self.metrics["positions"].set_value(str(len(positions)))
         self._fill_positions(positions)
+        history = []
+        if self.activity is not None:
+            try:
+                history = list(self.activity.history(limit=50) or [])
+            except Exception:
+                history = []
+        self._fill_history(history)
         self.updated.setText(
             "Ostatnia aktualizacja: " + self._visible_time(snapshot.get("observed_at"))
         )
         self.message.setText(str(snapshot.get("message", "Gotowy."))[:240])
+
+    def _fill_history(self, history: list[object]) -> None:
+        events = [dict(item) for item in history[-50:] if isinstance(item, dict)]
+        self.history_table.clearSpans()
+        pending = sum(not bool(item.get("delivered")) for item in events)
+        self.pending_history.setText(f"Nieodczytane zdarzenia: {pending}")
+        if not events:
+            self.history_table.setRowCount(1)
+            item = QTableWidgetItem("HISTORIA JEST JESZCZE PUSTA")
+            item.setTextAlignment(Qt.AlignCenter)
+            self.history_table.setItem(0, 0, item)
+            self.history_table.setSpan(0, 0, 1, len(self.HISTORY_HEADERS))
+            return
+        self.history_table.setRowCount(len(events))
+        names = {
+            "POSITION_OPENED": "OTWARCIE",
+            "POSITION_CLOSED": "ZAMKNIĘCIE",
+            "DATA_BLOCKED": "BLOKADA DANYCH",
+            "DATA_RECOVERED": "POWRÓT DANYCH",
+            "SAFETY_ATTENTION": "KONTROLA BEZPIECZEŃSTWA",
+        }
+        for row, event in enumerate(reversed(events)):
+            values = (
+                self._visible_time(event.get("occurred_at")),
+                names.get(str(event.get("kind", "")), "AKTYWNOŚĆ"),
+                str(event.get("message", ""))[:420],
+                str(event.get("delivery_status", "HISTORIA")),
+            )
+            for column, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                item.setTextAlignment(
+                    Qt.AlignLeft | Qt.AlignVCenter
+                    if column == 2
+                    else Qt.AlignCenter
+                )
+                self.history_table.setItem(row, column, item)
 
     def _fill_positions(self, positions: list[dict[str, Any]]) -> None:
         self.table.clearSpans()

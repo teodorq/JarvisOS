@@ -237,7 +237,7 @@ class MainWindow(BusinessCommandRuntimeMixin, QMainWindow):
         self.assistant_page = AssistantProductivityPage(self.assistant)
         self.intelligence_page = IntelligenceCenterPage(self.assistant.intelligence)
         self.productivity_page = ProductivityCenterPage(self.assistant.productivity)
-        self.stability_page = StabilityBetaPage(self.assistant.stability); self.forex_page = ForexPaperPage(self.assistant.trading.forex_dashboard); self.assistant_v12_page = AssistantV12Page(self.assistant.assistant_v12); self.online_page = OnlineAssistantPage(self.assistant.online)
+        self.stability_page = StabilityBetaPage(self.assistant.stability); self.forex_page = ForexPaperPage(self.assistant.trading.forex_dashboard, activity=self.assistant.trading.forex_activity); self.assistant_v12_page = AssistantV12Page(self.assistant.assistant_v12); self.online_page = OnlineAssistantPage(self.assistant.online)
         self.pages = {
             "console": self.console_page,
             "settings": self.settings_page,
