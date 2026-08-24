@@ -370,12 +370,14 @@ def test_phone_page_contains_two_step_power_controls() -> None:
     assert "60 sekund odliczania" in PHONE_PAGE
 
 
-def test_cloud_deployment_gate_runs_power_control_tests() -> None:
+def test_cloud_deployment_gate_requires_full_source_integrity() -> None:
     workflow = Path(".github/workflows/cloud-image.yml").read_text(
         encoding="utf-8"
     )
     assert "tests/test_remote_power_control.py" in workflow
-    assert "pytest -q tests/test_remote_command_bridge.py" in workflow
+    assert "Require successful full source integrity" in workflow
+    assert 'test_remote_command_bridge.py" -v' in workflow
+    assert "python -m pytest" not in workflow
 
 
 def test_expired_power_record_is_rejected_before_dispatch() -> None:
