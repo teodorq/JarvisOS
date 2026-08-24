@@ -8,6 +8,7 @@ import time
 import urllib.error
 import urllib.request
 
+import pytest
 from PySide6.QtCore import QObject, Signal
 
 from app.cloud.client import CloudPlannerClient, CloudPlannerSettings, CloudPlannerUnavailable
@@ -20,7 +21,7 @@ from app.cloud.contracts import (
 from app.core.windows_power import WindowsPowerController
 from app.gui.remote_command_runtime import RemoteCommandRuntime
 from cloud_service.main import ServiceConfig, build_server
-from cloud_service.phone_ui import PHONE_PAGE
+from cloud_service.phone_power_countdown import PHONE_PAGE, enhance_phone_page
 from cloud_service.remote_store import MemoryRemoteCommandStore
 
 
@@ -368,6 +369,23 @@ def test_phone_page_contains_two_step_power_controls() -> None:
     assert 'api("/v1/remote/power"' in PHONE_PAGE
     assert '"X-JARVIS-POWER-CONTROL":"owner-v1"' in PHONE_PAGE
     assert "60 sekund odliczania" in PHONE_PAGE
+
+
+def test_phone_page_restores_authoritative_power_countdown() -> None:
+    assert 'id="powerCountdown"' in PHONE_PAGE
+    assert 'aria-live="assertive"' in PHONE_PAGE
+    assert 'const powerDeadlineKey="jarvisPowerDeadline"' in PHONE_PAGE
+    assert 'data.kind==="power_shutdown"' in PHONE_PAGE
+    assert 'data.kind==="power_cancel"' in PHONE_PAGE
+    assert "startPowerCountdown(data.updated_at)" in PHONE_PAGE
+    assert "syncPowerCountdown(data)" in PHONE_PAGE
+    assert "restorePowerCountdown()" in PHONE_PAGE
+    assert "startedAt+60000" in PHONE_PAGE
+
+
+def test_phone_countdown_template_drift_fails_closed() -> None:
+    with pytest.raises(RuntimeError, match="template anchor changed"):
+        enhance_phone_page("<html></html>")
 
 
 def test_cloud_deployment_gate_requires_full_source_integrity() -> None:

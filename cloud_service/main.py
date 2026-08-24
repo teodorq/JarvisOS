@@ -32,12 +32,12 @@ from cloud_service.phone_ui import (
     PHONE_LOGOUT_PAGE,
     PHONE_MANIFEST,
     PHONE_OFFLINE_PAGE,
-    PHONE_PAGE,
     PHONE_SERVICE_WORKER,
     PHONE_START_PAGE,
     phone_diagnostics_page,
     phone_login_complete_page,
 )
+from cloud_service.phone_power_countdown import PHONE_PAGE
 from cloud_service.remote_store import (
     RemoteCommandStore,
     RemoteStoreConflict,
@@ -49,7 +49,7 @@ from cloud_service.remote_store import (
 
 
 SERVICE_NAME = "jarvis-os-cloud-planner"
-SERVICE_VERSION = "0.9.4"
+SERVICE_VERSION = "0.9.5"
 MAX_BODY_BYTES = 16_384
 
 

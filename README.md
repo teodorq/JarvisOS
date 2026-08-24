@@ -306,8 +306,12 @@ The phone page has a separate owner-only computer power card. Shutdown cannot
 be requested through the free-text command box: the owner must open the red
 control, type `WYLACZ` and press the second confirmation button. The dedicated
 request expires after five minutes. Once the desktop receives it, JARVIS keeps
-a local 60-second countdown and exposes `ANULUJ WYŁĄCZENIE` on the phone. The
-final Windows call uses `/t 0` without `/f`, so applications can still protect
+a local 60-second countdown and exposes `ANULUJ WYŁĄCZENIE` on the phone.
+The phone displays the remaining seconds from the desktop completion timestamp
+and restores that countdown after a page refresh. A confirmed cancellation
+clears the saved visual state; the local Windows timer remains the only
+shutdown authority. The final Windows call uses `/t 0` without `/f`, so
+applications can still protect
 unsaved work. Closing JARVIS during the countdown cancels it, and no power
 request is restored after an application or computer restart.
 
