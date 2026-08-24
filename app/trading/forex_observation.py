@@ -153,11 +153,20 @@ class ForexObservationJournal:
         observed_times: list[datetime] = []
         expected_pairs = {pair.symbol for pair in MAJOR_FOREX_PAIRS}
         expected_candidate = ForexRegimeFilteredScanner(MAJOR_FOREX_PAIRS)
+        candidate_forward_seen_count = 0
+        candidate_forward_expected_count = 0
         candidate_forward_count = 0
+        candidate_invalid_forward_count = 0
         candidate_market_days: Counter[str] = Counter()
         candidate_assessment_actions: Counter[str] = Counter()
         candidate_instruction_actions: Counter[str] = Counter()
-        candidate_evidence_valid = True
+        candidate_exclusion_reasons: Counter[str] = Counter()
+        candidate_contract_issues: Counter[str] = Counter()
+        candidate_filter_reasons: Counter[str] = Counter()
+        candidate_entry_pairs: Counter[str] = Counter()
+        candidate_base_entry_signal_count = 0
+        candidate_retained_entry_signal_count = 0
+        candidate_filtered_entry_signal_count = 0
         qualified_pair_coverage_complete = True
         qualified_count = 0
         schema_issue_detected = False
@@ -188,45 +197,196 @@ class ForexObservationJournal:
                     market_days.update((observed_at.date().isoformat(),))
 
                 raw_candidate = item.get("development_candidate_v2")
-                if isinstance(raw_candidate, Mapping) and raw_candidate.get(
-                    "forward_eligible"
-                ) is True:
+                candidate_expected = (
+                    is_qualified
+                    and expected_candidate.candidate_policy.forward_eligible(
+                        observed_at
+                    )
+                )
+                if candidate_expected:
+                    candidate_forward_expected_count += 1
+                candidate_forward = (
+                    isinstance(raw_candidate, Mapping)
+                    and raw_candidate.get("forward_eligible") is True
+                )
+                if candidate_expected and not candidate_forward:
+                    candidate_invalid_forward_count += 1
+                    candidate_contract_issues.update((
+                        "CANDIDATE_PAYLOAD_MISSING",
+                    ))
+                if candidate_forward:
+                    candidate_forward_seen_count += 1
                     candidate = dict(raw_candidate)
-                    candidate_assessments = list(
-                        candidate.get("assessments", []) or []
+                    raw_candidate_assessments = candidate.get(
+                        "assessments", []
+                    )
+                    candidate_assessments = (
+                        list(raw_candidate_assessments)
+                        if isinstance(raw_candidate_assessments, (list, tuple))
+                        else []
                     )
                     candidate_plan = candidate.get("proposed_plan", {})
                     candidate_instructions = list(
                         candidate_plan.get("instructions", []) or []
                     ) if isinstance(candidate_plan, Mapping) else []
-                    candidate_pairs = {
+                    candidate_pair_names = [
                         str(assessment.get("pair", ""))
                         for assessment in candidate_assessments
                         if isinstance(assessment, Mapping)
                         and assessment.get("pair")
-                    }
+                    ]
+                    candidate_pairs = set(candidate_pair_names)
+                    raw_base_assessments = item.get("assessments", [])
+                    base_assessments = (
+                        list(raw_base_assessments)
+                        if isinstance(raw_base_assessments, (list, tuple))
+                        else []
+                    )
+                    base_pair_names = [
+                        str(assessment.get("pair", ""))
+                        for assessment in base_assessments
+                        if isinstance(assessment, Mapping)
+                        and assessment.get("pair")
+                    ]
+                    base_pairs = set(base_pair_names)
                     candidate_execution = candidate.get("execution", {})
-                    candidate_safe = (
-                        is_qualified
-                        and candidate.get("candidate_id")
-                        == expected_candidate.candidate_policy.candidate_id
-                        and candidate.get("policy_fingerprint_sha256")
-                        == expected_candidate.candidate_policy.fingerprint_sha256
-                        and candidate_pairs == expected_pairs
-                        and isinstance(candidate_execution, Mapping)
-                        and candidate_execution.get("status") == "NOT_EXECUTED"
-                        and candidate.get("automatic_paper_promotion") is False
-                        and candidate.get("paper_orders_sent") is False
-                        and candidate.get("live_orders_sent") is False
-                    )
-                    candidate_evidence_valid = (
-                        candidate_evidence_valid and candidate_safe
-                    )
-                    if candidate_safe:
+                    candidate_entries = {
+                        (
+                            str(assessment.get("pair", "")),
+                            str(assessment.get("action", "")),
+                        )
+                        for assessment in candidate_assessments
+                        if isinstance(assessment, Mapping)
+                        and str(assessment.get("action", "")).startswith(
+                            "OPEN_"
+                        )
+                    }
+                    base_entries = {
+                        (
+                            str(assessment.get("pair", "")),
+                            str(assessment.get("action", "")),
+                        )
+                        for assessment in base_assessments
+                        if isinstance(assessment, Mapping)
+                        and str(assessment.get("action", "")).startswith(
+                            "OPEN_"
+                        )
+                    }
+                    candidate_exits = {
+                        (
+                            str(assessment.get("pair", "")),
+                            str(assessment.get("action", "")),
+                        )
+                        for assessment in candidate_assessments
+                        if isinstance(assessment, Mapping)
+                        and str(assessment.get("action", "")).startswith(
+                            "CLOSE_"
+                        )
+                    }
+                    base_exits = {
+                        (
+                            str(assessment.get("pair", "")),
+                            str(assessment.get("action", "")),
+                        )
+                        for assessment in base_assessments
+                        if isinstance(assessment, Mapping)
+                        and str(assessment.get("action", "")).startswith(
+                            "CLOSE_"
+                        )
+                    }
+                    contract_issues: list[str] = []
+                    for invalid, code in (
+                        (
+                            candidate.get("candidate_id")
+                            != expected_candidate.candidate_policy.candidate_id,
+                            "CANDIDATE_ID_MISMATCH",
+                        ),
+                        (
+                            candidate.get("policy_fingerprint_sha256")
+                            != expected_candidate.candidate_policy.fingerprint_sha256,
+                            "POLICY_FINGERPRINT_MISMATCH",
+                        ),
+                        (
+                            not isinstance(
+                                raw_candidate_assessments, (list, tuple)
+                            )
+                            or candidate_pairs != expected_pairs
+                            or len(candidate_pair_names) != len(expected_pairs),
+                            "CANDIDATE_PAIR_COVERAGE_INVALID",
+                        ),
+                        (
+                            not isinstance(candidate_execution, Mapping)
+                            or candidate_execution.get("status")
+                            != "NOT_EXECUTED",
+                            "CANDIDATE_EXECUTION_CONTRACT_INVALID",
+                        ),
+                        (
+                            candidate.get("automatic_paper_promotion") is not False,
+                            "CANDIDATE_PROMOTION_FLAG_INVALID",
+                        ),
+                        (
+                            candidate.get("paper_orders_sent") is not False,
+                            "CANDIDATE_PAPER_ORDER_FLAG_INVALID",
+                        ),
+                        (
+                            candidate.get("live_orders_sent") is not False,
+                            "CANDIDATE_LIVE_ORDER_FLAG_INVALID",
+                        ),
+                        (
+                            bool(candidate_entries - base_entries),
+                            "CANDIDATE_ENTRY_NOT_SUBSET_OF_BASE",
+                        ),
+                        (
+                            candidate_exits != base_exits,
+                            "CANDIDATE_EXIT_PARITY_INVALID",
+                        ),
+                    ):
+                        if invalid:
+                            contract_issues.append(code)
+                    if contract_issues:
+                        candidate_invalid_forward_count += 1
+                        candidate_contract_issues.update(set(contract_issues))
+                    elif not is_qualified:
+                        candidate_exclusion_reasons.update((
+                            "BASE_OBSERVATION_NOT_QUALIFIED",
+                        ))
+                    elif (
+                        base_pairs != expected_pairs
+                        or len(base_pair_names) != len(expected_pairs)
+                    ):
+                        candidate_exclusion_reasons.update((
+                            "BASE_PAIR_COVERAGE_INCOMPLETE",
+                        ))
+                    else:
                         candidate_forward_count += 1
                         candidate_market_days.update(
                             (observed_at.date().isoformat(),)
                         )
+                        candidate_base_entry_signal_count += len(base_entries)
+                        candidate_retained_entry_signal_count += len(
+                            candidate_entries
+                        )
+                        filtered_entries = base_entries - candidate_entries
+                        candidate_filtered_entry_signal_count += len(
+                            filtered_entries
+                        )
+                        candidate_entry_pairs.update(
+                            pair for pair, _action in candidate_entries
+                        )
+                        candidate_by_pair = {
+                            str(assessment.get("pair", "")): assessment
+                            for assessment in candidate_assessments
+                            if isinstance(assessment, Mapping)
+                        }
+                        for pair, _action in filtered_entries:
+                            assessment = candidate_by_pair.get(pair, {})
+                            raw_reasons = assessment.get("reason_codes", [])
+                            if isinstance(raw_reasons, (list, tuple)):
+                                candidate_filter_reasons.update(
+                                    str(code)
+                                    for code in raw_reasons
+                                    if str(code)
+                                )
                         for assessment in candidate_assessments:
                             if isinstance(assessment, Mapping):
                                 candidate_assessment_actions.update((str(
@@ -393,15 +553,57 @@ class ForexObservationJournal:
                 "frozen_after": (
                     expected_candidate.candidate_policy.frozen_after.isoformat()
                 ),
+                "expected_forward_observation_count": (
+                    candidate_forward_expected_count
+                ),
+                "seen_forward_observation_count": candidate_forward_seen_count,
                 "valid_forward_observation_count": candidate_forward_count,
+                "excluded_forward_observation_count": sum(
+                    candidate_exclusion_reasons.values()
+                ),
+                "invalid_forward_observation_count": (
+                    candidate_invalid_forward_count
+                ),
                 "valid_forward_market_day_count": len(candidate_market_days),
-                "evidence_valid": candidate_evidence_valid,
+                "evidence_valid": bool(
+                    candidate_forward_expected_count
+                    and not candidate_contract_issues
+                ),
+                "exclusion_reasons": dict(sorted(
+                    candidate_exclusion_reasons.items()
+                )),
+                "contract_issues": dict(sorted(
+                    candidate_contract_issues.items()
+                )),
                 "assessment_actions": dict(sorted(
                     candidate_assessment_actions.items()
                 )),
                 "proposed_instruction_actions": dict(sorted(
                     candidate_instruction_actions.items()
                 )),
+                "signal_comparison": {
+                    "base_entry_signal_count": (
+                        candidate_base_entry_signal_count
+                    ),
+                    "retained_entry_signal_count": (
+                        candidate_retained_entry_signal_count
+                    ),
+                    "filtered_entry_signal_count": (
+                        candidate_filtered_entry_signal_count
+                    ),
+                    "entry_signal_retention_pct": round(
+                        candidate_retained_entry_signal_count
+                        * 100
+                        / candidate_base_entry_signal_count,
+                        2,
+                    ) if candidate_base_entry_signal_count else 0.0,
+                    "retained_entry_pairs": dict(sorted(
+                        candidate_entry_pairs.items()
+                    )),
+                    "filter_reasons": dict(sorted(
+                        candidate_filter_reasons.items()
+                    )),
+                },
                 "strategy_performance_validated": False,
                 "automatic_paper_promotion": False,
                 "paper_execution_enabled": False,

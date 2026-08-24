@@ -208,6 +208,10 @@ The same report contains an isolated `development_candidate_v2` replay. It
 marks the already-known history as reused development data and always requires
 new post-freeze evidence, so repeatedly running the report cannot turn an
 overfit result into validation.
+Its read-only forward scorecard separates unqualified post-freeze cycles from
+invalid candidate contracts and compares base entry signals with the entries
+retained or filtered by V2. Counts never validate performance, promote the
+candidate, or enable PAPER/LIVE execution.
 If one M15 candle touches both stop and target, the backtest records the stop
 first. Gaps through a stop use the worse opening execution price, while target
 gaps are capped at the target. These deliberately conservative assumptions

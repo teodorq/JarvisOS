@@ -239,6 +239,19 @@ class TradingControlCenter:
         action_text = ", ".join(
             f"{action}: {count}" for action, count in actions.items()
         ) or "brak propozycji"
+        candidate = review["development_candidate_v2"]
+        comparison = candidate["signal_comparison"]
+        candidate_exclusions = ", ".join(
+            f"{code}: {count}"
+            for code, count in candidate["exclusion_reasons"].items()
+        ) or "brak"
+        candidate_issues = ", ".join(
+            f"{code}: {count}"
+            for code, count in candidate["contract_issues"].items()
+        ) or "brak"
+        candidate_contract = (
+            "prawidłowy" if candidate["evidence_valid"] else "NIEPRAWIDŁOWY"
+        )
         safety = review["safety"]
         if review["status"] == "READY_FOR_OWNER_REVIEW":
             decision = "GOTOWY DO RĘCZNEGO PRZEGLĄDU; PAPER nadal jest wyłączony"
@@ -260,6 +273,18 @@ class TradingControlCenter:
             f"{review['qualified_market_day_count']}/{review['minimum_market_days']}.\n"
             f"• Przyczyny blokad: {block_text}.\n"
             f"• Proponowane decyzje (niewykonane): {action_text}.\n"
+            f"• Kandydat V2 forward: ważne "
+            f"{candidate['valid_forward_observation_count']}/"
+            f"{candidate['expected_forward_observation_count']}; odebrane "
+            f"{candidate['seen_forward_observation_count']}; wykluczone "
+            f"{candidate['excluded_forward_observation_count']} "
+            f"({candidate_exclusions}); kontrakt {candidate_contract} "
+            f"({candidate_issues}).\n"
+            f"• Filtr V2: sygnały bazowe "
+            f"{comparison['base_entry_signal_count']}; zachowane "
+            f"{comparison['retained_entry_signal_count']}; odfiltrowane "
+            f"{comparison['filtered_entry_signal_count']}; retencja "
+            f"{comparison['entry_signal_retention_pct']:.2f}%.\n"
             f"• Audyt: {'prawidłowy' if review['audit_chain_valid'] else 'USZKODZONY'}; "
             f"pokrycie 7 par: {'pełne' if safety['qualified_pair_coverage_complete'] else 'NIEPEŁNE'}.\n"
             f"• Bezpieczeństwo: pozycje {'bez zmian' if safety['all_positions_unchanged'] else 'ZMIENIONE'}; "

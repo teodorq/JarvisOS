@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -93,13 +94,19 @@ def bundle(now: datetime, *, open_market: bool = True) -> ForexDataBundle:
 
 
 class FakeGateway:
-    def __init__(self, *, failing: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        failing: bool = False,
+        open_market: bool = True,
+    ) -> None:
         self.failing = failing
+        self.open_market = open_market
 
     def collect(self, *, now: datetime) -> ForexDataBundle:
         if self.failing:
             raise TradingValidationError("forex_data_gate: source_unavailable")
-        return bundle(now)
+        return bundle(now, open_market=self.open_market)
 
 
 class ForexObservationTests(unittest.TestCase):
@@ -109,10 +116,18 @@ class ForexObservationTests(unittest.TestCase):
         self.root = Path(self.temporary.name)
         self.now = datetime(2026, 8, 17, 10, 0, tzinfo=UTC)
 
-    def service(self, *, failing: bool = False) -> ForexObservationService:
+    def service(
+        self,
+        *,
+        failing: bool = False,
+        open_market: bool = True,
+    ) -> ForexObservationService:
         return ForexObservationService(
             self.root,
-            gateway=FakeGateway(failing=failing),  # type: ignore[arg-type]
+            gateway=FakeGateway(
+                failing=failing,
+                open_market=open_market,
+            ),  # type: ignore[arg-type]
         )
 
     def test_observation_records_plan_without_executing_it(self) -> None:
@@ -266,12 +281,93 @@ class ForexObservationTests(unittest.TestCase):
 
         candidate = service.journal.review()["development_candidate_v2"]
 
+        self.assertEqual(candidate["expected_forward_observation_count"], 1)
+        self.assertEqual(candidate["seen_forward_observation_count"], 1)
         self.assertEqual(candidate["valid_forward_observation_count"], 1)
+        self.assertEqual(candidate["excluded_forward_observation_count"], 0)
+        self.assertEqual(candidate["invalid_forward_observation_count"], 0)
         self.assertEqual(candidate["valid_forward_market_day_count"], 1)
         self.assertTrue(candidate["evidence_valid"])
+        self.assertEqual(candidate["contract_issues"], {})
+        comparison = candidate["signal_comparison"]
+        self.assertEqual(comparison["base_entry_signal_count"], 1)
+        self.assertEqual(comparison["retained_entry_signal_count"], 0)
+        self.assertEqual(comparison["filtered_entry_signal_count"], 1)
+        self.assertEqual(comparison["entry_signal_retention_pct"], 0.0)
+        self.assertEqual(comparison["retained_entry_pairs"], {})
+        self.assertEqual(
+            comparison["filter_reasons"],
+            {"CANDIDATE_V2_H1_HISTORY_INSUFFICIENT": 1},
+        )
         self.assertFalse(candidate["strategy_performance_validated"])
         self.assertFalse(candidate["paper_execution_enabled"])
         self.assertFalse(candidate["live_execution_enabled"])
+        rendered = TradingControlCenter(
+            self.root
+        ).format_observation_review()
+        self.assertIn("Kandydat V2 forward", rendered)
+        self.assertIn("odfiltrowane 1", rendered)
+        self.assertIn("Raport nie może sam uruchomić PAPER ani LIVE", rendered)
+
+    def test_review_excludes_unqualified_candidate_without_invalidating_it(
+        self,
+    ) -> None:
+        observed = datetime(2026, 8, 21, 10, 0, tzinfo=UTC)
+        self.service().observe_once(
+            observation_id="forex-candidate-qualified-0001",
+            now=observed,
+        )
+        self.service(open_market=False).observe_once(
+            observation_id="forex-candidate-market-closed-0001",
+            now=observed + timedelta(minutes=15),
+        )
+
+        candidate = ForexObservationJournal(self.root).review()[
+            "development_candidate_v2"
+        ]
+
+        self.assertEqual(candidate["expected_forward_observation_count"], 1)
+        self.assertEqual(candidate["seen_forward_observation_count"], 2)
+        self.assertEqual(candidate["valid_forward_observation_count"], 1)
+        self.assertEqual(candidate["excluded_forward_observation_count"], 1)
+        self.assertEqual(candidate["invalid_forward_observation_count"], 0)
+        self.assertEqual(
+            candidate["exclusion_reasons"],
+            {"BASE_OBSERVATION_NOT_QUALIFIED": 1},
+        )
+        self.assertEqual(candidate["contract_issues"], {})
+        self.assertTrue(candidate["evidence_valid"])
+
+    def test_review_rejects_invalid_candidate_contract(self) -> None:
+        service = self.service()
+        observed = datetime(2026, 8, 21, 10, 0, tzinfo=UTC)
+        original = service.observe_once(
+            observation_id="forex-candidate-contract-valid-0001",
+            now=observed,
+        )
+        invalid = deepcopy(original)
+        invalid["observation_id"] = "forex-candidate-contract-invalid-0001"
+        invalid["observed_at"] = (
+            observed + timedelta(minutes=15)
+        ).isoformat()
+        invalid["development_candidate_v2"][
+            "policy_fingerprint_sha256"
+        ] = "invalid-fingerprint"
+        service.journal.record(invalid)
+
+        review = service.journal.review()
+        candidate = review["development_candidate_v2"]
+
+        self.assertTrue(review["audit_chain_valid"])
+        self.assertEqual(candidate["expected_forward_observation_count"], 2)
+        self.assertEqual(candidate["seen_forward_observation_count"], 2)
+        self.assertEqual(candidate["valid_forward_observation_count"], 1)
+        self.assertEqual(candidate["invalid_forward_observation_count"], 1)
+        self.assertEqual(
+            candidate["contract_issues"],
+            {"POLICY_FINGERPRINT_MISMATCH": 1},
+        )
+        self.assertFalse(candidate["evidence_valid"])
 
     def test_review_blocks_incomplete_safety_evidence(self) -> None:
         journal = ForexObservationJournal(self.root)
