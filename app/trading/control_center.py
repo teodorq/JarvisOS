@@ -254,7 +254,10 @@ class TradingControlCenter:
         )
         safety = review["safety"]
         if review["status"] == "READY_FOR_OWNER_REVIEW":
-            decision = "GOTOWY DO RĘCZNEGO PRZEGLĄDU; PAPER nadal jest wyłączony"
+            decision = (
+                "GOTOWY DO RĘCZNEGO PRZEGLĄDU; kandydat V2 nie jest "
+                "automatycznie awansowany"
+            )
         elif review["status"] == "BLOCKED":
             decision = "ZABLOKOWANY przez błąd integralności lub bezpieczeństwa"
         else:
@@ -291,7 +294,7 @@ class TradingControlCenter:
             f"zlecenia PAPER: {'wykryte' if safety['paper_orders_detected'] else '0'}; "
             f"zlecenia LIVE: {'wykryte' if safety['live_orders_detected'] else '0'}; "
             f"sieć zleceń: {'wykryta' if safety['order_network_access_detected'] else 'wyłączona'}.\n"
-            "• Raport nie może sam uruchomić PAPER ani LIVE."
+            "• Raport nie może zmienić stanu PAPER/LIVE ani sam awansować V2."
         )
 
     def format_status(self) -> str:

@@ -307,7 +307,10 @@ class ForexObservationTests(unittest.TestCase):
         ).format_observation_review()
         self.assertIn("Kandydat V2 forward", rendered)
         self.assertIn("odfiltrowane 1", rendered)
-        self.assertIn("Raport nie może sam uruchomić PAPER ani LIVE", rendered)
+        self.assertIn(
+            "Raport nie może zmienić stanu PAPER/LIVE ani sam awansować V2",
+            rendered,
+        )
 
     def test_review_excludes_unqualified_candidate_without_invalidating_it(
         self,
