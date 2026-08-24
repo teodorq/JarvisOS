@@ -550,7 +550,10 @@ class TradingControlAndRoutingTests(unittest.TestCase):
             response = controller.handle(command)
         self.assertTrue(thought["read_only"])
         self.assertIn("tylko odczyt", response)
-        self.assertIn("Raport nie może sam uruchomić PAPER ani LIVE", response)
+        self.assertIn(
+            "Raport nie może zmienić stanu PAPER/LIVE ani sam awansować V2",
+            response,
+        )
         self.assertIn(
             "tylko w trybie właściciela",
             ClientCapabilityPolicy.denial_for_thought(thought),

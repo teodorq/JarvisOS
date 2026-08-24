@@ -84,9 +84,14 @@ class ForexPaperPage(QWidget):
             "equity": MetricCard("WARTOŚĆ KONTA", "—", "PLN"),
             "unrealized": MetricCard("WYNIK OTWARTY", "—", "PLN"),
             "positions": MetricCard("POZYCJE", "0", "PAPER"),
+            "closed": MetricCard("PRÓBKA WYNIKÓW", "0 / 20", "PAPER"),
+            "average": MetricCard("ŚREDNIA / TRANSAKCJĘ", "—", "PLN"),
+            "profit_factor": MetricCard("PROFIT FACTOR", "N/D", "PAPER"),
+            "drawdown": MetricCard("OBSUNIĘCIE", "—", "PLN"),
         }
-        for column, card in enumerate(self.metrics.values()):
-            layout.addWidget(card, 0, column)
+        for index, card in enumerate(self.metrics.values()):
+            row, column = divmod(index, 4)
+            layout.addWidget(card, row, column)
         return layout
 
     def _positions_card(self) -> SectionCard:
@@ -196,6 +201,32 @@ class ForexPaperPage(QWidget):
         raw_positions = raw_positions if isinstance(raw_positions, list) else []
         positions = [dict(item) for item in raw_positions[:5] if isinstance(item, dict)]
         self.metrics["positions"].set_value(str(len(positions)))
+        performance = snapshot.get("performance")
+        performance = (
+            dict(performance) if isinstance(performance, dict) else {}
+        )
+        closed = int(performance.get("valid_closed_trade_count", 0) or 0)
+        required = int(
+            performance.get("minimum_closed_trades_for_review", 20) or 20
+        )
+        self.metrics["closed"].set_value(f"{closed} / {required}")
+        self.metrics["closed"].set_hint(
+            "Ręczny przegląd po zebraniu pełnej próbki."
+        )
+        average = str(performance.get("average_trade_pnl_pln", "0.00"))
+        self.metrics["average"].set_value(f"{average} PLN")
+        factor = performance.get("profit_factor")
+        self.metrics["profit_factor"].set_value(
+            str(factor) if factor is not None else "N/D"
+        )
+        drawdown = str(
+            performance.get("maximum_closed_trade_drawdown_pln", "0.00")
+        )
+        drawdown_pct = str(
+            performance.get("maximum_closed_trade_drawdown_pct", "0.00")
+        )
+        self.metrics["drawdown"].set_value(f"{drawdown} PLN")
+        self.metrics["drawdown"].set_hint(f"{drawdown_pct}% zamkniętej krzywej")
         self._fill_positions(positions)
         history = []
         if self.activity is not None:

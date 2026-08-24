@@ -108,10 +108,14 @@ Lokalny cykl autonomiczny wykonuje kolejno:
    ekspozycji na każdą walutę.
 7. Ponowną kontrolę ryzyka bezpośrednio w lokalnym wykonawcy PAPER.
 8. Atomowy zapis cyklu, otwarcia lub zamknięcia i łańcucha audytowego.
+9. Wyłącznie odczytowe wyliczenie wyniku średniego, profit factor, obsunięcia
+   zamkniętej krzywej i serii strat z operacji zgodnych z audytem oraz saldem.
 
 Powtórzenie identycznego identyfikatora cyklu nie tworzy drugiej pozycji.
 Kill switch blokuje nowe wejścia, ale nie usuwa możliwości bezpiecznego
 zamknięcia istniejącej pozycji. Sygnały LONG i SHORT są wyłącznie symulowane.
+Próg 20 zamkniętych transakcji oznacza jedynie próbkę gotową do ręcznego
+przeglądu. Nie uruchamia optymalizacji, zmiany strategii ani promocji LIVE.
 
 Warstwa danych tylko do odczytu jest przygotowana, lecz domyślnie wyłączona.
 Obejmuje cztery rozdzielone role:

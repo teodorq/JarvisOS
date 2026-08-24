@@ -130,6 +130,11 @@ seconds and shows the sanitized local PAPER balance, equity, unrealized result,
 position count, pair, direction, units, entry, current price, stop loss and take
 profit. The page has no buy, sell or close controls and cannot route broker
 orders. The `status Forex` command also lists the currently open PAPER entries.
+It also derives a read-only performance review from closed fills that match the
+tamper-evident execution audit and reconcile with the PAPER balance. The second
+metric row shows sample progress, average trade result, profit factor and the
+maximum closed-equity drawdown. Twenty valid closed trades only make the sample
+available for manual review; they never validate the strategy or enable LIVE.
 
 Every watchdog cycle also appends safe open, close, first data-block and recovery
 events to the bounded, ignored `data/trading/forex_paper_activity_history.json`.

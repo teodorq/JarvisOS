@@ -300,6 +300,19 @@ class TradingControlCenter:
     def format_status(self) -> str:
         snapshot = self.status()
         forex_account = snapshot["forex"]["paper_account"]
+        performance = dict(forex_account.get("performance", {}) or {})
+        performance_integrity = dict(
+            performance.get("integrity", {}) or {}
+        )
+        profit_factor = performance.get("profit_factor")
+        profit_factor_text = (
+            str(profit_factor) if profit_factor is not None else "n/d"
+        )
+        performance_evidence = (
+            "prawidłowe"
+            if performance_integrity.get("evidence_valid") is True
+            else "NIEPRAWIDŁOWE"
+        )
         runtime_cycle = snapshot["forex"]["last_runtime_cycle"]
         data = snapshot["forex"]["data_configuration"]
         observation = snapshot["forex"]["observation"]
@@ -423,6 +436,17 @@ class TradingControlCenter:
             f"wynik zrealizowany: {forex_account['realized_pnl_pln']} PLN; "
             f"pozycje: {forex_account['position_count']}; zamknięte transakcje: "
             f"{forex_account['closed_trade_count']}.\n"
+            f"• Jakość PAPER: próbka "
+            f"{performance.get('valid_closed_trade_count', 0)}/"
+            f"{performance.get('minimum_closed_trades_for_review', 20)}; "
+            f"średni wynik "
+            f"{performance.get('average_trade_pnl_pln', '0.00')} PLN; "
+            f"profit factor {profit_factor_text}; maks. obsunięcie zamkniętych "
+            f"{performance.get('maximum_closed_trade_drawdown_pln', '0.00')} PLN "
+            f"({performance.get('maximum_closed_trade_drawdown_pct', '0.00')}%); "
+            f"najdłuższa seria strat "
+            f"{performance.get('maximum_consecutive_losses', 0)}; "
+            f"dowody {performance_evidence}.\n"
             f"• Otwarte pozycje PAPER: {position_details}.\n"
             f"• Cykle autopilota: {forex_account['processed_cycle_count']}; "
             f"ostatnia decyzja: {latest_cycle_text}.\n"

@@ -36,6 +36,18 @@ def _account() -> dict:
             "opened_at": "2026-08-21T10:09:38+00:00",
         }],
         "closed_trade_count": 0,
+        "performance": {
+            "status": "COLLECTING_PAPER_SAMPLE",
+            "valid_closed_trade_count": 1,
+            "minimum_closed_trades_for_review": 20,
+            "sample_progress_pct": "5.00",
+            "average_trade_pnl_pln": "-44.26",
+            "profit_factor": "0.0000",
+            "maximum_closed_trade_drawdown_pln": "44.26",
+            "maximum_closed_trade_drawdown_pct": "0.04",
+            "maximum_consecutive_losses": 1,
+            "integrity": {"evidence_valid": True},
+        },
         "processed_cycle_count": 75,
         "audit_chain_valid": True,
         "kill_switch_active": False,
@@ -81,6 +93,10 @@ def test_dashboard_projects_latest_safe_paper_cycle() -> None:
             "opened_at": "2026-08-21T10:09:38+00:00",
         }
         assert snapshot["unrealized_pnl_pln"] == "-1.88"
+        assert snapshot["performance"]["valid_closed_trade_count"] == 1
+        assert snapshot["performance"]["profit_factor"] == "0.0000"
+        assert snapshot["performance"]["evidence_valid"] is True
+        assert snapshot["performance"]["live_promotion_ready"] is False
         assert snapshot["live_orders_sent"] is False
 
 

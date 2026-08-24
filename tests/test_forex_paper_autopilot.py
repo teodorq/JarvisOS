@@ -165,6 +165,14 @@ class ForexPaperAutopilotTests(unittest.TestCase):
         self.assertEqual(status["winning_trade_count"], 0)
         self.assertEqual(status["losing_trade_count"], 1)
         self.assertLess(Decimal(status["realized_pnl_pln"]), 0)
+        performance = status["performance"]
+        self.assertEqual(performance["valid_closed_trade_count"], 1)
+        self.assertEqual(performance["profit_factor"], "0.0000")
+        self.assertEqual(performance["maximum_consecutive_losses"], 1)
+        self.assertTrue(performance["integrity"]["evidence_valid"])
+        self.assertFalse(performance["sample_size_sufficient_for_review"])
+        self.assertFalse(performance["performance_validated"])
+        self.assertFalse(performance["live_promotion_ready"])
         self.assertEqual(status["open_positions"], [])
 
     def test_missing_second_source_produces_no_execution(self) -> None:

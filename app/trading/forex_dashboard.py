@@ -89,6 +89,7 @@ class ForexPaperDashboard:
         source: str,
     ) -> dict[str, Any]:
         positions = self._positions(account.get("open_positions"))
+        performance = self._performance(account.get("performance"))
         return {
             "status": "READY",
             "mode": "FOREX_PAPER_ONLY",
@@ -103,6 +104,7 @@ class ForexPaperDashboard:
             "position_count": len(positions),
             "positions": positions,
             "closed_trade_count": self._count(account.get("closed_trade_count")),
+            "performance": performance,
             "processed_cycle_count": self._count(
                 account.get("processed_cycle_count")
             ),
@@ -112,6 +114,45 @@ class ForexPaperDashboard:
             "live_orders_sent": False,
             "real_money_access": False,
             "message": "Lokalna symulacja; brak zleceń u brokera.",
+        }
+
+    @classmethod
+    def _performance(cls, value: object) -> dict[str, Any]:
+        item = dict(value) if isinstance(value, dict) else {}
+        integrity = item.get("integrity")
+        integrity = dict(integrity) if isinstance(integrity, dict) else {}
+        raw_factor = item.get("profit_factor")
+        return {
+            "status": str(item.get("status", "COLLECTING_PAPER_SAMPLE"))[:80],
+            "valid_closed_trade_count": cls._count(
+                item.get("valid_closed_trade_count")
+            ),
+            "minimum_closed_trades_for_review": cls._count(
+                item.get("minimum_closed_trades_for_review") or 20
+            ),
+            "sample_progress_pct": cls._number(
+                item.get("sample_progress_pct"), 2
+            ),
+            "average_trade_pnl_pln": cls._number(
+                item.get("average_trade_pnl_pln"), 2
+            ),
+            "profit_factor": (
+                cls._number(raw_factor, 4)
+                if raw_factor is not None
+                else None
+            ),
+            "maximum_closed_trade_drawdown_pln": cls._number(
+                item.get("maximum_closed_trade_drawdown_pln"), 2
+            ),
+            "maximum_closed_trade_drawdown_pct": cls._number(
+                item.get("maximum_closed_trade_drawdown_pct"), 2
+            ),
+            "maximum_consecutive_losses": cls._count(
+                item.get("maximum_consecutive_losses")
+            ),
+            "evidence_valid": integrity.get("evidence_valid") is True,
+            "performance_validated": False,
+            "live_promotion_ready": False,
         }
 
     @classmethod

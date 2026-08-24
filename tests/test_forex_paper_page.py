@@ -18,6 +18,14 @@ class _Dashboard:
             "balance_pln": "100000.00",
             "equity_pln": "99998.12",
             "unrealized_pnl_pln": "-1.88",
+            "performance": {
+                "valid_closed_trade_count": 1,
+                "minimum_closed_trades_for_review": 20,
+                "average_trade_pnl_pln": "-44.26",
+                "profit_factor": "0.0000",
+                "maximum_closed_trade_drawdown_pln": "44.26",
+                "maximum_closed_trade_drawdown_pct": "0.04",
+            },
             "positions": [{
                 "pair": "USD_CHF",
                 "side": "SHORT",
@@ -53,6 +61,10 @@ def test_forex_page_shows_position_and_has_no_execution_controls() -> None:
         assert page.table.item(0, 1).text() == "SPRZEDAŻ / SHORT"
         assert page.table.item(0, 5).text() == "0.800040"
         assert page.metrics["unrealized"].value_label.text() == "-1.88 PLN"
+        assert page.metrics["closed"].value_label.text() == "1 / 20"
+        assert page.metrics["average"].value_label.text() == "-44.26 PLN"
+        assert page.metrics["profit_factor"].value_label.text() == "0.0000"
+        assert page.metrics["drawdown"].value_label.text() == "44.26 PLN"
         assert page.history_table.rowCount() == 1
         assert page.history_table.item(0, 1).text() == "OTWARCIE"
         assert page.history_table.item(0, 3).text() == "OCZEKUJE"

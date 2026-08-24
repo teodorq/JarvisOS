@@ -13,6 +13,9 @@ from uuid import uuid4
 from app.trading.forex_coordinator import ForexPaperCoordinator
 from app.trading.forex_ledger import ForexPaperLedger
 from app.trading.forex_models import ForexPosition, ForexQuote, major_pair
+from app.trading.forex_paper_performance import (
+    build_forex_paper_performance_review,
+)
 from app.trading.forex_risk import (
     ForexPaperPolicy,
     ForexPortfolioRiskEngine,
@@ -396,6 +399,26 @@ class ForexPaperExecutionEngine:
             else Decimal("0")
         )
         balance = _decimal(state.get("balance_pln"))
+        audit_chain_valid = self.ledger.verify_audit(state)
+        audited_closed_fills: list[dict[str, Any]] = []
+        for raw_event in list(state.get("audit", []) or []):
+            event = dict(raw_event or {})
+            if event.get("event_type") != "FOREX_PAPER_CYCLE":
+                continue
+            details = dict(event.get("details", {}) or {})
+            for raw_fill in list(details.get("executions", []) or []):
+                fill = dict(raw_fill or {})
+                if str(fill.get("action", "")).startswith("CLOSE_"):
+                    audited_closed_fills.append(fill)
+        performance = build_forex_paper_performance_review(
+            closed_fills,
+            initial_balance_pln=state.get("initial_balance_pln"),
+            current_balance_pln=state.get("balance_pln"),
+            audit_chain_valid=audit_chain_valid,
+            execution_audit_matches_ledger=(
+                closed_fills == audited_closed_fills
+            ),
+        )
         return {
             "status": "READY" if state.get("mode") == "FOREX_PAPER_ONLY" else "BLOCKED",
             "mode": str(state.get("mode", "")),
@@ -436,6 +459,7 @@ class ForexPaperExecutionEngine:
             "losing_trade_count": losing_trades,
             "breakeven_trade_count": breakeven_trades,
             "win_rate_pct": _text(win_rate),
+            "performance": performance,
             "processed_cycle_count": len(processed_cycles),
             "rejection_count": len(list(state.get("rejections", []) or [])),
             "last_cycle": {
@@ -454,7 +478,7 @@ class ForexPaperExecutionEngine:
             "kill_switch_active": bool(
                 dict(state.get("kill_switch", {}) or {}).get("active")
             ),
-            "audit_chain_valid": self.ledger.verify_audit(state),
+            "audit_chain_valid": audit_chain_valid,
             "live_trading_enabled": False,
             "network_access": False,
         }

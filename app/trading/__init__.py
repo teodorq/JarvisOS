@@ -22,6 +22,10 @@ from app.trading.forex_historical import (
     ForexWalkForwardPolicy,
 )
 from app.trading.forex_ledger import ForexPaperLedger
+from app.trading.forex_paper_performance import (
+    ForexPaperPerformancePolicy,
+    build_forex_paper_performance_review,
+)
 from app.trading.forex_portfolio_historical import (
     ForexPortfolioHistoricalBacktester,
     ForexPortfolioHistoricalPolicy,
@@ -92,6 +96,7 @@ __all__ = [
     "ForexPaperInstruction",
     "ForexPaperLedger",
     "ForexPaperPolicy",
+    "ForexPaperPerformancePolicy",
     "ForexPortfolioRiskEngine",
     "ForexPortfolioHistoricalBacktester",
     "ForexPortfolioHistoricalPolicy",
@@ -121,5 +126,6 @@ __all__ = [
     "TradingValidationError",
     "USD_PLN_CONVERSION_PAIR",
     "major_pair",
+    "build_forex_paper_performance_review",
     "WalkForwardPolicy",
 ]
