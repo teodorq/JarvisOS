@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.gui.business_widgets import MetricCard, SectionCard, StatusPill
+from app.gui.forex_pair_results_table import ForexPairResultsTable
 
 
 class ForexPaperPage(QWidget):
@@ -31,7 +32,6 @@ class ForexPaperPage(QWidget):
     REFRESH_INTERVAL_MS = 5000
     HEADERS = ("PARA", "KIERUNEK", "JEDNOSTKI", "WEJŚCIE", "CENA", "STOP LOSS", "TAKE PROFIT")
     HISTORY_HEADERS = ("CZAS", "ZDARZENIE", "WIADOMOŚĆ", "STATUS")
-
     def __init__(self, dashboard: Any, *, activity: Any | None = None) -> None:
         super().__init__()
         self.dashboard = dashboard
@@ -44,6 +44,7 @@ class ForexPaperPage(QWidget):
         self.tabs = QTabWidget()
         self.tabs.addTab(self._positions_card(), "OTWARTE POZYCJE")
         self.tabs.addTab(self._history_card(), "HISTORIA ZDARZEŃ")
+        self.tabs.addTab(self._pair_results_card(), "WYNIKI PAR")
         root.addWidget(self.tabs, 1)
         root.addWidget(self._safety_card())
         self.timer = QTimer(self)
@@ -126,6 +127,16 @@ class ForexPaperPage(QWidget):
         self.pending_history = QLabel("Nieodczytane zdarzenia: 0")
         self.pending_history.setObjectName("Muted")
         card.content_layout.addWidget(self.pending_history)
+        return card
+
+    def _pair_results_card(self) -> SectionCard:
+        card = SectionCard(
+            "Wyniki siedmiu par",
+            "Wyłącznie zamknięte transakcje PAPER; mała próbka nie potwierdza strategii.",
+        )
+        self.pair_table = ForexPairResultsTable()
+        self._configure_table(self.pair_table)
+        card.content_layout.addWidget(self.pair_table)
         return card
 
     @staticmethod
@@ -227,6 +238,9 @@ class ForexPaperPage(QWidget):
         )
         self.metrics["drawdown"].set_value(f"{drawdown} PLN")
         self.metrics["drawdown"].set_hint(f"{drawdown_pct}% zamkniętej krzywej")
+        raw_pairs = performance.get("pair_breakdown")
+        pair_breakdown = dict(raw_pairs) if isinstance(raw_pairs, dict) else {}
+        self.pair_table.set_values(pair_breakdown)
         self._fill_positions(positions)
         history = []
         if self.activity is not None:

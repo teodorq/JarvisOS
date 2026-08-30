@@ -116,6 +116,14 @@ Kill switch blokuje nowe wejścia, ale nie usuwa możliwości bezpiecznego
 zamknięcia istniejącej pozycji. Sygnały LONG i SHORT są wyłącznie symulowane.
 Próg 20 zamkniętych transakcji oznacza jedynie próbkę gotową do ręcznego
 przeglądu. Nie uruchamia optymalizacji, zmiany strategii ani promocji LIVE.
+Wyniki są również rozdzielane na siedem par. Dodatkowy raport kohortowy przypina
+rzeczywiste otwarcia V1 do decyzji zamrożonego filtra V2: `zachowane` albo
+`odfiltrowane`. Nie jest to symulacja alternatywnego portfela V2, ponieważ jego
+przyszła ekspozycja mogłaby różnić się od faktycznego portfela V1.
+Ukryty observer zapisuje również atomowy heartbeat do
+`data/trading/forex_observer_status.json`. Status właściciela odróżnia dzięki temu
+prawidłowe oczekiwanie przy zamkniętym rynku od nieaktualnego lub niedziałającego
+procesu, bez uruchamiania MT5 i bez zużywania limitu danych poza oknem handlowym.
 
 Warstwa danych tylko do odczytu jest przygotowana, lecz domyślnie wyłączona.
 Obejmuje cztery rozdzielone role:

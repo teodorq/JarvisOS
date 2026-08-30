@@ -25,6 +25,17 @@ class _Dashboard:
                 "profit_factor": "0.0000",
                 "maximum_closed_trade_drawdown_pln": "44.26",
                 "maximum_closed_trade_drawdown_pct": "0.04",
+                "pair_breakdown": {
+                    "USD_CHF": {
+                        "closed_trade_count": 1,
+                        "winning_trade_count": 0,
+                        "losing_trade_count": 1,
+                        "win_rate_pct": "0.00",
+                        "net_realized_pnl_pln": "-44.26",
+                        "average_trade_pnl_pln": "-44.26",
+                        "profit_factor": "0.0000",
+                    },
+                },
             },
             "positions": [{
                 "pair": "USD_CHF",
@@ -65,6 +76,12 @@ def test_forex_page_shows_position_and_has_no_execution_controls() -> None:
         assert page.metrics["average"].value_label.text() == "-44.26 PLN"
         assert page.metrics["profit_factor"].value_label.text() == "0.0000"
         assert page.metrics["drawdown"].value_label.text() == "44.26 PLN"
+        assert page.tabs.count() == 3
+        assert page.pair_table.rowCount() == 7
+        assert page.pair_table.item(3, 0).text() == "USD/CHF"
+        assert page.pair_table.item(3, 1).text() == "1"
+        assert page.pair_table.item(3, 5).text() == "-44.26"
+        assert page.pair_table.item(3, 7).text() == "0.0000"
         assert page.history_table.rowCount() == 1
         assert page.history_table.item(0, 1).text() == "OTWARCIE"
         assert page.history_table.item(0, 3).text() == "OCZEKUJE"

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +22,7 @@ from app.trading.forex_observation import ForexObservationJournal
 from app.trading.forex_research_status import ForexHistoricalResearchGate
 from app.trading.forex_risk import ForexPaperPolicy
 from app.trading.forex_scanner import ForexMarketScanner
+from app.trading.forex_strategy_cohorts import ForexStrategyCohortReview
 from app.trading.paper_broker import PaperTradingEngine
 from app.trading.policy import PaperTradingPolicy
 from app.trading.risk import PreTradeRiskEngine
@@ -54,6 +56,9 @@ class TradingControlCenter:
         )
         self.forex_observations = ForexObservationJournal(self.project_root)
         self.forex_research = ForexHistoricalResearchGate(self.project_root)
+        self.forex_strategy_cohorts = ForexStrategyCohortReview(
+            self.project_root
+        )
 
     def status(self) -> dict[str, Any]:
         account = self.engine.status()
@@ -61,7 +66,9 @@ class TradingControlCenter:
         observations = self.forex_observations.summary()
         research = self.forex_research.status()
         forex_account = self.forex_executor.status()
+        strategy_cohorts = self.forex_strategy_cohorts.review()
         runtime_cycle = self._last_runtime_cycle()
+        observer_runtime = self._observer_runtime_status()
         opening_gate_ready = bool(
             data_readiness["complete"]
             and observations["paper_promotion_ready"]
@@ -129,7 +136,9 @@ class TradingControlCenter:
                 "observation": observations,
                 "historical_research": research,
                 "paper_account": forex_account,
+                "strategy_cohort_review": strategy_cohorts,
                 "last_runtime_cycle": runtime_cycle,
+                "observer_runtime": observer_runtime,
             },
             "account": account,
             "limits": self.policy.status(),
@@ -227,6 +236,59 @@ class TradingControlCenter:
             "real_money_access": payload.get("real_money_access") is True,
         }
 
+    def _observer_runtime_status(self) -> dict[str, Any]:
+        path = self.project_root / "data" / "trading" / "forex_observer_status.json"
+        empty = {
+            "available": False,
+            "status": "NO_HEARTBEAT",
+            "checked_at": "",
+            "market_window_open": False,
+            "mt5_running": False,
+            "last_cycle_observed_at": "",
+            "stale": True,
+            "broker_orders_sent": False,
+            "live_orders_sent": False,
+            "real_money_access": False,
+        }
+        try:
+            if not path.is_file() or not 0 < path.stat().st_size <= 65_536:
+                return empty
+            payload = json.loads(path.read_text(encoding="utf-8-sig"))
+            if not isinstance(payload, dict) or payload.get("schema_version") != 1:
+                return empty
+            checked_at = datetime.fromisoformat(
+                str(payload.get("checked_at", "")).replace("Z", "+00:00")
+            ).astimezone(timezone.utc)
+        except (OSError, UnicodeError, json.JSONDecodeError, ValueError):
+            return empty
+        unsafe = any(
+            payload.get(key) is not False
+            for key in (
+                "broker_orders_sent",
+                "live_orders_sent",
+                "real_money_access",
+            )
+        )
+        age_seconds = max(
+            0,
+            (datetime.now(timezone.utc) - checked_at).total_seconds(),
+        )
+        status = str(payload.get("status", "UNKNOWN"))[:80]
+        return {
+            "available": True,
+            "status": "SAFETY_VIOLATION" if unsafe else status,
+            "checked_at": checked_at.isoformat(),
+            "market_window_open": payload.get("market_window_open") is True,
+            "mt5_running": payload.get("mt5_running") is True,
+            "last_cycle_observed_at": str(
+                payload.get("last_cycle_observed_at", "")
+            )[:64],
+            "stale": age_seconds > 20 * 60,
+            "broker_orders_sent": False,
+            "live_orders_sent": False,
+            "real_money_access": False,
+        }
+
     def format_observation_review(self) -> str:
         review = self.forex_observations.review()
         remaining = int(review["remaining_qualified_observations"])
@@ -314,9 +376,19 @@ class TradingControlCenter:
             else "NIEPRAWIDŁOWE"
         )
         runtime_cycle = snapshot["forex"]["last_runtime_cycle"]
+        observer_runtime = snapshot["forex"]["observer_runtime"]
         data = snapshot["forex"]["data_configuration"]
         observation = snapshot["forex"]["observation"]
         research = snapshot["forex"]["historical_research"]
+        strategy_cohorts = snapshot["forex"]["strategy_cohort_review"]
+        cohort_values = dict(strategy_cohorts.get("cohorts", {}) or {})
+        v1_cohort = dict(cohort_values.get("V1_ALL", {}) or {})
+        retained_cohort = dict(
+            cohort_values.get("V2_RETAINED", {}) or {}
+        )
+        filtered_cohort = dict(
+            cohort_values.get("V2_FILTERED", {}) or {}
+        )
         automatic_paper = bool(
             snapshot["forex"]["automatic_paper_execution"]
         )
@@ -365,6 +437,22 @@ class TradingControlCenter:
             latest_cycle_text = f"cykl bez transakcji — blokady danych: {reason_text}"
         else:
             latest_cycle_text = "cykl zakończony bez transakcji"
+        if not observer_runtime["available"]:
+            observer_text = "brak heartbeat; sprawdź zadanie Forex Observer"
+        elif observer_runtime["stale"]:
+            observer_text = "heartbeat NIEAKTUALNY; observer wymaga sprawdzenia"
+        elif observer_runtime["status"] == "MARKET_CLOSED_IDLE":
+            observer_text = (
+                "aktywny; rynek zamknięty, MT5 uruchomi się automatycznie "
+                "w oknie handlowym"
+            )
+        elif observer_runtime["status"] == "MT5_UNAVAILABLE":
+            observer_text = "aktywny, ale MT5 jest chwilowo niedostępny"
+        else:
+            observer_text = (
+                f"aktywny ({observer_runtime['status']}); MT5 "
+                f"{'działa' if observer_runtime['mt5_running'] else 'oczekuje'}"
+            )
         qualified = int(observation["qualified_market_open_count"])
         required = int(observation["minimum_market_open_observations"])
         days = int(observation["qualified_market_day_count"])
@@ -447,9 +535,20 @@ class TradingControlCenter:
             f"najdłuższa seria strat "
             f"{performance.get('maximum_consecutive_losses', 0)}; "
             f"dowody {performance_evidence}.\n"
+            f"• Kohorty V1/V2: faktyczny V1 — sygnały "
+            f"{v1_cohort.get('open_signal_count', 0)}, zamknięte "
+            f"{v1_cohort.get('closed_trade_count', 0)}, wynik "
+            f"{v1_cohort.get('net_realized_pnl_pln', '0.00')} PLN; "
+            f"V2 zachował {retained_cohort.get('open_signal_count', 0)} "
+            f"(zamknięte {retained_cohort.get('closed_trade_count', 0)}, "
+            f"wynik {retained_cohort.get('net_realized_pnl_pln', '0.00')} PLN); "
+            f"V2 odfiltrował {filtered_cohort.get('open_signal_count', 0)} "
+            f"(zamknięte {filtered_cohort.get('closed_trade_count', 0)}, "
+            f"wynik {filtered_cohort.get('net_realized_pnl_pln', '0.00')} PLN).\n"
             f"• Otwarte pozycje PAPER: {position_details}.\n"
             f"• Cykle autopilota: {forex_account['processed_cycle_count']}; "
             f"ostatnia decyzja: {latest_cycle_text}.\n"
+            f"• Observer Forex: {observer_text}.\n"
             f"• Audyt: {audit}; wyłącznik awaryjny: {kill_switch}.\n"
             f"• Obserwacje Forex: kwalifikowane {qualified}/{required}; dni "
             f"rynkowe {days}/{required_days}; wszystkie wpisy "

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any, Iterable, Mapping
 
+from app.trading.forex_models import MAJOR_FOREX_PAIRS
 from app.trading.models import TradingValidationError
 
 
@@ -58,6 +59,9 @@ def build_forex_paper_performance_review(
 
     selected_policy = policy or ForexPaperPerformancePolicy()
     values: list[Decimal] = []
+    pair_values: dict[str, list[Decimal]] = {
+        pair.symbol: [] for pair in MAJOR_FOREX_PAIRS
+    }
     invalid_fill_count = 0
     for raw in tuple(closed_fills):
         if not isinstance(raw, Mapping):
@@ -65,11 +69,17 @@ def build_forex_paper_performance_review(
             continue
         item = dict(raw)
         action = str(item.get("action", "")).strip().upper()
+        pair = str(item.get("pair", "")).strip().upper()
         pnl = _decimal(item.get("realized_pnl_pln"))
-        if not action.startswith("CLOSE_") or pnl is None:
+        if (
+            not action.startswith("CLOSE_")
+            or pair not in pair_values
+            or pnl is None
+        ):
             invalid_fill_count += 1
             continue
         values.append(pnl)
+        pair_values[pair].append(pnl)
 
     initial_balance = _decimal(initial_balance_pln)
     current_balance = _decimal(current_balance_pln)
@@ -156,6 +166,52 @@ def build_forex_paper_performance_review(
     else:
         status = "COLLECTING_PAPER_SAMPLE"
 
+    pair_breakdown: dict[str, dict[str, Any]] = {}
+    for pair, outcomes in pair_values.items():
+        pair_profits = [value for value in outcomes if value > 0]
+        pair_losses = [value for value in outcomes if value < 0]
+        pair_net = sum(outcomes, Decimal("0"))
+        pair_gross_profit = sum(pair_profits, Decimal("0"))
+        pair_gross_loss = abs(sum(pair_losses, Decimal("0")))
+        pair_average = (
+            pair_net / Decimal(len(outcomes))
+            if outcomes
+            else Decimal("0")
+        )
+        pair_win_rate = (
+            Decimal(len(pair_profits)) * 100 / Decimal(len(outcomes))
+            if outcomes
+            else Decimal("0")
+        )
+        pair_loss_streak = 0
+        pair_maximum_loss_streak = 0
+        for outcome in outcomes:
+            if outcome < 0:
+                pair_loss_streak += 1
+                pair_maximum_loss_streak = max(
+                    pair_maximum_loss_streak, pair_loss_streak
+                )
+            else:
+                pair_loss_streak = 0
+        pair_breakdown[pair] = {
+            "closed_trade_count": len(outcomes),
+            "winning_trade_count": len(pair_profits),
+            "losing_trade_count": len(pair_losses),
+            "breakeven_trade_count": (
+                len(outcomes) - len(pair_profits) - len(pair_losses)
+            ),
+            "win_rate_pct": _text(pair_win_rate, _PERCENT),
+            "net_realized_pnl_pln": _text(pair_net),
+            "average_trade_pnl_pln": _text(pair_average),
+            "profit_factor": (
+                _text(pair_gross_profit / pair_gross_loss, _RATIO)
+                if pair_gross_loss > 0
+                else None
+            ),
+            "maximum_consecutive_losses": pair_maximum_loss_streak,
+            "performance_validated": False,
+        }
+
     return {
         "status": status,
         "mode": "FOREX_PAPER_PERFORMANCE_READ_ONLY",
@@ -185,6 +241,7 @@ def build_forex_paper_performance_review(
         ),
         "maximum_consecutive_losses": maximum_loss_streak,
         "current_consecutive_losses": current_loss_streak,
+        "pair_breakdown": pair_breakdown,
         "integrity": {
             "evidence_valid": evidence_valid,
             "audit_chain_valid": audit_chain_valid is True,

@@ -64,6 +64,14 @@ def test_review_calculates_profit_factor_drawdown_and_loss_streak() -> None:
     assert review["maximum_consecutive_losses"] == 2
     assert review["current_consecutive_losses"] == 1
     assert review["integrity"]["balance_reconciled"] is True
+    eur = review["pair_breakdown"]["EUR_USD"]
+    assert eur["closed_trade_count"] == 5
+    assert eur["net_realized_pnl_pln"] == "-10.00"
+    assert eur["average_trade_pnl_pln"] == "-2.00"
+    assert eur["profit_factor"] == "0.9167"
+    assert eur["maximum_consecutive_losses"] == 2
+    assert review["pair_breakdown"]["GBP_USD"]["closed_trade_count"] == 0
+    assert review["pair_breakdown"]["GBP_USD"]["performance_validated"] is False
 
 
 def test_full_sample_only_opens_manual_review_not_live_promotion() -> None:

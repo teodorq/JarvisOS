@@ -3,9 +3,11 @@ from __future__ import annotations
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 
 from app.market_data.forex_models import ForexDataBundle
 from app.trading.forex_models import (
@@ -229,12 +231,16 @@ class ForexObservationTests(unittest.TestCase):
         self.assertTrue(summary["paper_promotion_ready"])
         self.assertFalse(summary["automatic_promotion"])
         self.assertEqual(summary["qualified_market_day_count"], 3)
-        control_center = TradingControlCenter(self.root)
-        status = control_center.status()
+        with patch.dict(
+            os.environ,
+            {"JARVIS_OS_FOREX_PAPER_AUTOPILOT_ENABLED": "false"},
+        ):
+            control_center = TradingControlCenter(self.root)
+            status = control_center.status()
+            rendered = control_center.format_status()
         self.assertFalse(status["forex"]["opening_gate_ready"])
         self.assertFalse(status["forex"]["historical_research"]["strategy_candidate_ready"])
         self.assertFalse(status["forex"]["automatic_paper_execution"])
-        rendered = control_center.format_status()
         self.assertIn("kwalifikowane 20/20", rendered)
         self.assertIn("dni rynkowe 3/3", rendered)
         self.assertIn("Bramka PAPER: ZABLOKOWANA", rendered)

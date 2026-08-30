@@ -476,6 +476,40 @@ class TradingControlAndRoutingTests(unittest.TestCase):
         self.assertFalse(runtime["live_orders_sent"])
         self.assertIn("gotowe pary 7/7", rendered)
         self.assertIn("Konto PAPER Forex: 100000.00 PLN", rendered)
+        self.assertIn("Kohorty V1/V2", rendered)
+
+    def test_status_distinguishes_closed_market_from_dead_observer(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            status_path = (
+                root / "data" / "trading" / "forex_observer_status.json"
+            )
+            status_path.parent.mkdir(parents=True)
+            status_path.write_text(
+                json.dumps({
+                    "schema_version": 1,
+                    "status": "MARKET_CLOSED_IDLE",
+                    "checked_at": datetime.now(UTC).isoformat(),
+                    "market_window_open": False,
+                    "mt5_running": False,
+                    "last_cycle_observed_at": "2026-08-24T14:35:11+00:00",
+                    "broker_orders_sent": False,
+                    "live_orders_sent": False,
+                    "real_money_access": False,
+                }),
+                encoding="utf-8",
+            )
+            center = TradingControlCenter(root)
+            snapshot = center.status()
+            rendered = center.format_status()
+
+        heartbeat = snapshot["forex"]["observer_runtime"]
+        self.assertTrue(heartbeat["available"])
+        self.assertFalse(heartbeat["stale"])
+        self.assertEqual(heartbeat["status"], "MARKET_CLOSED_IDLE")
+        self.assertFalse(heartbeat["mt5_running"])
+        self.assertIn("rynek zamknięty", rendered)
+        self.assertIn("MT5 uruchomi się automatycznie", rendered)
 
     def test_status_labels_explicit_unvalidated_demo_override(self) -> None:
         with TemporaryDirectory() as directory:

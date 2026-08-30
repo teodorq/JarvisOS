@@ -122,6 +122,41 @@ class ForexPaperDashboard:
         integrity = item.get("integrity")
         integrity = dict(integrity) if isinstance(integrity, dict) else {}
         raw_factor = item.get("profit_factor")
+        raw_pairs = item.get("pair_breakdown")
+        raw_pairs = dict(raw_pairs) if isinstance(raw_pairs, dict) else {}
+        pairs: dict[str, dict[str, Any]] = {}
+        for raw_pair, raw_metrics in raw_pairs.items():
+            pair = str(raw_pair).strip().upper()
+            if not _PAIR.fullmatch(pair) or not isinstance(raw_metrics, dict):
+                continue
+            metrics = dict(raw_metrics)
+            pair_factor = metrics.get("profit_factor")
+            pairs[pair] = {
+                "closed_trade_count": cls._count(
+                    metrics.get("closed_trade_count")
+                ),
+                "winning_trade_count": cls._count(
+                    metrics.get("winning_trade_count")
+                ),
+                "losing_trade_count": cls._count(
+                    metrics.get("losing_trade_count")
+                ),
+                "win_rate_pct": cls._number(
+                    metrics.get("win_rate_pct"), 2
+                ),
+                "net_realized_pnl_pln": cls._number(
+                    metrics.get("net_realized_pnl_pln"), 2
+                ),
+                "average_trade_pnl_pln": cls._number(
+                    metrics.get("average_trade_pnl_pln"), 2
+                ),
+                "profit_factor": (
+                    cls._number(pair_factor, 4)
+                    if pair_factor is not None
+                    else None
+                ),
+                "performance_validated": False,
+            }
         return {
             "status": str(item.get("status", "COLLECTING_PAPER_SAMPLE"))[:80],
             "valid_closed_trade_count": cls._count(
@@ -150,6 +185,7 @@ class ForexPaperDashboard:
             "maximum_consecutive_losses": cls._count(
                 item.get("maximum_consecutive_losses")
             ),
+            "pair_breakdown": pairs,
             "evidence_valid": integrity.get("evidence_valid") is True,
             "performance_validated": False,
             "live_promotion_ready": False,

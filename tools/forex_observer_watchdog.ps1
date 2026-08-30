@@ -18,6 +18,7 @@ $dataPath = Join-Path $projectPath "data\trading"
 $logPath = Join-Path $dataPath "forex_paper_watchdog.log"
 $outputPath = Join-Path $dataPath "forex_paper_last.json"
 $errorPath = Join-Path $dataPath "forex_paper_last.error.log"
+$statusPath = Join-Path $dataPath "forex_observer_status.json"
 
 foreach ($requiredPath in @($terminalPath, $pythonPath, $runnerPath)) {
     if (-not (Test-Path -LiteralPath $requiredPath -PathType Leaf)) {
@@ -36,6 +37,50 @@ function Write-ObserverLog {
     }
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     Add-Content -LiteralPath $logPath -Value "$timestamp $Message" -Encoding UTF8
+}
+
+function Write-ObserverStatus {
+    param(
+        [string]$Status,
+        [bool]$MarketWindowOpen,
+        [bool]$Mt5Running,
+        [string]$Detail
+    )
+    $lastCycleObservedAt = ""
+    try {
+        if (Test-Path -LiteralPath $outputPath -PathType Leaf) {
+            $lastResult = Get-Content -LiteralPath $outputPath -Raw -Encoding UTF8 |
+                ConvertFrom-Json
+            $lastCycleObservedAt = [string]$lastResult.observed_at
+        }
+    }
+    catch {
+        $lastCycleObservedAt = ""
+    }
+    $payload = [ordered]@{
+        schema_version = 1
+        status = $Status
+        checked_at = [DateTime]::UtcNow.ToString("o")
+        market_window_open = $MarketWindowOpen
+        mt5_running = $Mt5Running
+        last_cycle_observed_at = $lastCycleObservedAt
+        interval_minutes = $IntervalMinutes
+        detail = $Detail
+        broker_orders_sent = $false
+        live_orders_sent = $false
+        real_money_access = $false
+    }
+    $temporaryStatusPath = Join-Path $dataPath (
+        "forex_observer_status.$PID.tmp"
+    )
+    try {
+        $payload | ConvertTo-Json -Depth 4 -Compress |
+            Set-Content -LiteralPath $temporaryStatusPath -Encoding UTF8
+        Move-Item -LiteralPath $temporaryStatusPath -Destination $statusPath -Force
+    }
+    finally {
+        Remove-Item -LiteralPath $temporaryStatusPath -Force -ErrorAction SilentlyContinue
+    }
 }
 
 function Get-RunningMt5Process {
@@ -146,28 +191,55 @@ try {
         exit 0
     }
     Write-ObserverLog "Forex runtime started in AUTONOMOUS_LOCAL_PAPER mode."
+    Write-ObserverStatus "STARTING" $false $false "Observer uruchomiony."
     while ($true) {
         try {
             if (-not (Test-ForexMarketWindow)) {
                 Write-ObserverLog "Forex market is closed; data quota preserved."
+                Write-ObserverStatus `
+                    "MARKET_CLOSED_IDLE" `
+                    $false `
+                    $false `
+                    "Rynek jest zamkniety; MT5 uruchomi sie w oknie handlowym."
             }
             else {
                 $mt5 = Start-Mt5IfNeeded
                 if ($null -eq $mt5) {
                     Write-ObserverLog "MT5 did not become available; no PAPER cycle run."
+                    Write-ObserverStatus `
+                        "MT5_UNAVAILABLE" `
+                        $true `
+                        $false `
+                        "MT5 nie stal sie dostepny; cykl PAPER pominiety."
                 }
                 else {
+                    Write-ObserverStatus `
+                        "RUNNING_CYCLE" `
+                        $true `
+                        $true `
+                        "Trwa lokalny cykl PAPER."
                     Invoke-ForexPaperCycle
+                    Write-ObserverStatus `
+                        "WAITING_NEXT_CYCLE" `
+                        $true `
+                        $true `
+                        "Cykl zakonczony; oczekiwanie na nastepny interwal."
                 }
             }
         }
         catch {
             Write-ObserverLog "Cycle failed safely; no broker order execution is available."
+            Write-ObserverStatus `
+                "CYCLE_FAILED_SAFE" `
+                (Test-ForexMarketWindow) `
+                ($null -ne (Get-RunningMt5Process)) `
+                "Cykl zakonczyl sie bezpiecznie bez dostepu do zlecen brokera."
         }
         Start-Sleep -Seconds ($IntervalMinutes * 60)
     }
 }
 finally {
+    Write-ObserverStatus "STOPPED" $false $false "Observer zostal zatrzymany."
     if ($ownsMutex) {
         $mutex.ReleaseMutex()
     }

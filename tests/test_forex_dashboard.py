@@ -46,6 +46,17 @@ def _account() -> dict:
             "maximum_closed_trade_drawdown_pln": "44.26",
             "maximum_closed_trade_drawdown_pct": "0.04",
             "maximum_consecutive_losses": 1,
+            "pair_breakdown": {
+                "USD_CHF": {
+                    "closed_trade_count": 1,
+                    "winning_trade_count": 0,
+                    "losing_trade_count": 1,
+                    "win_rate_pct": "0.00",
+                    "net_realized_pnl_pln": "-44.26",
+                    "average_trade_pnl_pln": "-44.26",
+                    "profit_factor": "0.0000",
+                },
+            },
             "integrity": {"evidence_valid": True},
         },
         "processed_cycle_count": 75,
@@ -97,6 +108,11 @@ def test_dashboard_projects_latest_safe_paper_cycle() -> None:
         assert snapshot["performance"]["profit_factor"] == "0.0000"
         assert snapshot["performance"]["evidence_valid"] is True
         assert snapshot["performance"]["live_promotion_ready"] is False
+        pair = snapshot["performance"]["pair_breakdown"]["USD_CHF"]
+        assert pair["closed_trade_count"] == 1
+        assert pair["net_realized_pnl_pln"] == "-44.26"
+        assert pair["profit_factor"] == "0.0000"
+        assert pair["performance_validated"] is False
         assert snapshot["live_orders_sent"] is False
 
 

@@ -54,6 +54,10 @@ from app.trading.forex_scanner import (
     ForexPairAssessment,
     ForexScannerPolicy,
 )
+from app.trading.forex_strategy_cohorts import (
+    ForexStrategyCohortReview,
+    build_forex_strategy_cohort_review,
+)
 from app.trading.ledger import PaperTradingLedger
 from app.trading.models import (
     MarketBar,
@@ -110,6 +114,7 @@ __all__ = [
     "ForexRiskDecision",
     "ForexSafetyContext",
     "ForexScannerPolicy",
+    "ForexStrategyCohortReview",
     "ForexWalkForwardPolicy",
     "LiveTradingBlockedError",
     "MarketBar",
@@ -127,5 +132,6 @@ __all__ = [
     "USD_PLN_CONVERSION_PAIR",
     "major_pair",
     "build_forex_paper_performance_review",
+    "build_forex_strategy_cohort_review",
     "WalkForwardPolicy",
 ]

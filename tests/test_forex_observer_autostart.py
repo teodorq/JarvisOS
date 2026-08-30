@@ -35,6 +35,12 @@ def test_watchdog_has_bounded_interval_and_single_instance() -> None:
     assert "Forex market is closed; data quota preserved." in WATCHDOG
     assert "[DayOfWeek]::Sunday" in WATCHDOG
     assert "$utcNow.Hour -ge 22" in WATCHDOG
+    assert "forex_observer_status.json" in WATCHDOG
+    assert "Write-ObserverStatus" in WATCHDOG
+    assert '"MARKET_CLOSED_IDLE"' in WATCHDOG
+    assert "broker_orders_sent = $false" in WATCHDOG
+    assert "live_orders_sent = $false" in WATCHDOG
+    assert "real_money_access = $false" in WATCHDOG
 
 
 def test_watchdog_calls_only_the_local_paper_entry_point() -> None:
