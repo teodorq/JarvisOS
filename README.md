@@ -114,7 +114,10 @@ Run one enabled cycle manually with:
 
 This explicit demo override may test an unvalidated strategy, but it still
 enforces 0.25% risk per trade, 0.5% total open risk, a 1% daily loss stop and at
-most two local PAPER positions. It cannot send MT5, broker or real-money orders.
+most two local PAPER positions. After three consecutive closed losses it also
+pauses new entries for six hours. The cooldown is derived from the persistent
+tamper-evident fill history, survives restarts and never blocks verified position
+closes. It cannot send MT5, broker or real-money orders.
 
 In owner mode, say or type `Ile obserwacji Forex?`,
 `Status obserwatora Forex` or `Czy PAPER jest gotowy?`. JARVIS reads the local

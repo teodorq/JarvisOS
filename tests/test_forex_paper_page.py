@@ -46,6 +46,11 @@ class _Dashboard:
                 "stop_loss": "0.800040",
                 "take_profit": "0.797040",
             }],
+            "loss_streak_safety": {
+                "active": True,
+                "current_consecutive_losses": 3,
+                "threshold": 3,
+            },
             "message": "Lokalna symulacja; brak zleceń u brokera.",
         }
 
@@ -86,6 +91,8 @@ def test_forex_page_shows_position_and_has_no_execution_controls() -> None:
         assert page.history_table.item(0, 1).text() == "OTWARCIE"
         assert page.history_table.item(0, 3).text() == "OCZEKUJE"
         assert page.pending_history.text() == "Nieodczytane zdarzenia: 1"
+        assert page.overall.full_text == "PAPER — PRZERWA"
+        assert "NOWE WEJŚCIA: PRZERWA" in page.safety.text()
         labels = [button.text() for button in page.findChildren(QPushButton)]
         assert labels == ["ODŚWIEŻ"]
     finally:

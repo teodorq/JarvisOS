@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 import re
@@ -144,6 +144,11 @@ class ForexPaperExecutionEngine:
                 elif action in {"OPEN_LONG", "OPEN_SHORT"}:
                     if bool(dict(state.get("kill_switch", {}) or {}).get("active")):
                         result = {"status": "REJECTED", "code": "KILL_SWITCH_ACTIVE"}
+                    elif self._loss_streak_safety(state, selected_now)["active"]:
+                        result = {
+                            "status": "REJECTED",
+                            "code": "CONSECUTIVE_LOSS_COOLDOWN",
+                        }
                     else:
                         result = self._open(
                             state,
@@ -356,8 +361,10 @@ class ForexPaperExecutionEngine:
         *,
         quotes: Mapping[str, ForexQuote] | None = None,
         rates: ForexRateBook | None = None,
+        now: datetime | None = None,
     ) -> dict[str, Any]:
         state = self.ledger.snapshot()
+        selected_now = aware_utc(now or datetime.now(timezone.utc), "now")
         positions = self._positions(state)
         fills = list(state.get("fills", []) or [])
         closed_fills = [
@@ -419,6 +426,7 @@ class ForexPaperExecutionEngine:
                 closed_fills == audited_closed_fills
             ),
         )
+        loss_streak_safety = self._loss_streak_safety(state, selected_now)
         return {
             "status": "READY" if state.get("mode") == "FOREX_PAPER_ONLY" else "BLOCKED",
             "mode": str(state.get("mode", "")),
@@ -478,9 +486,75 @@ class ForexPaperExecutionEngine:
             "kill_switch_active": bool(
                 dict(state.get("kill_switch", {}) or {}).get("active")
             ),
+            "loss_streak_safety": loss_streak_safety,
+            "new_entries_paused_by_loss_streak": loss_streak_safety["active"],
             "audit_chain_valid": audit_chain_valid,
             "live_trading_enabled": False,
             "network_access": False,
+        }
+
+    def _loss_streak_safety(
+        self,
+        state: Mapping[str, Any],
+        now: datetime,
+    ) -> dict[str, Any]:
+        """Derive a restart-safe PAPER entry cooldown from immutable close fills."""
+
+        selected_now = aware_utc(now, "now")
+        streak = 0
+        latest_loss_at = ""
+        for raw in reversed(list(state.get("fills", []) or [])):
+            fill = dict(raw or {})
+            if not str(fill.get("action", "")).startswith("CLOSE_"):
+                continue
+            if _decimal(fill.get("realized_pnl_pln")) >= 0:
+                break
+            streak += 1
+            if not latest_loss_at:
+                latest_loss_at = str(fill.get("filled_at", ""))
+
+        threshold = self.policy.consecutive_loss_pause_threshold
+        base = {
+            "active": False,
+            "code": "READY",
+            "current_consecutive_losses": streak,
+            "threshold": threshold,
+            "cooldown_minutes": self.policy.loss_streak_cooldown_minutes,
+            "triggered_at": latest_loss_at,
+            "resume_at": "",
+            "remaining_seconds": 0,
+            "paper_only": True,
+        }
+        if streak < threshold:
+            return base
+        try:
+            triggered_at = aware_utc(
+                datetime.fromisoformat(latest_loss_at),
+                "latest_loss_at",
+            )
+        except (TradingValidationError, TypeError, ValueError):
+            return {
+                **base,
+                "active": True,
+                "code": "INVALID_LOSS_TIMESTAMP",
+            }
+        resume_at = triggered_at + timedelta(
+            minutes=self.policy.loss_streak_cooldown_minutes
+        )
+        remaining_seconds = max(
+            0,
+            int((resume_at - selected_now).total_seconds()),
+        )
+        return {
+            **base,
+            "active": selected_now < resume_at,
+            "code": (
+                "CONSECUTIVE_LOSS_COOLDOWN"
+                if selected_now < resume_at
+                else "COOLDOWN_COMPLETE"
+            ),
+            "resume_at": resume_at.isoformat(),
+            "remaining_seconds": remaining_seconds,
         }
 
     def activate_kill_switch(self, reason: object) -> None:

@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 
 from app.gui.business_widgets import MetricCard, SectionCard, StatusPill
 from app.gui.forex_pair_results_table import ForexPairResultsTable
+from app.gui.forex_paper_safety_view import forex_paper_safety_view
 
 
 class ForexPaperPage(QWidget):
@@ -198,11 +199,8 @@ class ForexPaperPage(QWidget):
             snapshot = dict(value) if isinstance(value, dict) else {}
         except Exception:
             snapshot = {"status": "BLOCKED", "positions": [], "message": "Podgląd jest chwilowo niedostępny."}
-        ready = snapshot.get("status") == "READY"
-        self.overall.set_status(
-            "PAPER AKTYWNY" if ready else "WYMAGA UWAGI",
-            "healthy" if ready else "danger",
-        )
+        label, tone, safety_banner = forex_paper_safety_view(snapshot)
+        self.overall.set_status(label, tone)
         self.metrics["balance"].set_value(f"{snapshot.get('balance_pln', '0.00')} PLN")
         self.metrics["equity"].set_value(f"{snapshot.get('equity_pln', '0.00')} PLN")
         pnl = str(snapshot.get("unrealized_pnl_pln", "0.00"))
@@ -252,6 +250,7 @@ class ForexPaperPage(QWidget):
         self.updated.setText(
             "Ostatnia aktualizacja: " + self._visible_time(snapshot.get("observed_at"))
         )
+        self.safety.setText(safety_banner)
         self.message.setText(str(snapshot.get("message", "Gotowy."))[:240])
 
     def _fill_history(self, history: list[object]) -> None:

@@ -16,7 +16,7 @@ from app.trading.forex_models import (
     MAJOR_FOREX_PAIRS,
     USD_PLN_CONVERSION_PAIR,
 )
-from app.trading.forex_risk import ForexRateBook
+from app.trading.forex_risk import ForexPaperPolicy, ForexRateBook
 from app.trading.models import TradingValidationError
 from app.trading.paper_broker import LiveTradingBlockedError
 
@@ -238,6 +238,69 @@ class ForexPaperAutopilotTests(unittest.TestCase):
         )
         allowed = self.run_cycle("forex-cycle-resume")
         self.assertEqual(allowed["execution"]["status"], "APPLIED")
+
+    def test_three_losses_pause_entries_then_resume_after_cooldown(self) -> None:
+        current = self.now
+        for index in range(3):
+            opened = self.run_cycle(
+                f"forex-loss-open-{index}",
+                now=current,
+                direction="UP",
+            )
+            self.assertEqual(opened["execution"]["status"], "APPLIED")
+            current += timedelta(minutes=15)
+            closed = self.run_cycle(
+                f"forex-loss-close-{index}",
+                now=current,
+                direction="DOWN",
+            )
+            self.assertEqual(
+                closed["execution"]["executions"][0]["fill"]["action"],
+                "CLOSE_LONG",
+            )
+            current += timedelta(minutes=15)
+
+        safety = closed["account"]["loss_streak_safety"]
+        self.assertTrue(safety["active"])
+        self.assertEqual(safety["current_consecutive_losses"], 3)
+        self.assertEqual(safety["threshold"], 3)
+        blocked = self.run_cycle(
+            "forex-loss-cooldown-blocked",
+            now=current,
+            direction="UP",
+        )
+        self.assertEqual(blocked["execution"]["status"], "NO_EXECUTION")
+        self.assertEqual(
+            blocked["execution"]["rejections"][0]["code"],
+            "CONSECUTIVE_LOSS_COOLDOWN",
+        )
+        self.assertEqual(blocked["account"]["position_count"], 0)
+
+        resumed = self.run_cycle(
+            "forex-loss-cooldown-complete",
+            now=current + timedelta(hours=6),
+            direction="UP",
+        )
+        self.assertEqual(resumed["execution"]["status"], "APPLIED")
+        self.assertFalse(
+            resumed["account"]["new_entries_paused_by_loss_streak"]
+        )
+        self.assertEqual(
+            resumed["account"]["loss_streak_safety"]["code"],
+            "COOLDOWN_COMPLETE",
+        )
+
+    def test_loss_streak_policy_rejects_unsafe_values(self) -> None:
+        with self.assertRaisesRegex(
+            TradingValidationError,
+            "unsafe_consecutive_loss_pause_threshold",
+        ):
+            ForexPaperPolicy(consecutive_loss_pause_threshold=1)
+        with self.assertRaisesRegex(
+            TradingValidationError,
+            "unsafe_loss_streak_cooldown_minutes",
+        ):
+            ForexPaperPolicy(loss_streak_cooldown_minutes=14)
 
     def test_executor_rechecks_forged_oversized_instruction(self) -> None:
         quotes, _bars, _contexts, conversion = market(

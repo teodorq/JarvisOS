@@ -62,6 +62,16 @@ def _account() -> dict:
         "processed_cycle_count": 75,
         "audit_chain_valid": True,
         "kill_switch_active": False,
+        "loss_streak_safety": {
+            "active": True,
+            "code": "CONSECUTIVE_LOSS_COOLDOWN",
+            "current_consecutive_losses": 3,
+            "threshold": 3,
+            "cooldown_minutes": 360,
+            "resume_at": "2026-08-21T16:09:38+00:00",
+            "remaining_seconds": 10800,
+            "paper_only": True,
+        },
     }
 
 
@@ -113,6 +123,18 @@ def test_dashboard_projects_latest_safe_paper_cycle() -> None:
         assert pair["net_realized_pnl_pln"] == "-44.26"
         assert pair["profit_factor"] == "0.0000"
         assert pair["performance_validated"] is False
+        assert snapshot["new_entries_paused_by_loss_streak"] is True
+        assert snapshot["loss_streak_safety"] == {
+            "active": True,
+            "code": "CONSECUTIVE_LOSS_COOLDOWN",
+            "current_consecutive_losses": 3,
+            "threshold": 3,
+            "cooldown_minutes": 360,
+            "resume_at": "2026-08-21T16:09:38+00:00",
+            "remaining_seconds": 10800,
+            "paper_only": True,
+        }
+        assert "wstrzymane" in snapshot["message"]
         assert snapshot["live_orders_sent"] is False
 
 

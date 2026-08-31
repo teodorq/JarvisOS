@@ -415,6 +415,19 @@ class TradingControlCenter:
             if forex_account["kill_switch_active"]
             else "gotowy"
         )
+        loss_streak_safety = dict(
+            forex_account.get("loss_streak_safety", {}) or {}
+        )
+        loss_streak_text = (
+            "PRZERWA W NOWYCH WEJŚCIACH; zamknięcia pozostają aktywne; "
+            f"wznowienie {loss_streak_safety.get('resume_at', 'po cooldownie')}"
+            if loss_streak_safety.get("active") is True
+            else (
+                f"gotowy; bieżąca seria strat "
+                f"{loss_streak_safety.get('current_consecutive_losses', 0)}/"
+                f"{loss_streak_safety.get('threshold', 3)}"
+            )
+        )
         audit = (
             "prawidłowy" if forex_account["audit_chain_valid"] else "USZKODZONY"
         )
@@ -516,6 +529,7 @@ class TradingControlCenter:
             "oraz kontrola odcisków, synchronizacji, wolumenu i luk — gotowe.\n"
             "• Ryzyko: limity zlecenia, pozycji, ekspozycji, dziennej straty, "
             "spreadu i liczby zleceń — aktywne.\n"
+            f"• Bezpiecznik serii strat: {loss_streak_text}.\n"
             "• Forex: skaner 7 głównych par, ranking i wspólne limity walutowe "
             "— gotowe lokalnie.\n"
             "• Silnik autopilota PAPER: lokalne otwieranie, zamykanie, ponowna "

@@ -90,6 +90,15 @@ class ForexPaperDashboard:
     ) -> dict[str, Any]:
         positions = self._positions(account.get("open_positions"))
         performance = self._performance(account.get("performance"))
+        loss_streak_safety = self._loss_streak_safety(
+            account.get("loss_streak_safety")
+        )
+        message = "Lokalna symulacja; brak zleceń u brokera."
+        if loss_streak_safety["active"]:
+            message = (
+                "Nowe wejścia PAPER są wstrzymane po serii strat; "
+                "zweryfikowane zamknięcia nadal działają."
+            )
         return {
             "status": "READY",
             "mode": "FOREX_PAPER_ONLY",
@@ -110,10 +119,42 @@ class ForexPaperDashboard:
             ),
             "audit_chain_valid": account.get("audit_chain_valid") is True,
             "kill_switch_active": account.get("kill_switch_active") is True,
+            "loss_streak_safety": loss_streak_safety,
+            "new_entries_paused_by_loss_streak": loss_streak_safety["active"],
             "broker_orders_sent": False,
             "live_orders_sent": False,
             "real_money_access": False,
-            "message": "Lokalna symulacja; brak zleceń u brokera.",
+            "message": message,
+        }
+
+    @classmethod
+    def _loss_streak_safety(cls, value: object) -> dict[str, Any]:
+        item = dict(value) if isinstance(value, dict) else {}
+        code = str(item.get("code", "READY")).strip().upper()
+        if code not in {
+            "READY",
+            "CONSECUTIVE_LOSS_COOLDOWN",
+            "COOLDOWN_COMPLETE",
+            "INVALID_LOSS_TIMESTAMP",
+        }:
+            code = "UNKNOWN"
+        return {
+            "active": item.get("active") is True,
+            "code": code,
+            "current_consecutive_losses": cls._count(
+                item.get("current_consecutive_losses")
+            ),
+            "threshold": cls._count(item.get("threshold") or 3),
+            "cooldown_minutes": cls._count(
+                item.get("cooldown_minutes") or 360
+            ),
+            "resume_at": " ".join(
+                str(item.get("resume_at", "")).split()
+            )[:64],
+            "remaining_seconds": cls._count(
+                item.get("remaining_seconds")
+            ),
+            "paper_only": True,
         }
 
     @classmethod

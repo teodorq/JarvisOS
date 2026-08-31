@@ -73,7 +73,11 @@ class ForexPaperAutopilot:
                 positions=sides,
                 now=selected_now,
             )
-            before = self.executor.status(quotes=quotes, rates=rates)
+            before = self.executor.status(
+                quotes=quotes,
+                rates=rates,
+                now=selected_now,
+            )
             plan = self.coordinator.plan(
                 assessments=assessments,
                 quotes=quotes,
@@ -92,7 +96,11 @@ class ForexPaperAutopilot:
                 cycle_id=cycle_id,
                 now=selected_now,
             )
-            after = self.executor.status(quotes=quotes, rates=rates)
+            after = self.executor.status(
+                quotes=quotes,
+                rates=rates,
+                now=selected_now,
+            )
         except TradingValidationError as error:
             return self._blocked(str(error), selected_now)
         return {
