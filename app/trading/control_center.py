@@ -375,6 +375,7 @@ class TradingControlCenter:
             if performance_integrity.get("evidence_valid") is True
             else "NIEPRAWIDŁOWE"
         )
+        pair_review = dict(performance.get("pair_review", {}) or {})
         runtime_cycle = snapshot["forex"]["last_runtime_cycle"]
         observer_runtime = snapshot["forex"]["observer_runtime"]
         data = snapshot["forex"]["data_configuration"]
@@ -549,6 +550,11 @@ class TradingControlCenter:
             f"najdłuższa seria strat "
             f"{performance.get('maximum_consecutive_losses', 0)}; "
             f"dowody {performance_evidence}.\n"
+            f"• Próbki par: do ręcznego przeglądu "
+            f"{pair_review.get('ready_pair_count', 0)}/7; w trakcie "
+            f"{pair_review.get('collecting_pair_count', 0)}; bez zamkniętej "
+            f"transakcji {pair_review.get('unobserved_pair_count', 7)}; "
+            "automatyczny wybór par jest wyłączony.\n"
             f"• Kohorty V1/V2: faktyczny V1 — sygnały "
             f"{v1_cohort.get('open_signal_count', 0)}, zamknięte "
             f"{v1_cohort.get('closed_trade_count', 0)}, wynik "

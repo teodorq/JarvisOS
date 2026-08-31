@@ -42,6 +42,11 @@ $action = New-ScheduledTaskAction `
     -WorkingDirectory $projectPath
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $userId
 $trigger.Delay = "PT40S"
+$recoveryTrigger = New-ScheduledTaskTrigger `
+    -Once `
+    -At (Get-Date).AddMinutes(1) `
+    -RepetitionInterval (New-TimeSpan -Minutes 15) `
+    -RepetitionDuration (New-TimeSpan -Days 3650)
 $principal = New-ScheduledTaskPrincipal `
     -UserId $userId `
     -LogonType Interactive `
@@ -56,12 +61,13 @@ $settings = New-ScheduledTaskSettingsSet `
     -MultipleInstances IgnoreNew
 $definition = New-ScheduledTask `
     -Action $action `
-    -Trigger $trigger `
+    -Trigger @($trigger, $recoveryTrigger) `
     -Principal $principal `
     -Settings $settings `
     -Description (
         "Starts OANDA TMS MT5 after sign-in and runs autonomous local JARVIS OS " +
-        "Forex PAPER cycles every 15 minutes. It cannot send broker orders."
+        "Forex PAPER cycles every 15 minutes. A recovery trigger restarts the " +
+        "observer if it exits. It cannot send broker orders."
     )
 
 Register-ScheduledTask `

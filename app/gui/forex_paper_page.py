@@ -133,7 +133,7 @@ class ForexPaperPage(QWidget):
     def _pair_results_card(self) -> SectionCard:
         card = SectionCard(
             "Wyniki siedmiu par",
-            "Wyłącznie zamknięte transakcje PAPER; mała próbka nie potwierdza strategii.",
+            "Postęp każdej próbki PAPER; status nigdy nie wybiera pary automatycznie.",
         )
         self.pair_table = ForexPairResultsTable()
         self._configure_table(self.pair_table)
@@ -219,8 +219,10 @@ class ForexPaperPage(QWidget):
             performance.get("minimum_closed_trades_for_review", 20) or 20
         )
         self.metrics["closed"].set_value(f"{closed} / {required}")
+        pair_review = performance.get("pair_review")
+        pair_review = dict(pair_review) if isinstance(pair_review, dict) else {}
         self.metrics["closed"].set_hint(
-            "Ręczny przegląd po zebraniu pełnej próbki."
+            f"Pary do przeglądu: {pair_review.get('ready_pair_count', 0)}/7"
         )
         average = str(performance.get("average_trade_pnl_pln", "0.00"))
         self.metrics["average"].set_value(f"{average} PLN")

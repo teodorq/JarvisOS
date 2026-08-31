@@ -5,13 +5,15 @@ from __future__ import annotations
 import json
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
-import re
 from typing import Any
 
 from app.core.project_paths import resolve_project_root
 
 
-_PAIR = re.compile(r"^[A-Z]{3}_[A-Z]{3}$")
+_MAJOR_PAIRS = (
+    "EUR_USD", "GBP_USD", "USD_JPY", "USD_CHF",
+    "AUD_USD", "USD_CAD", "NZD_USD",
+)
 
 
 class ForexPaperDashboard:
@@ -166,16 +168,30 @@ class ForexPaperDashboard:
         raw_pairs = item.get("pair_breakdown")
         raw_pairs = dict(raw_pairs) if isinstance(raw_pairs, dict) else {}
         pairs: dict[str, dict[str, Any]] = {}
-        for raw_pair, raw_metrics in raw_pairs.items():
-            pair = str(raw_pair).strip().upper()
-            if not _PAIR.fullmatch(pair) or not isinstance(raw_metrics, dict):
-                continue
-            metrics = dict(raw_metrics)
+        required = max(1, cls._count(
+            item.get("minimum_closed_trades_for_review") or 20
+        ))
+        evidence_valid = integrity.get("evidence_valid") is True
+        for pair in _MAJOR_PAIRS:
+            raw_metrics = raw_pairs.get(pair)
+            metrics = dict(raw_metrics) if isinstance(raw_metrics, dict) else {}
             pair_factor = metrics.get("profit_factor")
+            count = cls._count(metrics.get("closed_trade_count"))
+            review_status = str(metrics.get("review_status", "")).upper()
+            allowed_statuses = {
+                "NO_CLOSED_TRADES",
+                "COLLECTING_PAIR_SAMPLE",
+                "READY_FOR_MANUAL_REVIEW",
+                "BLOCKED_INVALID_EVIDENCE",
+            }
+            if not evidence_valid:
+                review_status = "BLOCKED_INVALID_EVIDENCE"
+            elif review_status not in allowed_statuses:
+                review_status = (
+                    "NO_CLOSED_TRADES" if count == 0 else "COLLECTING_PAIR_SAMPLE"
+                )
             pairs[pair] = {
-                "closed_trade_count": cls._count(
-                    metrics.get("closed_trade_count")
-                ),
+                "closed_trade_count": count,
                 "winning_trade_count": cls._count(
                     metrics.get("winning_trade_count")
                 ),
@@ -196,8 +212,19 @@ class ForexPaperDashboard:
                     if pair_factor is not None
                     else None
                 ),
+                "minimum_closed_trades_for_review": required,
+                "remaining_closed_trades_for_review": max(0, required - count),
+                "sample_progress_pct": cls._number(
+                    min(100, count * 100 / max(1, required)), 2
+                ),
+                "sample_size_sufficient_for_review": (
+                    review_status == "READY_FOR_MANUAL_REVIEW"
+                ),
+                "review_status": review_status,
                 "performance_validated": False,
+                "automatic_pair_selection": False,
             }
+        pair_review = cls._pair_review(pairs, required, evidence_valid)
         return {
             "status": str(item.get("status", "COLLECTING_PAPER_SAMPLE"))[:80],
             "valid_closed_trade_count": cls._count(
@@ -227,8 +254,52 @@ class ForexPaperDashboard:
                 item.get("maximum_consecutive_losses")
             ),
             "pair_breakdown": pairs,
-            "evidence_valid": integrity.get("evidence_valid") is True,
+            "pair_review": pair_review,
+            "evidence_valid": evidence_valid,
             "performance_validated": False,
+            "live_promotion_ready": False,
+        }
+
+    @staticmethod
+    def _pair_review(
+        pairs: dict[str, dict[str, Any]],
+        required: int,
+        evidence_valid: bool,
+    ) -> dict[str, Any]:
+        def selected(status: str) -> list[str]:
+            return [
+                pair for pair, metrics in pairs.items()
+                if metrics.get("review_status") == status
+            ]
+
+        ready = selected("READY_FOR_MANUAL_REVIEW")
+        collecting = selected("COLLECTING_PAIR_SAMPLE")
+        unobserved = selected("NO_CLOSED_TRADES")
+        blocked = selected("BLOCKED_INVALID_EVIDENCE")
+        return {
+            "status": (
+                "BLOCKED_INVALID_EVIDENCE"
+                if not evidence_valid
+                else (
+                    "READY_FOR_MANUAL_REVIEW"
+                    if len(ready) == len(pairs)
+                    else "COLLECTING_PAIR_SAMPLES"
+                )
+            ),
+            "mode": "FOREX_PAIR_REVIEW_READ_ONLY",
+            "pair_count": len(pairs),
+            "minimum_closed_trades_per_pair_for_review": required,
+            "ready_pair_count": len(ready),
+            "collecting_pair_count": len(collecting),
+            "unobserved_pair_count": len(unobserved),
+            "blocked_pair_count": len(blocked),
+            "ready_pairs": ready,
+            "collecting_pairs": collecting,
+            "unobserved_pairs": unobserved,
+            "blocked_pairs": blocked,
+            "all_pairs_ready_for_manual_review": len(ready) == len(pairs),
+            "automatic_pair_selection": False,
+            "automatic_pair_disable": False,
             "live_promotion_ready": False,
         }
 
@@ -240,7 +311,7 @@ class ForexPaperDashboard:
             item = dict(raw) if isinstance(raw, dict) else {}
             pair = str(item.get("pair", "")).strip().upper()
             side = str(item.get("side", "")).strip().upper()
-            if not _PAIR.fullmatch(pair) or side not in {"LONG", "SHORT"}:
+            if pair not in _MAJOR_PAIRS or side not in {"LONG", "SHORT"}:
                 continue
             result.append({
                 "pair": pair,

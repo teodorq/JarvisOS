@@ -34,8 +34,15 @@ class _Dashboard:
                         "net_realized_pnl_pln": "-44.26",
                         "average_trade_pnl_pln": "-44.26",
                         "profit_factor": "0.0000",
+                        "minimum_closed_trades_for_review": 20,
+                        "review_status": "COLLECTING_PAIR_SAMPLE",
                     },
                 },
+            },
+            "pair_review": {
+                "ready_pair_count": 0,
+                "collecting_pair_count": 1,
+                "unobserved_pair_count": 6,
             },
             "positions": [{
                 "pair": "USD_CHF",
@@ -87,6 +94,8 @@ def test_forex_page_shows_position_and_has_no_execution_controls() -> None:
         assert page.pair_table.item(3, 1).text() == "1"
         assert page.pair_table.item(3, 5).text() == "-44.26"
         assert page.pair_table.item(3, 7).text() == "0.0000"
+        assert page.pair_table.item(3, 8).text() == "1/20"
+        assert page.pair_table.item(3, 9).text() == "ZBIERANIE"
         assert page.history_table.rowCount() == 1
         assert page.history_table.item(0, 1).text() == "OTWARCIE"
         assert page.history_table.item(0, 3).text() == "OCZEKUJE"

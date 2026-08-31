@@ -18,6 +18,10 @@ def test_installer_uses_hidden_limited_interactive_logon_task() -> None:
     assert "-RunLevel Limited" in INSTALLER
     assert "-MultipleInstances IgnoreNew" in INSTALLER
     assert "Start-ScheduledTask -TaskName $taskName" in INSTALLER
+    assert "-RepetitionInterval (New-TimeSpan -Minutes 15)" in INSTALLER
+    assert "-RepetitionDuration (New-TimeSpan -Days 3650)" in INSTALLER
+    assert "-Trigger @($trigger, $recoveryTrigger)" in INSTALLER
+    assert "-MultipleInstances IgnoreNew" in INSTALLER
 
 
 def test_installer_has_reversible_remove_path() -> None:

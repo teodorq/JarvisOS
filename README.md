@@ -145,13 +145,18 @@ metric row shows sample progress, average trade result, profit factor and the
 maximum closed-equity drawdown. Twenty valid closed trades only make the sample
 available for manual review; they never validate the strategy or enable LIVE.
 The `WYNIKI PAR` tab keeps the same metrics separate for all seven configured
-pairs. The owner status also groups actual V1 PAPER openings into the frozen V2
+pairs and shows each pair's progress toward 20 closed PAPER trades. A completed
+pair sample only opens a manual review; it never enables, disables or promotes a
+pair automatically. The owner status also groups actual V1 PAPER openings into the frozen V2
 `retained` and `filtered` cohorts at entry time. This is cohort attribution, not
 a counterfactual V2 portfolio simulation, and cannot prove that V2 is better.
 The observer also writes an atomic, bounded heartbeat to
 `data/trading/forex_observer_status.json`. Owner status can therefore distinguish
 a healthy closed-market idle state from a stale or missing observer without
-starting MT5 or spending a market-data request outside the trading window.
+starting MT5 or spending a market-data request outside the trading window. Its
+Windows task has both a logon trigger and a 15-minute recovery trigger; the
+single-instance policy ignores the recovery trigger while the observer is healthy
+and restarts it after an unexpected exit.
 
 Every watchdog cycle also appends safe open, close, first data-block and recovery
 events to the bounded, ignored `data/trading/forex_paper_activity_history.json`.

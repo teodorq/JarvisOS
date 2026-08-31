@@ -70,8 +70,16 @@ def test_review_calculates_profit_factor_drawdown_and_loss_streak() -> None:
     assert eur["average_trade_pnl_pln"] == "-2.00"
     assert eur["profit_factor"] == "0.9167"
     assert eur["maximum_consecutive_losses"] == 2
+    assert eur["review_status"] == "COLLECTING_PAIR_SAMPLE"
+    assert eur["sample_progress_pct"] == "25.00"
+    assert eur["remaining_closed_trades_for_review"] == 15
     assert review["pair_breakdown"]["GBP_USD"]["closed_trade_count"] == 0
+    assert review["pair_breakdown"]["GBP_USD"]["review_status"] == "NO_CLOSED_TRADES"
     assert review["pair_breakdown"]["GBP_USD"]["performance_validated"] is False
+    assert review["pair_review"]["ready_pair_count"] == 0
+    assert review["pair_review"]["collecting_pairs"] == ["EUR_USD"]
+    assert review["pair_review"]["unobserved_pair_count"] == 6
+    assert review["pair_review"]["automatic_pair_selection"] is False
 
 
 def test_full_sample_only_opens_manual_review_not_live_promotion() -> None:
@@ -86,6 +94,11 @@ def test_full_sample_only_opens_manual_review_not_live_promotion() -> None:
     assert review["automatic_paper_strategy_change"] is False
     assert review["live_promotion_ready"] is False
     assert review["automatic_live_promotion"] is False
+    assert review["pair_breakdown"]["EUR_USD"]["review_status"] == (
+        "READY_FOR_MANUAL_REVIEW"
+    )
+    assert review["pair_review"]["ready_pairs"] == ["EUR_USD"]
+    assert review["pair_review"]["all_pairs_ready_for_manual_review"] is False
 
 
 def test_invalid_fill_or_audit_mismatch_blocks_evidence() -> None:
@@ -103,6 +116,10 @@ def test_invalid_fill_or_audit_mismatch_blocks_evidence() -> None:
     assert invalid["integrity"]["evidence_valid"] is False
     assert mismatch["status"] == "BLOCKED_INVALID_EVIDENCE"
     assert mismatch["integrity"]["execution_audit_matches_ledger"] is False
+    assert all(
+        item["review_status"] == "BLOCKED_INVALID_EVIDENCE"
+        for item in mismatch["pair_breakdown"].values()
+    )
 
 
 def test_balance_that_does_not_reconcile_blocks_evidence() -> None:

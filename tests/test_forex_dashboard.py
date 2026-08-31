@@ -55,6 +55,10 @@ def _account() -> dict:
                     "net_realized_pnl_pln": "-44.26",
                     "average_trade_pnl_pln": "-44.26",
                     "profit_factor": "0.0000",
+                    "minimum_closed_trades_for_review": 20,
+                    "remaining_closed_trades_for_review": 19,
+                    "sample_progress_pct": "5.00",
+                    "review_status": "COLLECTING_PAIR_SAMPLE",
                 },
             },
             "integrity": {"evidence_valid": True},
@@ -123,6 +127,14 @@ def test_dashboard_projects_latest_safe_paper_cycle() -> None:
         assert pair["net_realized_pnl_pln"] == "-44.26"
         assert pair["profit_factor"] == "0.0000"
         assert pair["performance_validated"] is False
+        assert pair["review_status"] == "COLLECTING_PAIR_SAMPLE"
+        assert pair["sample_progress_pct"] == "5.00"
+        assert snapshot["performance"]["pair_review"]["ready_pair_count"] == 0
+        assert snapshot["performance"]["pair_review"]["collecting_pairs"] == [
+            "USD_CHF"
+        ]
+        assert snapshot["performance"]["pair_review"]["unobserved_pair_count"] == 6
+        assert snapshot["performance"]["pair_review"]["automatic_pair_disable"] is False
         assert snapshot["new_entries_paused_by_loss_streak"] is True
         assert snapshot["loss_streak_safety"] == {
             "active": True,

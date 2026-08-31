@@ -167,6 +167,10 @@ def build_forex_paper_performance_review(
         status = "COLLECTING_PAPER_SAMPLE"
 
     pair_breakdown: dict[str, dict[str, Any]] = {}
+    ready_pairs: list[str] = []
+    collecting_pairs: list[str] = []
+    unobserved_pairs: list[str] = []
+    blocked_pairs: list[str] = []
     for pair, outcomes in pair_values.items():
         pair_profits = [value for value in outcomes if value > 0]
         pair_losses = [value for value in outcomes if value < 0]
@@ -193,6 +197,20 @@ def build_forex_paper_performance_review(
                 )
             else:
                 pair_loss_streak = 0
+        pair_remaining = max(0, required - len(outcomes))
+        pair_sample_ready = bool(evidence_valid and len(outcomes) >= required)
+        if not evidence_valid:
+            pair_review_status = "BLOCKED_INVALID_EVIDENCE"
+            blocked_pairs.append(pair)
+        elif not outcomes:
+            pair_review_status = "NO_CLOSED_TRADES"
+            unobserved_pairs.append(pair)
+        elif pair_sample_ready:
+            pair_review_status = "READY_FOR_MANUAL_REVIEW"
+            ready_pairs.append(pair)
+        else:
+            pair_review_status = "COLLECTING_PAIR_SAMPLE"
+            collecting_pairs.append(pair)
         pair_breakdown[pair] = {
             "closed_trade_count": len(outcomes),
             "winning_trade_count": len(pair_profits),
@@ -209,8 +227,48 @@ def build_forex_paper_performance_review(
                 else None
             ),
             "maximum_consecutive_losses": pair_maximum_loss_streak,
+            "minimum_closed_trades_for_review": required,
+            "remaining_closed_trades_for_review": pair_remaining,
+            "sample_progress_pct": _text(
+                min(
+                    Decimal("100"),
+                    Decimal(len(outcomes)) * 100 / Decimal(required),
+                ),
+                _PERCENT,
+            ),
+            "sample_size_sufficient_for_review": pair_sample_ready,
+            "review_status": pair_review_status,
             "performance_validated": False,
+            "automatic_pair_selection": False,
         }
+
+    pair_review_status = (
+        "BLOCKED_INVALID_EVIDENCE"
+        if blocked_pairs
+        else (
+            "READY_FOR_MANUAL_REVIEW"
+            if len(ready_pairs) == len(pair_values)
+            else "COLLECTING_PAIR_SAMPLES"
+        )
+    )
+    pair_review = {
+        "status": pair_review_status,
+        "mode": "FOREX_PAIR_REVIEW_READ_ONLY",
+        "pair_count": len(pair_values),
+        "minimum_closed_trades_per_pair_for_review": required,
+        "ready_pair_count": len(ready_pairs),
+        "collecting_pair_count": len(collecting_pairs),
+        "unobserved_pair_count": len(unobserved_pairs),
+        "blocked_pair_count": len(blocked_pairs),
+        "ready_pairs": ready_pairs,
+        "collecting_pairs": collecting_pairs,
+        "unobserved_pairs": unobserved_pairs,
+        "blocked_pairs": blocked_pairs,
+        "all_pairs_ready_for_manual_review": len(ready_pairs) == len(pair_values),
+        "automatic_pair_selection": False,
+        "automatic_pair_disable": False,
+        "live_promotion_ready": False,
+    }
 
     return {
         "status": status,
@@ -242,6 +300,7 @@ def build_forex_paper_performance_review(
         "maximum_consecutive_losses": maximum_loss_streak,
         "current_consecutive_losses": current_loss_streak,
         "pair_breakdown": pair_breakdown,
+        "pair_review": pair_review,
         "integrity": {
             "evidence_valid": evidence_valid,
             "audit_chain_valid": audit_chain_valid is True,

@@ -29,6 +29,8 @@ class ForexPairResultsTable(QTableWidget):
         "WYNIK PLN",
         "ŚREDNIA PLN",
         "PROFIT FACTOR",
+        "POSTĘP",
+        "STATUS",
     )
 
     def __init__(self) -> None:
@@ -43,6 +45,12 @@ class ForexPairResultsTable(QTableWidget):
             raw = values.get(pair)
             metrics = dict(raw) if isinstance(raw, Mapping) else {}
             factor = metrics.get("profit_factor")
+            review_status = {
+                "NO_CLOSED_TRADES": "BRAK DANYCH",
+                "COLLECTING_PAIR_SAMPLE": "ZBIERANIE",
+                "READY_FOR_MANUAL_REVIEW": "DO PRZEGLĄDU",
+                "BLOCKED_INVALID_EVIDENCE": "BLOKADA DOWODÓW",
+            }.get(str(metrics.get("review_status", "")), "BRAK DANYCH")
             columns = (
                 pair.replace("_", "/"),
                 str(metrics.get("closed_trade_count", 0)),
@@ -52,6 +60,11 @@ class ForexPairResultsTable(QTableWidget):
                 str(metrics.get("net_realized_pnl_pln", "0.00")),
                 str(metrics.get("average_trade_pnl_pln", "0.00")),
                 str(factor) if factor is not None else "N/D",
+                (
+                    f"{metrics.get('closed_trade_count', 0)}/"
+                    f"{metrics.get('minimum_closed_trades_for_review', 20)}"
+                ),
+                review_status,
             )
             for column, value in enumerate(columns):
                 item = QTableWidgetItem(value)
