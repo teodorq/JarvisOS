@@ -141,6 +141,9 @@ nie zawiera funkcji wysyłania, zmiany ani zamykania zleceń. Alternatywny adapt
 OANDA REST-V20 `practice` pozostaje dostępny dla oddziałów obsługujących v20;
 OANDA TMS w Polsce korzysta z MT5. Klucz Twelve Data jest pobierany z ignorowanego
 `config/forex.env` i ukryty w reprezentacji obiektów oraz statusie.
+Observer przed pełnym cyklem lokalnie potwierdza świeżość ticków i zamkniętych
+świec wszystkich siedmiu par. Sonda nie odpytuje zewnętrznych dostawców i nie
+ma powierzchni do składania zleceń.
 
 Przed każdym wejściem bramka wymaga dwóch świeżych, zgodnych źródeł ceny.
 Rozbieżność większa niż 0,2%, brak jednej z siedmiu par, stary kalendarz,
@@ -148,6 +151,9 @@ wydarzenie wysokiej ważności w oknie 30 minut, zamknięty rynek albo kurs NBP
 starszy niż cztery dni blokują nowe pozycje. Dane NBP są referencją księgową dla
 PAPER, a nie drugim źródłem ceny wykonania. Spot Forex nie ma jednego centralnego
 wolumenu całego rynku, dlatego tick volume pozostaje tylko jednym z filtrów.
+Wpis `Holiday` blokuje pary zawierające wskazaną walutę przez cały lokalny dzień
+źródła. Blokada wejść usuwa wszystkie instrukcje otwarcia, ale może przepuścić
+wyłącznie zweryfikowane zamknięcie istniejącej pozycji PAPER.
 
 Narzędzie `tools/export_mt5_history.py` pobiera wyłącznie zamknięte świece M15,
 zaczynając od pozycji 1 API MT5. Dane trafiają do ignorowanego katalogu

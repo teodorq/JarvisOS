@@ -57,10 +57,13 @@ class ForexDemoPaperRuntime:
                 now=selected_now,
                 bundle=bundle,
             )
+            close_only = self._verified_close_only(observation)
+            scoped_entries = self._verified_scoped_entries(observation)
+            opening_blocked = bool(observation.get("opening_blocks"))
             if (
                 observation.get("status") != "OBSERVATION_RECORDED"
                 or observation.get("fully_cross_checked") is not True
-                or bool(observation.get("opening_blocks"))
+                or (opening_blocked and not (close_only or scoped_entries))
                 or observation.get("positions_unchanged") is not True
             ):
                 return self._blocked(
@@ -81,6 +84,7 @@ class ForexDemoPaperRuntime:
                 contexts=bundle.contexts,
                 conversion_quotes=bundle.conversion_quotes,
                 cycle_id=f"paper-cycle-{selected_id}",
+                allow_new_entries=not close_only,
                 now=selected_now,
             )
         except (OSError, RuntimeError, TradingValidationError) as error:
@@ -102,6 +106,54 @@ class ForexDemoPaperRuntime:
             "live_orders_sent": False,
             "real_money_access": False,
         }
+
+    @staticmethod
+    def _verified_close_only(observation: dict[str, Any]) -> bool:
+        plan = observation.get("proposed_plan")
+        if not isinstance(plan, dict):
+            return False
+        instructions = plan.get("instructions")
+        return bool(
+            plan.get("mode") == "FOREX_PAPER_ONLY"
+            and plan.get("live_orders_sent") is False
+            and plan.get("network_access") is False
+            and isinstance(instructions, list)
+            and instructions
+            and all(
+                isinstance(item, dict)
+                and item.get("action") == "CLOSE_POSITION"
+                and item.get("mode") == "FOREX_PAPER_ONLY"
+                for item in instructions
+            )
+        )
+
+    @staticmethod
+    def _verified_scoped_entries(observation: dict[str, Any]) -> bool:
+        plan = observation.get("proposed_plan")
+        assessments = observation.get("assessments")
+        if not isinstance(plan, dict) or not isinstance(assessments, list):
+            return False
+        instructions = plan.get("instructions")
+        if not (
+            plan.get("mode") == "FOREX_PAPER_ONLY"
+            and plan.get("live_orders_sent") is False
+            and plan.get("network_access") is False
+            and isinstance(instructions, list)
+            and instructions
+        ):
+            return False
+        ready = {
+            (item.get("pair"), item.get("action"))
+            for item in assessments
+            if isinstance(item, dict) and item.get("status") == "READY"
+        }
+        return all(
+            isinstance(item, dict)
+            and item.get("action") in {"OPEN_LONG", "OPEN_SHORT"}
+            and item.get("mode") == "FOREX_PAPER_ONLY"
+            and (item.get("pair"), item.get("action")) in ready
+            for item in instructions
+        )
 
     @staticmethod
     def _blocked(

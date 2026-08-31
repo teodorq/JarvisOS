@@ -70,6 +70,10 @@ cross-checks prices, NBP supplies the public USD/PLN reference and the public
 weekly Forex Factory export supplies the economic calendar. Configuration is
 absent by default, so the opening gate remains closed. No broker order route or
 real-money execution surface is exposed.
+`Holiday` entries are treated as high importance for the complete source-local
+calendar day and affect only pairs containing that currency. Event or data
+blocks remove every new entry, while a fully cross-checked close-only plan may
+still reduce an existing PAPER position.
 
 Before PAPER execution is enabled, use the observation-only cycle. It reads all
 configured sources and 211 closed M15 bars per pair, calculates the same
@@ -89,8 +93,10 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\install_forex_ob
 ```
 
 The limited interactive task starts only the configured OANDA TMS MT5 terminal,
-waits for it to connect and runs one local PAPER cycle every 15 minutes while
-the Forex market is open. MT5 stamps each candle at its opening time, so JARVIS
+waits for all seven local ticks and closed-bar series to become fresh, and runs
+one local PAPER cycle every 15 minutes while the Forex market is open. This
+readiness probe never calls the external providers and has no order surface.
+MT5 stamps each candle at its opening time, so JARVIS
 accepts the previous fully closed M15 candle for at most two M15 periods plus a
 one-minute synchronization allowance; older data still fails closed. Set
 `JARVIS_OS_FOREX_PAPER_AUTOPILOT_ENABLED=true` in the ignored

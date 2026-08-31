@@ -37,7 +37,7 @@ _COUNTRY_CURRENCY = {
 }
 
 
-def _utc_datetime(value: object, code: str) -> datetime:
+def _source_datetime(value: object, code: str) -> datetime:
     text = str(value or "").strip()
     if text.endswith("Z"):
         text = text[:-1] + "+00:00"
@@ -47,7 +47,11 @@ def _utc_datetime(value: object, code: str) -> datetime:
         raise TradingValidationError(code) from error
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
-    return aware_utc(parsed)
+    return parsed
+
+
+def _utc_datetime(value: object, code: str) -> datetime:
+    return aware_utc(_source_datetime(value, code))
 
 
 def _mapping(value: object, code: str) -> Mapping[str, Any]:
@@ -242,20 +246,34 @@ class ForexFactoryEconomicCalendarReadOnlySource:
             currency = str(row.get("country", "")).strip().upper()
             if currency not in _MAJOR_CURRENCIES:
                 continue
-            importance = {"low": 1, "medium": 2, "high": 3}.get(
-                str(row.get("impact", "")).strip().casefold()
-            )
+            impact = str(row.get("impact", "")).strip().casefold()
+            importance = {
+                "low": 1,
+                "medium": 2,
+                "high": 3,
+                "holiday": 3,
+            }.get(impact)
             if importance is None:
                 raise TradingValidationError(
                     "forex_factory_calendar: invalid_importance"
                 )
+            source_time = _source_datetime(
+                row.get("date"), "forex_factory_calendar: invalid_time"
+            )
+            block_start = None
+            block_end = None
+            if impact == "holiday":
+                block_start = datetime.combine(
+                    source_time.date(), time.min, tzinfo=source_time.tzinfo
+                )
+                block_end = block_start + timedelta(days=1)
             events.append(EconomicEvent(
-                event_at=_utc_datetime(
-                    row.get("date"), "forex_factory_calendar: invalid_time"
-                ),
+                event_at=source_time,
                 title=row.get("title"),
                 currencies=(currency,),
                 importance=importance,
+                block_start_at=block_start,
+                block_end_at=block_end,
             ))
         events.sort(key=lambda item: item.event_at)
         if not events:

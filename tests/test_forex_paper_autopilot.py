@@ -103,6 +103,7 @@ class ForexPaperAutopilotTests(unittest.TestCase):
         now: datetime | None = None,
         direction: str = "UP",
         sources: int = 2,
+        allow_new_entries: bool = True,
     ) -> dict:
         selected_now = now or self.now
         quotes, bars, contexts, conversion = market(
@@ -116,6 +117,7 @@ class ForexPaperAutopilotTests(unittest.TestCase):
             contexts=contexts,
             conversion_quotes=conversion,
             cycle_id=cycle_id,
+            allow_new_entries=allow_new_entries,
             now=selected_now,
         )
 
@@ -174,6 +176,31 @@ class ForexPaperAutopilotTests(unittest.TestCase):
         self.assertFalse(performance["performance_validated"])
         self.assertFalse(performance["live_promotion_ready"])
         self.assertEqual(status["open_positions"], [])
+
+    def test_close_only_mode_removes_entries_but_preserves_exit(self) -> None:
+        blocked_open = self.run_cycle(
+            "forex-cycle-entry-blocked",
+            allow_new_entries=False,
+        )
+        self.assertEqual(blocked_open["plan"]["status"], "NO_ACTION")
+        self.assertEqual(blocked_open["execution"]["status"], "NO_EXECUTION")
+        self.assertFalse(blocked_open["new_entries_allowed"])
+        self.assertEqual(blocked_open["account"]["position_count"], 0)
+
+        self.run_cycle("forex-cycle-close-only-open")
+        closed = self.run_cycle(
+            "forex-cycle-close-only-exit",
+            now=self.now + timedelta(minutes=15),
+            direction="DOWN",
+            allow_new_entries=False,
+        )
+        fills = [
+            item["fill"]["action"]
+            for item in closed["execution"]["executions"]
+        ]
+        self.assertEqual(fills, ["CLOSE_LONG"])
+        self.assertTrue(all(not action.startswith("OPEN_") for action in fills))
+        self.assertEqual(closed["account"]["position_count"], 0)
 
     def test_missing_second_source_produces_no_execution(self) -> None:
         result = self.run_cycle("forex-cycle-data", sources=1)

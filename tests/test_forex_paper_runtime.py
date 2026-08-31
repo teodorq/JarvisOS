@@ -32,14 +32,21 @@ BASE = {
 }
 
 
-def _bundle(now: datetime) -> ForexDataBundle:
+def _bundle(
+    now: datetime,
+    *,
+    eur_direction: str = "UP",
+    blocked_pair: str = "",
+) -> ForexDataBundle:
     quotes = {}
     bars = {}
     contexts = {}
     for pair in MAJOR_FOREX_PAIRS:
         prices = [BASE[pair.symbol]] * 31
-        if pair.symbol == "EUR_USD":
+        if pair.symbol == "EUR_USD" and eur_direction == "UP":
             prices[-1] += pair.pip_size * Decimal("20")
+        elif pair.symbol == "EUR_USD" and eur_direction == "DOWN":
+            prices[-1] -= pair.pip_size * Decimal("20")
         bars[pair.symbol] = tuple(
             ForexBar.create(
                 pair=pair,
@@ -63,7 +70,7 @@ def _bundle(now: datetime) -> ForexDataBundle:
             observed_at=now,
             market_open=True,
             calendar_ready=True,
-            high_impact_event_blocked=False,
+            high_impact_event_blocked=pair.symbol == blocked_pair,
             conversion_to_pln_ready=True,
             independent_source_count=2,
         )
@@ -92,13 +99,25 @@ def _bundle(now: datetime) -> ForexDataBundle:
 
 
 class FakeGateway:
-    def __init__(self, *, fully_cross_checked: bool = True) -> None:
+    def __init__(
+        self,
+        *,
+        fully_cross_checked: bool = True,
+        eur_direction: str = "UP",
+        blocked_pair: str = "",
+    ) -> None:
         self.calls = 0
         self.fully_cross_checked = fully_cross_checked
+        self.eur_direction = eur_direction
+        self.blocked_pair = blocked_pair
 
     def collect(self, *, now: datetime) -> ForexDataBundle:
         self.calls += 1
-        selected = _bundle(now)
+        selected = _bundle(
+            now,
+            eur_direction=self.eur_direction,
+            blocked_pair=self.blocked_pair,
+        )
         if self.fully_cross_checked:
             return selected
         contexts = dict(selected.contexts)
@@ -222,6 +241,60 @@ class ForexPaperRuntimeTests(unittest.TestCase):
         self.assertFalse(
             (self.root / "data/trading/forex_paper_ledger.json").exists()
         )
+        self.assertFalse(result["broker_orders_sent"])
+        self.assertFalse(result["live_orders_sent"])
+
+    def test_unrelated_event_block_allows_verified_close_only_cycle(self) -> None:
+        journal = _ready_journal(self.root)
+        opened = ForexDemoPaperRuntime(
+            self.root,
+            settings=self.settings(),
+            gateway=FakeGateway(),  # type: ignore[arg-type]
+            journal=journal,
+        ).run_once(cycle_id="close-only-open", now=NOW)
+        self.assertEqual(opened["paper"]["account"]["position_count"], 1)
+
+        closed = ForexDemoPaperRuntime(
+            self.root,
+            settings=self.settings(),
+            gateway=FakeGateway(
+                eur_direction="DOWN",
+                blocked_pair="GBP_USD",
+            ),  # type: ignore[arg-type]
+            journal=journal,
+        ).run_once(
+            cycle_id="close-only-exit",
+            now=NOW + timedelta(minutes=15),
+        )
+
+        self.assertEqual(closed["status"], "PAPER_CYCLE_COMPLETED")
+        self.assertFalse(closed["paper"]["new_entries_allowed"])
+        fills = [
+            item["fill"]["action"]
+            for item in closed["paper"]["execution"]["executions"]
+        ]
+        self.assertEqual(fills, ["CLOSE_LONG"])
+        self.assertEqual(closed["paper"]["account"]["position_count"], 0)
+        self.assertFalse(closed["broker_orders_sent"])
+        self.assertFalse(closed["live_orders_sent"])
+
+    def test_unrelated_event_block_allows_scoped_ready_entry(self) -> None:
+        result = ForexDemoPaperRuntime(
+            self.root,
+            settings=self.settings(),
+            gateway=FakeGateway(blocked_pair="GBP_USD"),  # type: ignore[arg-type]
+            journal=_ready_journal(self.root),
+        ).run_once(cycle_id="scoped-entry", now=NOW)
+
+        self.assertEqual(result["status"], "PAPER_CYCLE_COMPLETED")
+        self.assertTrue(result["paper"]["new_entries_allowed"])
+        fills = [
+            item["fill"]
+            for item in result["paper"]["execution"]["executions"]
+        ]
+        self.assertEqual([item["action"] for item in fills], ["OPEN_LONG"])
+        self.assertEqual([item["pair"] for item in fills], ["EUR_USD"])
+        self.assertTrue(all(item["pair"] != "GBP_USD" for item in fills))
         self.assertFalse(result["broker_orders_sent"])
         self.assertFalse(result["live_orders_sent"])
 

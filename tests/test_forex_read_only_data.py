@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from dataclasses import replace
 from decimal import Decimal
 import os
 from pathlib import Path
@@ -19,7 +20,10 @@ from app.market_data.forex_sources import (
     TwelveDataReadOnlySource,
 )
 from app.market_data.http_json import MarketDataTransportError, PreparedJsonRequest
-from app.market_data.mt5_demo import Mt5DemoReadOnlySource
+from app.market_data.mt5_demo import (
+    Mt5DemoReadOnlySource,
+    mt5_market_snapshot_fresh,
+)
 from app.trading.forex_autopilot import ForexPaperAutopilot
 from app.trading.forex_models import MAJOR_FOREX_PAIRS, major_pair
 from app.trading.models import TradingValidationError
@@ -44,11 +48,15 @@ class FakeForexTransport:
         *,
         divergent_pair: str = "",
         event_currency: str = "",
+        event_impact: str = "",
+        event_time: datetime | None = None,
         nbp_age_days: int = 0,
     ) -> None:
         self.calls: list[PreparedJsonRequest] = []
         self.divergent_pair = divergent_pair
         self.event_currency = event_currency
+        self.event_impact = event_impact
+        self.event_time = event_time
         self.nbp_age_days = nbp_age_days
 
     def __call__(self, request: PreparedJsonRequest) -> object:
@@ -87,11 +95,14 @@ class FakeForexTransport:
             currency = self.event_currency or "EUR"
             return [{
                 "date": (
-                    NOW if self.event_currency else NOW + timedelta(hours=12)
+                    self.event_time
+                    or (NOW if self.event_currency else NOW + timedelta(hours=12))
                 ).isoformat(),
                 "country": currency,
                 "title": "Test economic release",
-                "impact": "High" if self.event_currency else "Low",
+                "impact": self.event_impact or (
+                    "High" if self.event_currency else "Low"
+                ),
             }]
         raise AssertionError(request.public_summary())
 
@@ -289,7 +300,10 @@ class RequestBoundaryTests(unittest.TestCase):
 class ProviderParserTests(unittest.TestCase):
     def test_mt5_demo_reads_quotes_and_only_closed_m15_bars(self) -> None:
         fake = FakeMt5Module()
-        quotes, bars = Mt5DemoReadOnlySource(module=fake).fetch_market(MAJOR_FOREX_PAIRS)
+        quotes, bars = Mt5DemoReadOnlySource(module=fake).fetch_market(
+            MAJOR_FOREX_PAIRS,
+            now=NOW,
+        )
         self.assertEqual(len(quotes), 7)
         self.assertEqual(len(bars), 7)
         self.assertTrue(all(len(series) == 31 for series in bars.values()))
@@ -301,6 +315,23 @@ class ProviderParserTests(unittest.TestCase):
             ("account_info",),
         ])
         self.assertEqual(fake.calls[-1], ("shutdown",))
+        self.assertTrue(mt5_market_snapshot_fresh(
+            MAJOR_FOREX_PAIRS,
+            quotes,
+            bars,
+            now=NOW,
+        ))
+        stale_quotes = dict(quotes)
+        stale_quotes["EUR_USD"] = replace(
+            quotes["EUR_USD"],
+            timestamp=NOW - timedelta(seconds=11),
+        )
+        self.assertFalse(mt5_market_snapshot_fresh(
+            MAJOR_FOREX_PAIRS,
+            stale_quotes,
+            bars,
+            now=NOW,
+        ))
 
     def test_mt5_demo_reads_bounded_closed_m15_history(self) -> None:
         fake = FakeMt5Module()
@@ -383,6 +414,34 @@ class ProviderParserTests(unittest.TestCase):
         with self.assertRaisesRegex(TradingValidationError, "invalid_response"):
             source.fetch_calendar(now=NOW)
 
+    def test_forex_factory_holiday_has_source_local_full_day_window(self) -> None:
+        source = ForexFactoryEconomicCalendarReadOnlySource(lambda request: [{
+            "date": "2026-08-31T03:00:00-04:00",
+            "country": "GBP",
+            "title": "Bank Holiday",
+            "impact": "Holiday",
+        }])
+        event = source.fetch_calendar(now=NOW).events[0]
+        self.assertEqual(event.importance, 3)
+        self.assertEqual(
+            event.block_start_at,
+            datetime(2026, 8, 31, 4, 0, tzinfo=UTC),
+        )
+        self.assertEqual(
+            event.block_end_at,
+            datetime(2026, 9, 1, 4, 0, tzinfo=UTC),
+        )
+
+    def test_forex_factory_unknown_impact_still_fails_closed(self) -> None:
+        source = ForexFactoryEconomicCalendarReadOnlySource(lambda request: [{
+            "date": NOW.isoformat(),
+            "country": "EUR",
+            "title": "Unknown event",
+            "impact": "Unreviewed",
+        }])
+        with self.assertRaisesRegex(TradingValidationError, "invalid_importance"):
+            source.fetch_calendar(now=NOW)
+
     def test_oanda_rejects_non_practice_credentials_shape(self) -> None:
         with self.assertRaisesRegex(TradingValidationError, "invalid_account_id"):
             OandaPracticeReadOnlySource(account_id="https://live.example", token="x")
@@ -434,6 +493,24 @@ class ForexDataGatewayTests(unittest.TestCase):
         ).collect(now=NOW)
         self.assertIn("HIGH_IMPACT_EVENT_WINDOW", bundle.contexts["EUR_USD"].opening_blocks)
         self.assertNotIn("HIGH_IMPACT_EVENT_WINDOW", bundle.contexts["GBP_USD"].opening_blocks)
+
+    def test_holiday_blocks_affected_currency_for_full_source_day(self) -> None:
+        bundle = ForexReadOnlyDataGateway(
+            ready_settings(),
+            transport=FakeForexTransport(
+                event_currency="GBP",
+                event_impact="Holiday",
+                event_time=NOW - timedelta(hours=5),
+            ),
+        ).collect(now=NOW)
+        self.assertIn(
+            "HIGH_IMPACT_EVENT_WINDOW",
+            bundle.contexts["GBP_USD"].opening_blocks,
+        )
+        self.assertNotIn(
+            "HIGH_IMPACT_EVENT_WINDOW",
+            bundle.contexts["EUR_USD"].opening_blocks,
+        )
 
     def test_stale_nbp_reference_removes_conversion_and_blocks_opening(self) -> None:
         bundle = ForexReadOnlyDataGateway(

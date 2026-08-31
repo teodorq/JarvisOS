@@ -14,13 +14,19 @@ $projectPath = [IO.Path]::GetFullPath($ProjectRoot)
 $terminalPath = [IO.Path]::GetFullPath($Mt5Path)
 $pythonPath = Join-Path $projectPath ".venv\Scripts\python.exe"
 $runnerPath = Join-Path $projectPath "tools\run_forex_paper_cycle.py"
+$readinessPath = Join-Path $projectPath "tools\check_mt5_market_ready.py"
 $dataPath = Join-Path $projectPath "data\trading"
 $logPath = Join-Path $dataPath "forex_paper_watchdog.log"
 $outputPath = Join-Path $dataPath "forex_paper_last.json"
 $errorPath = Join-Path $dataPath "forex_paper_last.error.log"
 $statusPath = Join-Path $dataPath "forex_observer_status.json"
 
-foreach ($requiredPath in @($terminalPath, $pythonPath, $runnerPath)) {
+foreach ($requiredPath in @(
+    $terminalPath,
+    $pythonPath,
+    $runnerPath,
+    $readinessPath
+)) {
     if (-not (Test-Path -LiteralPath $requiredPath -PathType Leaf)) {
         throw "Required Forex observation component is missing."
     }
@@ -115,22 +121,37 @@ function Test-ForexMarketWindow {
 
 function Start-Mt5IfNeeded {
     $process = Get-RunningMt5Process
-    if ($null -ne $process) {
-        return $process
+    if ($null -eq $process) {
+        Start-Process `
+            -FilePath $terminalPath `
+            -WorkingDirectory (Split-Path -Parent $terminalPath) | Out-Null
+        Write-ObserverLog "MT5 start requested."
+        $deadline = (Get-Date).AddSeconds($StartupWaitSeconds)
+        do {
+            Start-Sleep -Seconds 3
+            $process = Get-RunningMt5Process
+        } while ($null -eq $process -and (Get-Date) -lt $deadline)
     }
-    Start-Process `
-        -FilePath $terminalPath `
-        -WorkingDirectory (Split-Path -Parent $terminalPath) | Out-Null
-    Write-ObserverLog "MT5 start requested."
-    $deadline = (Get-Date).AddSeconds($StartupWaitSeconds)
+    if ($null -eq $process) {
+        return $null
+    }
+    $readinessDeadline = (Get-Date).AddSeconds($StartupWaitSeconds)
     do {
+        $probe = Start-Process `
+            -FilePath $pythonPath `
+            -ArgumentList ('"' + $readinessPath + '"') `
+            -WorkingDirectory $projectPath `
+            -WindowStyle Hidden `
+            -Wait `
+            -PassThru
+        if ($probe.ExitCode -eq 0) {
+            Write-ObserverLog "MT5 market data ready."
+            return $process
+        }
         Start-Sleep -Seconds 3
-        $process = Get-RunningMt5Process
-    } while ($null -eq $process -and (Get-Date) -lt $deadline)
-    if ($null -ne $process) {
-        Start-Sleep -Seconds 15
-    }
-    return $process
+    } while ((Get-Date) -lt $readinessDeadline)
+    Write-ObserverLog "MT5 market data readiness timed out."
+    return $null
 }
 
 function Invoke-ForexPaperCycle {

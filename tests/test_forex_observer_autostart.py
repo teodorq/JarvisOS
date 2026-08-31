@@ -59,3 +59,6 @@ def test_watchdog_starts_only_the_configured_mt5_binary() -> None:
     assert "Get-CimInstance Win32_Process" in WATCHDOG
     assert "AUTONOMOUS_LOCAL_PAPER" in WATCHDOG
     assert "no broker order execution is available" in WATCHDOG
+    assert '"tools\\check_mt5_market_ready.py"' in WATCHDOG
+    assert "MT5 market data ready." in WATCHDOG
+    assert "MT5 market data readiness timed out." in WATCHDOG

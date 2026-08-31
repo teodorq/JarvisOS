@@ -15,6 +15,8 @@ from app.trading.models import TradingValidationError, aware_utc
 
 _SYMBOL_SUFFIX = re.compile(r"^[A-Za-z0-9._-]{0,12}$")
 _LOCAL_TIME_SERVERS = frozenset({"OANDATMS-MT5"})
+_MAX_READY_QUOTE_AGE_SECONDS = 10
+_MAX_READY_CLOSED_BAR_AGE_SECONDS = 1_860
 
 
 def _value(record: object, field: str, code: str) -> object:
@@ -29,6 +31,37 @@ def _value(record: object, field: str, code: str) -> object:
             return getattr(record, field)
         except AttributeError as error:
             raise TradingValidationError(code) from error
+
+
+def mt5_market_snapshot_fresh(
+    pairs: Iterable[ForexPair],
+    quotes: Mapping[str, ForexQuote],
+    bars: Mapping[str, Iterable[ForexBar]],
+    *,
+    now: datetime,
+) -> bool:
+    """Return true only for a complete, currently synchronized MT5 snapshot."""
+
+    selected = tuple(pairs)
+    selected_now = aware_utc(now, "now")
+    if not selected or set(quotes) != {pair.symbol for pair in selected}:
+        return False
+    if set(bars) != {pair.symbol for pair in selected}:
+        return False
+    for pair in selected:
+        quote = quotes.get(pair.symbol)
+        series = tuple(bars.get(pair.symbol, ()))
+        if quote is None or quote.pair != pair or not series:
+            return False
+        if series[-1].pair != pair:
+            return False
+        quote_age = (selected_now - quote.timestamp).total_seconds()
+        bar_age = (selected_now - series[-1].timestamp).total_seconds()
+        if not -2 <= quote_age <= _MAX_READY_QUOTE_AGE_SECONDS:
+            return False
+        if not -2 <= bar_age <= _MAX_READY_CLOSED_BAR_AGE_SECONDS:
+            return False
+    return True
 
 
 class Mt5DemoReadOnlySource:
@@ -365,4 +398,4 @@ class Mt5DemoReadOnlySource:
         return selected
 
 
-__all__ = ["Mt5DemoReadOnlySource"]
+__all__ = ["Mt5DemoReadOnlySource", "mt5_market_snapshot_fresh"]

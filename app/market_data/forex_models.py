@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Mapping
 
@@ -56,6 +56,8 @@ class EconomicEvent:
     title: str
     currencies: tuple[str, ...]
     importance: int
+    block_start_at: datetime | None = None
+    block_end_at: datetime | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "event_at", aware_utc(self.event_at))
@@ -71,6 +73,21 @@ class EconomicEvent:
         object.__setattr__(self, "currencies", currencies)
         if type(self.importance) is not int or not 1 <= self.importance <= 3:
             raise TradingValidationError("forex_calendar: invalid_importance")
+        start = self.block_start_at
+        end = self.block_end_at
+        if (start is None) != (end is None):
+            raise TradingValidationError("forex_calendar: incomplete_block_window")
+        if start is not None and end is not None:
+            start = aware_utc(start)
+            end = aware_utc(end)
+            if (
+                self.importance != 3
+                or end <= start
+                or end - start > timedelta(days=2)
+            ):
+                raise TradingValidationError("forex_calendar: invalid_block_window")
+            object.__setattr__(self, "block_start_at", start)
+            object.__setattr__(self, "block_end_at", end)
 
 
 @dataclass(frozen=True, slots=True)

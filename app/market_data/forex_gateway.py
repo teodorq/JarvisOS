@@ -230,8 +230,18 @@ class ForexReadOnlyDataGateway:
         affected = {pair.base_currency, pair.quote_currency}
         return any(
             event.importance == 3
-            and start <= event.event_at <= end
             and bool(affected.intersection(event.currencies))
+            and (
+                (
+                    event.block_start_at is not None
+                    and event.block_end_at is not None
+                    and event.block_start_at <= now < event.block_end_at
+                )
+                or (
+                    event.block_start_at is None
+                    and start <= event.event_at <= end
+                )
+            )
             for event in snapshot.events
         )
 

@@ -44,9 +44,12 @@ class ForexPaperAutopilot:
         contexts: Mapping[str, ForexSafetyContext],
         conversion_quotes: Iterable[ForexQuote],
         cycle_id: object,
+        allow_new_entries: bool = True,
         now: datetime | None = None,
     ) -> dict[str, Any]:
         selected_now = aware_utc(now or datetime.now(timezone.utc), "now")
+        if type(allow_new_entries) is not bool:
+            return self._blocked("INVALID_ENTRY_PERMISSION", selected_now)
         all_quotes: dict[str, ForexQuote] = dict(quotes)
         for quote in conversion_quotes:
             if quote.pair.symbol in all_quotes:
@@ -80,6 +83,8 @@ class ForexPaperAutopilot:
                 daily_pnl_pln=before["daily_pnl_pln"],
                 now=selected_now,
             )
+            if not allow_new_entries:
+                plan = self._without_entries(plan)
             execution = self.executor.apply_plan(
                 plan,
                 quotes=quotes,
@@ -98,9 +103,45 @@ class ForexPaperAutopilot:
             "plan": plan,
             "execution": execution,
             "account": after,
+            "new_entries_allowed": allow_new_entries,
             "live_orders_sent": False,
             "network_access": False,
         }
+
+    @staticmethod
+    def _without_entries(plan: Mapping[str, Any]) -> dict[str, Any]:
+        """Keep verified closes while making any new entry unexecutable."""
+
+        value = dict(plan)
+        raw_instructions = value.get("instructions", [])
+        instructions = [
+            dict(item)
+            for item in raw_instructions
+            if isinstance(item, Mapping)
+            and str(item.get("action", "")).upper() == "CLOSE_POSITION"
+        ] if isinstance(raw_instructions, (list, tuple)) else []
+        dropped = (
+            len(raw_instructions) - len(instructions)
+            if isinstance(raw_instructions, (list, tuple))
+            else 0
+        )
+        rejected = [
+            dict(item)
+            for item in value.get("rejected", [])
+            if isinstance(item, Mapping)
+        ]
+        if dropped:
+            rejected.append({
+                "pair": "PORTFOLIO",
+                "code": "NEW_ENTRIES_BLOCKED_BY_DATA_GATE",
+            })
+        value["status"] = "CLOSES_READY" if instructions else "NO_ACTION"
+        value["instructions"] = instructions
+        value["rejected"] = rejected
+        value["new_entries_allowed"] = False
+        value["live_orders_sent"] = False
+        value["network_access"] = False
+        return value
 
     @staticmethod
     def _blocked(code: str, now: datetime) -> dict[str, Any]:
