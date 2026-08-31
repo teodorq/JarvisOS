@@ -140,3 +140,40 @@ def test_balance_that_does_not_reconcile_blocks_evidence() -> None:
 def test_policy_rejects_unsafe_sample_threshold() -> None:
     with pytest.raises(TradingValidationError):
         ForexPaperPerformancePolicy(minimum_closed_trades_for_review=0)
+
+
+def test_contract_tracking_excludes_legacy_and_foreign_fills_from_sample() -> None:
+    expected = {
+        "contract_id": "FOREX_PAPER_V1_20260831",
+        "fingerprint_sha256": "a" * 64,
+    }
+    current = _fill("5", 1)
+    current["sample_contract_id"] = expected["contract_id"]
+    current["sample_contract_fingerprint_sha256"] = expected[
+        "fingerprint_sha256"
+    ]
+    legacy = _fill("10", 2)
+    foreign = _fill("-2", 3)
+    foreign["sample_contract_id"] = "FOREX_PAPER_OTHER"
+    foreign["sample_contract_fingerprint_sha256"] = "b" * 64
+
+    review = build_forex_paper_performance_review(
+        [legacy, current, foreign],
+        initial_balance_pln="100000",
+        current_balance_pln="100013",
+        audit_chain_valid=True,
+        execution_audit_matches_ledger=True,
+        expected_sample_contract=expected,
+    )
+
+    assert review["valid_closed_trade_count"] == 1
+    assert review["all_time_closed_trade_count"] == 3
+    assert review["sample_progress_pct"] == "5.00"
+    contract = review["sample_contract_review"]
+    assert contract["current_contract_closed_trade_count"] == 1
+    assert contract["legacy_unversioned_closed_trade_count"] == 1
+    assert contract["foreign_contract_closed_trade_count"] == 1
+    assert contract["sample_contract_consistent"] is False
+    assert review["pair_breakdown"]["EUR_USD"][
+        "sample_contract_closed_trade_count"
+    ] == 1

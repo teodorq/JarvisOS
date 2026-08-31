@@ -61,7 +61,7 @@ class ForexPairResultsTable(QTableWidget):
                 str(metrics.get("average_trade_pnl_pln", "0.00")),
                 str(factor) if factor is not None else "N/D",
                 (
-                    f"{metrics.get('closed_trade_count', 0)}/"
+                    f"{metrics.get('sample_contract_closed_trade_count', metrics.get('closed_trade_count', 0))}/"
                     f"{metrics.get('minimum_closed_trades_for_review', 20)}"
                 ),
                 review_status,

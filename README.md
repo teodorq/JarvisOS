@@ -147,7 +147,10 @@ available for manual review; they never validate the strategy or enable LIVE.
 The `WYNIKI PAR` tab keeps the same metrics separate for all seven configured
 pairs and shows each pair's progress toward 20 closed PAPER trades. A completed
 pair sample only opens a manual review; it never enables, disables or promotes a
-pair automatically. The owner status also groups actual V1 PAPER openings into the frozen V2
+pair automatically. Every new opening must also carry the exact deterministic
+sample-contract fingerprint covering the scanner, risk limits, universe and fill
+model. The two earlier unversioned fills remain in all-time history but are not
+silently merged into the new frozen sample. The owner status also groups actual V1 PAPER openings into the frozen V2
 `retained` and `filtered` cohorts at entry time. This is cohort attribution, not
 a counterfactual V2 portfolio simulation, and cannot prove that V2 is better.
 The observer also writes an atomic, bounded heartbeat to

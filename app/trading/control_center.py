@@ -376,6 +376,9 @@ class TradingControlCenter:
             else "NIEPRAWIDŁOWE"
         )
         pair_review = dict(performance.get("pair_review", {}) or {})
+        sample_contract = dict(
+            performance.get("sample_contract_review", {}) or {}
+        )
         runtime_cycle = snapshot["forex"]["last_runtime_cycle"]
         observer_runtime = snapshot["forex"]["observer_runtime"]
         data = snapshot["forex"]["data_configuration"]
@@ -555,6 +558,14 @@ class TradingControlCenter:
             f"{pair_review.get('collecting_pair_count', 0)}; bez zamkniętej "
             f"transakcji {pair_review.get('unobserved_pair_count', 7)}; "
             "automatyczny wybór par jest wyłączony.\n"
+            f"• Kontrakt próbki: bieżąca wersja "
+            f"{sample_contract.get('current_contract_closed_trade_count', 0)}/"
+            f"{performance.get('minimum_closed_trades_for_review', 20)}; "
+            f"starsze bez odcisku "
+            f"{sample_contract.get('legacy_unversioned_closed_trade_count', 0)}; "
+            f"obce odciski "
+            f"{sample_contract.get('foreign_contract_closed_trade_count', 0)}; "
+            "automatyczne łączenie próbek jest wyłączone.\n"
             f"• Kohorty V1/V2: faktyczny V1 — sygnały "
             f"{v1_cohort.get('open_signal_count', 0)}, zamknięte "
             f"{v1_cohort.get('closed_trade_count', 0)}, wynik "

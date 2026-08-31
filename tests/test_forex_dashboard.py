@@ -39,6 +39,7 @@ def _account() -> dict:
         "performance": {
             "status": "COLLECTING_PAPER_SAMPLE",
             "valid_closed_trade_count": 1,
+            "all_time_closed_trade_count": 2,
             "minimum_closed_trades_for_review": 20,
             "sample_progress_pct": "5.00",
             "average_trade_pnl_pln": "-44.26",
@@ -49,6 +50,7 @@ def _account() -> dict:
             "pair_breakdown": {
                 "USD_CHF": {
                     "closed_trade_count": 1,
+                    "sample_contract_closed_trade_count": 1,
                     "winning_trade_count": 0,
                     "losing_trade_count": 1,
                     "win_rate_pct": "0.00",
@@ -62,6 +64,17 @@ def _account() -> dict:
                 },
             },
             "integrity": {"evidence_valid": True},
+            "sample_contract_review": {
+                "status": "TRACKING_CURRENT_CONTRACT",
+                "contract_tracking_enabled": True,
+                "expected_contract_id": "FOREX_PAPER_V1_20260831",
+                "expected_fingerprint_sha256": "a" * 64,
+                "current_contract_closed_trade_count": 1,
+                "legacy_unversioned_closed_trade_count": 1,
+                "foreign_contract_closed_trade_count": 0,
+                "all_time_closed_trade_count": 2,
+                "sample_contract_consistent": True,
+            },
         },
         "processed_cycle_count": 75,
         "audit_chain_valid": True,
@@ -94,6 +107,19 @@ def _write_result(root: Path, account: dict, *, live: bool = False) -> None:
             "network_access": False,
             "account": account,
         },
+    }), encoding="utf-8")
+
+
+def _write_safe_block(root: Path, *, live: bool = False) -> None:
+    path = root / "data" / "trading" / "forex_paper_last.json"
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps({
+        "status": "PAPER_CYCLE_BLOCKED",
+        "reason": "CURRENT_OBSERVATION_BLOCKED",
+        "observed_at": "2026-08-31T18:54:00+00:00",
+        "broker_orders_sent": False,
+        "live_orders_sent": live,
+        "real_money_access": False,
     }), encoding="utf-8")
 
 
@@ -135,6 +161,11 @@ def test_dashboard_projects_latest_safe_paper_cycle() -> None:
         ]
         assert snapshot["performance"]["pair_review"]["unobserved_pair_count"] == 6
         assert snapshot["performance"]["pair_review"]["automatic_pair_disable"] is False
+        contract = snapshot["performance"]["sample_contract_review"]
+        assert contract["contract_tracking_enabled"] is True
+        assert contract["current_contract_closed_trade_count"] == 1
+        assert contract["legacy_unversioned_closed_trade_count"] == 1
+        assert contract["automatic_sample_merge"] is False
         assert snapshot["new_entries_paused_by_loss_streak"] is True
         assert snapshot["loss_streak_safety"] == {
             "active": True,
@@ -174,6 +205,34 @@ def test_dashboard_uses_safe_local_ledger_when_result_is_missing() -> None:
         assert snapshot["status"] == "READY"
         assert snapshot["source"] == "LOCAL_PAPER_LEDGER"
         assert snapshot["position_count"] == 1
+
+
+def test_dashboard_uses_ledger_after_safe_block_without_account() -> None:
+    with TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        _write_safe_block(root)
+        dashboard = ForexPaperDashboard(root, executor=_Executor(_account()))
+
+        snapshot = dashboard.snapshot()
+
+        assert snapshot["status"] == "READY"
+        assert snapshot["source"] == "LOCAL_PAPER_LEDGER_AFTER_SAFE_BLOCK"
+        assert snapshot["observed_at"] == "2026-08-31T18:54:00+00:00"
+        assert snapshot["performance"]["sample_contract_review"][
+            "contract_tracking_enabled"
+        ] is True
+
+
+def test_dashboard_does_not_fallback_after_block_claiming_live() -> None:
+    with TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        _write_safe_block(root, live=True)
+        dashboard = ForexPaperDashboard(root, executor=_Executor(_account()))
+
+        snapshot = dashboard.snapshot()
+
+        assert snapshot["status"] == "BLOCKED"
+        assert snapshot["live_orders_sent"] is False
 
 
 def test_dashboard_drops_invalid_positions_and_numbers() -> None:

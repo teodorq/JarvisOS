@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Mapping
@@ -16,6 +17,7 @@ from app.trading.forex_models import (
 )
 from app.trading.forex_risk import ForexPaperPolicy, ForexRateBook
 from app.trading.forex_scanner import ForexMarketScanner
+from app.trading.forex_sample_contract import build_forex_paper_sample_contract
 from app.trading.models import TradingValidationError, aware_utc
 
 
@@ -31,9 +33,15 @@ class ForexPaperAutopilot:
         self.policy = policy or ForexPaperPolicy()
         self.scanner = ForexMarketScanner(MAJOR_FOREX_PAIRS)
         self.coordinator = ForexPaperCoordinator(self.policy)
+        self.sample_contract = build_forex_paper_sample_contract(
+            scanner_policy=self.scanner.policy,
+            paper_policy=self.policy,
+            universe=self.scanner.universe,
+        )
         self.executor = ForexPaperExecutionEngine(
             project_root,
             policy=self.policy,
+            sample_contract=self.sample_contract,
         )
 
     def run_cycle(
@@ -87,6 +95,7 @@ class ForexPaperAutopilot:
                 daily_pnl_pln=before["daily_pnl_pln"],
                 now=selected_now,
             )
+            plan["sample_contract"] = deepcopy(self.sample_contract)
             if not allow_new_entries:
                 plan = self._without_entries(plan)
             execution = self.executor.apply_plan(

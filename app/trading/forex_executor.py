@@ -21,6 +21,11 @@ from app.trading.forex_risk import (
     ForexPortfolioRiskEngine,
     ForexRateBook,
 )
+from app.trading.forex_sample_contract import (
+    build_forex_paper_sample_contract,
+    sample_contracts_match,
+    verify_forex_paper_sample_contract,
+)
 from app.trading.models import TradingValidationError, aware_utc, decimal_value
 from app.trading.paper_broker import LiveTradingBlockedError
 
@@ -59,10 +64,17 @@ class ForexPaperExecutionEngine:
         *,
         policy: ForexPaperPolicy | None = None,
         ledger: ForexPaperLedger | None = None,
+        sample_contract: Mapping[str, Any] | None = None,
     ) -> None:
         self.policy = policy or ForexPaperPolicy()
         self.ledger = ledger or ForexPaperLedger(project_root)
         self.risk = ForexPortfolioRiskEngine(self.policy)
+        selected_contract = sample_contract or build_forex_paper_sample_contract(
+            paper_policy=self.policy
+        )
+        if not verify_forex_paper_sample_contract(selected_contract):
+            raise TradingValidationError("forex_execution: invalid_sample_contract")
+        self.sample_contract = deepcopy(dict(selected_contract))
 
     def apply_plan(
         self,
@@ -94,6 +106,22 @@ class ForexPaperExecutionEngine:
             dict(item) for item in list(plan.get("instructions", []) or [])
             if isinstance(item, Mapping)
         ]
+        if any(
+            str(item.get("action", "")).upper() in {"OPEN_LONG", "OPEN_SHORT"}
+            for item in raw_instructions
+        ):
+            provided_contract = plan.get("sample_contract")
+            if not isinstance(provided_contract, Mapping):
+                raise TradingValidationError(
+                    "forex_plan: sample_contract_required"
+                )
+            if not sample_contracts_match(
+                provided_contract,
+                self.sample_contract,
+            ):
+                raise TradingValidationError(
+                    "forex_plan: sample_contract_mismatch"
+                )
         instructions = sorted(
             raw_instructions,
             key=lambda item: 0 if item.get("action") == "CLOSE_POSITION" else 1,
@@ -156,6 +184,7 @@ class ForexPaperExecutionEngine:
                             quote,
                             rates,
                             selected_now,
+                            self.sample_contract,
                         )
                 else:
                     result = {"status": "REJECTED", "code": "UNKNOWN_ACTION"}
@@ -180,6 +209,10 @@ class ForexPaperExecutionEngine:
                 "live_orders_sent": False,
                 "network_access": False,
                 "idempotent_replay": False,
+                "sample_contract_id": self.sample_contract["contract_id"],
+                "sample_contract_fingerprint_sha256": self.sample_contract[
+                    "fingerprint_sha256"
+                ],
             }
             cycles = dict(state.get("processed_cycles", {}) or {})
             cycles[selected_cycle] = deepcopy(outcome)
@@ -210,6 +243,7 @@ class ForexPaperExecutionEngine:
         quote: ForexQuote,
         rates: ForexRateBook,
         now: datetime,
+        sample_contract: Mapping[str, Any],
     ) -> dict[str, Any]:
         positions = self._positions(state)
         if quote.pair.symbol in positions:
@@ -287,6 +321,10 @@ class ForexPaperExecutionEngine:
             "stop_loss": _text(position.stop_loss, _PRICE),
             "take_profit": _text(target, _PRICE),
             "opened_at": position.opened_at.isoformat(),
+            "sample_contract_id": str(sample_contract["contract_id"]),
+            "sample_contract_fingerprint_sha256": str(
+                sample_contract["fingerprint_sha256"]
+            ),
         }
         raw_positions = dict(state.get("positions", {}) or {})
         raw_positions[position.pair.symbol] = stored
@@ -327,6 +365,7 @@ class ForexPaperExecutionEngine:
             _decimal(state.get("daily_pnl_pln")) + pnl_pln
         )
         raw_positions = dict(state.get("positions", {}) or {})
+        stored_position = dict(raw_positions.get(pair_name, {}) or {})
         raw_positions.pop(pair_name, None)
         state["positions"] = raw_positions
         fill = {
@@ -349,6 +388,12 @@ class ForexPaperExecutionEngine:
             ],
             "realized_pnl_pln": _text(pnl_pln),
             "filled_at": now.isoformat(),
+            "sample_contract_id": str(
+                stored_position.get("sample_contract_id", "")
+            ),
+            "sample_contract_fingerprint_sha256": str(
+                stored_position.get("sample_contract_fingerprint_sha256", "")
+            ),
         }
         state["fills"] = list(state.get("fills", []) or []) + [fill]
         return {"status": "EXECUTED", "fill": deepcopy(fill)}
@@ -425,6 +470,7 @@ class ForexPaperExecutionEngine:
             execution_audit_matches_ledger=(
                 closed_fills == audited_closed_fills
             ),
+            expected_sample_contract=self.sample_contract,
         )
         loss_streak_safety = self._loss_streak_safety(state, selected_now)
         return {
@@ -468,6 +514,14 @@ class ForexPaperExecutionEngine:
             "breakeven_trade_count": breakeven_trades,
             "win_rate_pct": _text(win_rate),
             "performance": performance,
+            "sample_contract": {
+                "contract_id": self.sample_contract["contract_id"],
+                "fingerprint_sha256": self.sample_contract[
+                    "fingerprint_sha256"
+                ],
+                "paper_only": True,
+                "live_trading_enabled": False,
+            },
             "processed_cycle_count": len(processed_cycles),
             "rejection_count": len(list(state.get("rejections", []) or [])),
             "last_cycle": {

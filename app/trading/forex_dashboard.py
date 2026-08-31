@@ -29,17 +29,28 @@ class ForexPaperDashboard:
     def snapshot(self) -> dict[str, Any]:
         payload = self._load_result()
         if payload is not None:
-            if not self._result_is_paper_only(payload):
-                return self._blocked("Raport nie przeszedł kontroli PAPER ONLY.")
-            paper = payload.get("paper")
-            paper = dict(paper) if isinstance(paper, dict) else {}
-            account = paper.get("account")
-            account = dict(account) if isinstance(account, dict) else {}
-            return self._project(
-                account,
-                observed_at=str(payload.get("observed_at", "")),
-                source="LATEST_PAPER_CYCLE",
-            )
+            if self._result_is_paper_only(payload):
+                paper = payload.get("paper")
+                paper = dict(paper) if isinstance(paper, dict) else {}
+                account = paper.get("account")
+                account = dict(account) if isinstance(account, dict) else {}
+                return self._project(
+                    account,
+                    observed_at=str(payload.get("observed_at", "")),
+                    source="LATEST_PAPER_CYCLE",
+                )
+            if self._safe_blocked_cycle_without_account(payload):
+                return self._local_snapshot(
+                    observed_at=str(payload.get("observed_at", "")),
+                    source="LOCAL_PAPER_LEDGER_AFTER_SAFE_BLOCK",
+                )
+            return self._blocked("Raport nie przeszedł kontroli PAPER ONLY.")
+        return self._local_snapshot(
+            observed_at="",
+            source="LOCAL_PAPER_LEDGER",
+        )
+
+    def _local_snapshot(self, *, observed_at: str, source: str) -> dict[str, Any]:
         try:
             account = self.executor.status()
         except Exception:
@@ -47,7 +58,7 @@ class ForexPaperDashboard:
         account = dict(account) if isinstance(account, dict) else {}
         if not self._account_is_paper_only(account):
             return self._blocked("Lokalna księga nie potwierdza trybu PAPER ONLY.")
-        return self._project(account, observed_at="", source="LOCAL_PAPER_LEDGER")
+        return self._project(account, observed_at=observed_at, source=source)
 
     def _load_result(self) -> dict[str, Any] | None:
         try:
@@ -74,6 +85,21 @@ class ForexPaperDashboard:
             and paper.get("network_access") is False
         )
         return root_flags and paper_flags and cls._account_is_paper_only(account)
+
+    @staticmethod
+    def _safe_blocked_cycle_without_account(payload: dict[str, Any]) -> bool:
+        return bool(
+            payload.get("status") == "PAPER_CYCLE_BLOCKED"
+            and "paper" not in payload
+            and all(
+                payload.get(key) is False
+                for key in (
+                    "broker_orders_sent",
+                    "live_orders_sent",
+                    "real_money_access",
+                )
+            )
+        )
 
     @staticmethod
     def _account_is_paper_only(account: dict[str, Any]) -> bool:
@@ -177,6 +203,9 @@ class ForexPaperDashboard:
             metrics = dict(raw_metrics) if isinstance(raw_metrics, dict) else {}
             pair_factor = metrics.get("profit_factor")
             count = cls._count(metrics.get("closed_trade_count"))
+            sample_count = cls._count(
+                metrics.get("sample_contract_closed_trade_count", count)
+            )
             review_status = str(metrics.get("review_status", "")).upper()
             allowed_statuses = {
                 "NO_CLOSED_TRADES",
@@ -192,6 +221,7 @@ class ForexPaperDashboard:
                 )
             pairs[pair] = {
                 "closed_trade_count": count,
+                "sample_contract_closed_trade_count": sample_count,
                 "winning_trade_count": cls._count(
                     metrics.get("winning_trade_count")
                 ),
@@ -213,9 +243,11 @@ class ForexPaperDashboard:
                     else None
                 ),
                 "minimum_closed_trades_for_review": required,
-                "remaining_closed_trades_for_review": max(0, required - count),
+                "remaining_closed_trades_for_review": max(
+                    0, required - sample_count
+                ),
                 "sample_progress_pct": cls._number(
-                    min(100, count * 100 / max(1, required)), 2
+                    min(100, sample_count * 100 / max(1, required)), 2
                 ),
                 "sample_size_sufficient_for_review": (
                     review_status == "READY_FOR_MANUAL_REVIEW"
@@ -225,10 +257,16 @@ class ForexPaperDashboard:
                 "automatic_pair_selection": False,
             }
         pair_review = cls._pair_review(pairs, required, evidence_valid)
+        contract_review = cls._sample_contract_review(
+            item.get("sample_contract_review")
+        )
         return {
             "status": str(item.get("status", "COLLECTING_PAPER_SAMPLE"))[:80],
             "valid_closed_trade_count": cls._count(
                 item.get("valid_closed_trade_count")
+            ),
+            "all_time_closed_trade_count": cls._count(
+                item.get("all_time_closed_trade_count")
             ),
             "minimum_closed_trades_for_review": cls._count(
                 item.get("minimum_closed_trades_for_review") or 20
@@ -255,8 +293,47 @@ class ForexPaperDashboard:
             ),
             "pair_breakdown": pairs,
             "pair_review": pair_review,
+            "sample_contract_review": contract_review,
             "evidence_valid": evidence_valid,
             "performance_validated": False,
+            "live_promotion_ready": False,
+        }
+
+    @classmethod
+    def _sample_contract_review(cls, value: object) -> dict[str, Any]:
+        item = dict(value) if isinstance(value, dict) else {}
+        fingerprint = str(item.get("expected_fingerprint_sha256", ""))
+        if len(fingerprint) != 64 or any(
+            character not in "0123456789abcdef" for character in fingerprint
+        ):
+            fingerprint = ""
+        return {
+            "status": str(item.get("status", "CONTRACT_STATUS_MISSING"))[:80],
+            "mode": "FOREX_PAPER_SAMPLE_CONTRACT_READ_ONLY",
+            "contract_tracking_enabled": (
+                item.get("contract_tracking_enabled") is True
+            ),
+            "expected_contract_id": " ".join(
+                str(item.get("expected_contract_id", "")).split()
+            )[:80],
+            "expected_fingerprint_sha256": fingerprint,
+            "current_contract_closed_trade_count": cls._count(
+                item.get("current_contract_closed_trade_count")
+            ),
+            "legacy_unversioned_closed_trade_count": cls._count(
+                item.get("legacy_unversioned_closed_trade_count")
+            ),
+            "foreign_contract_closed_trade_count": cls._count(
+                item.get("foreign_contract_closed_trade_count")
+            ),
+            "all_time_closed_trade_count": cls._count(
+                item.get("all_time_closed_trade_count")
+            ),
+            "sample_contract_consistent": (
+                item.get("sample_contract_consistent") is True
+            ),
+            "automatic_sample_merge": False,
+            "automatic_strategy_change": False,
             "live_promotion_ready": False,
         }
 

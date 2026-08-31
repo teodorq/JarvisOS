@@ -54,6 +54,7 @@ def build_forex_paper_performance_review(
     audit_chain_valid: bool,
     execution_audit_matches_ledger: bool,
     policy: ForexPaperPerformancePolicy | None = None,
+    expected_sample_contract: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Summarize immutable PAPER evidence without changing trading state."""
 
@@ -62,6 +63,24 @@ def build_forex_paper_performance_review(
     pair_values: dict[str, list[Decimal]] = {
         pair.symbol: [] for pair in MAJOR_FOREX_PAIRS
     }
+    sample_values: list[Decimal] = []
+    sample_pair_values: dict[str, list[Decimal]] = {
+        pair.symbol: [] for pair in MAJOR_FOREX_PAIRS
+    }
+    expected_contract = (
+        dict(expected_sample_contract)
+        if isinstance(expected_sample_contract, Mapping)
+        else {}
+    )
+    expected_contract_id = str(expected_contract.get("contract_id", ""))
+    expected_fingerprint = str(
+        expected_contract.get("fingerprint_sha256", "")
+    )
+    contract_tracking_enabled = bool(
+        expected_contract_id and len(expected_fingerprint) == 64
+    )
+    legacy_unversioned_count = 0
+    foreign_contract_count = 0
     invalid_fill_count = 0
     for raw in tuple(closed_fills):
         if not isinstance(raw, Mapping):
@@ -80,6 +99,20 @@ def build_forex_paper_performance_review(
             continue
         values.append(pnl)
         pair_values[pair].append(pnl)
+        fill_contract_id = str(item.get("sample_contract_id", ""))
+        fill_fingerprint = str(
+            item.get("sample_contract_fingerprint_sha256", "")
+        )
+        if not contract_tracking_enabled or (
+            fill_contract_id == expected_contract_id
+            and fill_fingerprint == expected_fingerprint
+        ):
+            sample_values.append(pnl)
+            sample_pair_values[pair].append(pnl)
+        elif not fill_contract_id and not fill_fingerprint:
+            legacy_unversioned_count += 1
+        else:
+            foreign_contract_count += 1
 
     initial_balance = _decimal(initial_balance_pln)
     current_balance = _decimal(current_balance_pln)
@@ -157,8 +190,8 @@ def build_forex_paper_performance_review(
         and balance_reconciled
     )
     required = selected_policy.minimum_closed_trades_for_review
-    remaining = max(0, required - len(values))
-    sample_ready = bool(evidence_valid and len(values) >= required)
+    remaining = max(0, required - len(sample_values))
+    sample_ready = bool(evidence_valid and len(sample_values) >= required)
     if not evidence_valid:
         status = "BLOCKED_INVALID_EVIDENCE"
     elif sample_ready:
@@ -172,6 +205,7 @@ def build_forex_paper_performance_review(
     unobserved_pairs: list[str] = []
     blocked_pairs: list[str] = []
     for pair, outcomes in pair_values.items():
+        sample_outcomes = sample_pair_values[pair]
         pair_profits = [value for value in outcomes if value > 0]
         pair_losses = [value for value in outcomes if value < 0]
         pair_net = sum(outcomes, Decimal("0"))
@@ -197,12 +231,14 @@ def build_forex_paper_performance_review(
                 )
             else:
                 pair_loss_streak = 0
-        pair_remaining = max(0, required - len(outcomes))
-        pair_sample_ready = bool(evidence_valid and len(outcomes) >= required)
+        pair_remaining = max(0, required - len(sample_outcomes))
+        pair_sample_ready = bool(
+            evidence_valid and len(sample_outcomes) >= required
+        )
         if not evidence_valid:
             pair_review_status = "BLOCKED_INVALID_EVIDENCE"
             blocked_pairs.append(pair)
-        elif not outcomes:
+        elif not sample_outcomes:
             pair_review_status = "NO_CLOSED_TRADES"
             unobserved_pairs.append(pair)
         elif pair_sample_ready:
@@ -213,6 +249,7 @@ def build_forex_paper_performance_review(
             collecting_pairs.append(pair)
         pair_breakdown[pair] = {
             "closed_trade_count": len(outcomes),
+            "sample_contract_closed_trade_count": len(sample_outcomes),
             "winning_trade_count": len(pair_profits),
             "losing_trade_count": len(pair_losses),
             "breakeven_trade_count": (
@@ -232,7 +269,7 @@ def build_forex_paper_performance_review(
             "sample_progress_pct": _text(
                 min(
                     Decimal("100"),
-                    Decimal(len(outcomes)) * 100 / Decimal(required),
+                    Decimal(len(sample_outcomes)) * 100 / Decimal(required),
                 ),
                 _PERCENT,
             ),
@@ -269,15 +306,40 @@ def build_forex_paper_performance_review(
         "automatic_pair_disable": False,
         "live_promotion_ready": False,
     }
+    sample_contract_review = {
+        "status": (
+            "TRACKING_CURRENT_CONTRACT"
+            if contract_tracking_enabled
+            else "CONTRACT_TRACKING_NOT_REQUESTED"
+        ),
+        "mode": "FOREX_PAPER_SAMPLE_CONTRACT_READ_ONLY",
+        "contract_tracking_enabled": contract_tracking_enabled,
+        "expected_contract_id": expected_contract_id,
+        "expected_fingerprint_sha256": expected_fingerprint,
+        "current_contract_closed_trade_count": len(sample_values),
+        "legacy_unversioned_closed_trade_count": legacy_unversioned_count,
+        "foreign_contract_closed_trade_count": foreign_contract_count,
+        "all_time_closed_trade_count": len(values),
+        "legacy_fills_excluded_from_current_sample": contract_tracking_enabled,
+        "foreign_fills_excluded_from_current_sample": contract_tracking_enabled,
+        "sample_contract_consistent": foreign_contract_count == 0,
+        "automatic_sample_merge": False,
+        "automatic_strategy_change": False,
+        "live_promotion_ready": False,
+    }
 
     return {
         "status": status,
         "mode": "FOREX_PAPER_PERFORMANCE_READ_ONLY",
         "minimum_closed_trades_for_review": required,
-        "valid_closed_trade_count": len(values),
+        "valid_closed_trade_count": len(sample_values),
+        "all_time_closed_trade_count": len(values),
         "remaining_closed_trades_for_review": remaining,
         "sample_progress_pct": _text(
-            min(Decimal("100"), Decimal(len(values)) * 100 / Decimal(required)),
+            min(
+                Decimal("100"),
+                Decimal(len(sample_values)) * 100 / Decimal(required),
+            ),
             _PERCENT,
         ),
         "sample_size_sufficient_for_review": sample_ready,
@@ -301,6 +363,7 @@ def build_forex_paper_performance_review(
         "current_consecutive_losses": current_loss_streak,
         "pair_breakdown": pair_breakdown,
         "pair_review": pair_review,
+        "sample_contract_review": sample_contract_review,
         "integrity": {
             "evidence_valid": evidence_valid,
             "audit_chain_valid": audit_chain_valid is True,

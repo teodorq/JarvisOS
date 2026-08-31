@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
@@ -134,6 +135,15 @@ class ForexPaperAutopilotTests(unittest.TestCase):
         self.assertTrue(
             first["execution"]["executions"][0]["fill"]["take_profit"]
         )
+        opened_fill = first["execution"]["executions"][0]["fill"]
+        self.assertEqual(
+            opened_fill["sample_contract_id"],
+            self.autopilot.sample_contract["contract_id"],
+        )
+        self.assertEqual(
+            opened_fill["sample_contract_fingerprint_sha256"],
+            self.autopilot.sample_contract["fingerprint_sha256"],
+        )
         self.assertFalse(first["live_orders_sent"])
         self.assertFalse(first["network_access"])
         self.assertTrue(replay["execution"]["idempotent_replay"])
@@ -157,6 +167,12 @@ class ForexPaperAutopilotTests(unittest.TestCase):
         self.assertEqual(
             result["execution"]["executions"][0]["fill"]["action"],
             "CLOSE_LONG",
+        )
+        self.assertEqual(
+            result["execution"]["executions"][0]["fill"][
+                "sample_contract_fingerprint_sha256"
+            ],
+            self.autopilot.sample_contract["fingerprint_sha256"],
         )
         status = self.autopilot.executor.status()
         self.assertEqual(status["position_count"], 0)
@@ -313,6 +329,7 @@ class ForexPaperAutopilotTests(unittest.TestCase):
         plan = {
             "mode": "FOREX_PAPER_ONLY",
             "live_orders_sent": False,
+            "sample_contract": self.autopilot.sample_contract,
             "instructions": [{
                 "action": "OPEN_LONG",
                 "pair": "EUR_USD",
@@ -368,6 +385,7 @@ class ForexPaperAutopilotTests(unittest.TestCase):
             {
                 "mode": "FOREX_PAPER_ONLY",
                 "live_orders_sent": False,
+                "sample_contract": self.autopilot.sample_contract,
                 "instructions": [{
                     "action": "OPEN_LONG",
                     "pair": "EUR_USD",
@@ -399,9 +417,14 @@ class ForexPaperAutopilotTests(unittest.TestCase):
             list(quotes.values()) + conversion,
             now=self.now,
         )
+        engines = (
+            ForexPaperExecutionEngine(self.temporary.name),
+            ForexPaperExecutionEngine(self.temporary.name),
+        )
         plan = {
             "mode": "FOREX_PAPER_ONLY",
             "live_orders_sent": False,
+            "sample_contract": engines[0].sample_contract,
             "instructions": [{
                 "action": "OPEN_LONG",
                 "pair": "EUR_USD",
@@ -410,10 +433,6 @@ class ForexPaperAutopilotTests(unittest.TestCase):
                 "take_profit": "1.10615",
             }],
         }
-        engines = (
-            ForexPaperExecutionEngine(self.temporary.name),
-            ForexPaperExecutionEngine(self.temporary.name),
-        )
         with ThreadPoolExecutor(max_workers=2) as pool:
             outcomes = list(pool.map(
                 lambda engine: engine.apply_plan(
@@ -427,6 +446,52 @@ class ForexPaperAutopilotTests(unittest.TestCase):
             ))
         self.assertEqual(sum(item["idempotent_replay"] for item in outcomes), 1)
         self.assertEqual(engines[0].status()["fill_count"], 1)
+
+    def test_executor_requires_the_exact_sample_contract_for_open(self) -> None:
+        quotes, _bars, _contexts, conversion = market(
+            self.now, eur_direction="UP"
+        )
+        rates = ForexRateBook(
+            list(quotes.values()) + conversion,
+            now=self.now,
+        )
+        plan = {
+            "mode": "FOREX_PAPER_ONLY",
+            "live_orders_sent": False,
+            "instructions": [{
+                "action": "OPEN_LONG",
+                "pair": "EUR_USD",
+                "units": "100",
+                "stop_loss": "1.1000",
+                "take_profit": "1.10615",
+            }],
+        }
+        with self.assertRaisesRegex(
+            TradingValidationError,
+            "sample_contract_required",
+        ):
+            self.autopilot.executor.apply_plan(
+                plan,
+                quotes=quotes,
+                rates=rates,
+                cycle_id="forex-contract-missing",
+                now=self.now,
+            )
+
+        tampered = deepcopy(self.autopilot.sample_contract)
+        tampered["fingerprint_sha256"] = "0" * 64
+        plan["sample_contract"] = tampered
+        with self.assertRaisesRegex(
+            TradingValidationError,
+            "sample_contract_mismatch",
+        ):
+            self.autopilot.executor.apply_plan(
+                plan,
+                quotes=quotes,
+                rates=rates,
+                cycle_id="forex-contract-tampered",
+                now=self.now,
+            )
 
 
 if __name__ == "__main__":

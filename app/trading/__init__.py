@@ -54,6 +54,12 @@ from app.trading.forex_scanner import (
     ForexPairAssessment,
     ForexScannerPolicy,
 )
+from app.trading.forex_sample_contract import (
+    CONTRACT_ID as FOREX_PAPER_SAMPLE_CONTRACT_ID,
+    build_forex_paper_sample_contract,
+    sample_contracts_match,
+    verify_forex_paper_sample_contract,
+)
 from app.trading.forex_strategy_cohorts import (
     ForexStrategyCohortReview,
     build_forex_strategy_cohort_review,
@@ -114,6 +120,7 @@ __all__ = [
     "ForexRiskDecision",
     "ForexSafetyContext",
     "ForexScannerPolicy",
+    "FOREX_PAPER_SAMPLE_CONTRACT_ID",
     "ForexStrategyCohortReview",
     "ForexWalkForwardPolicy",
     "LiveTradingBlockedError",
@@ -132,6 +139,9 @@ __all__ = [
     "USD_PLN_CONVERSION_PAIR",
     "major_pair",
     "build_forex_paper_performance_review",
+    "build_forex_paper_sample_contract",
     "build_forex_strategy_cohort_review",
+    "sample_contracts_match",
+    "verify_forex_paper_sample_contract",
     "WalkForwardPolicy",
 ]
