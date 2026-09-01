@@ -7,6 +7,9 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any, Iterable, Mapping
 
 from app.trading.forex_models import MAJOR_FOREX_PAIRS
+from app.trading.forex_trade_diagnostics import (
+    build_forex_trade_diagnostics,
+)
 from app.trading.models import TradingValidationError
 
 
@@ -138,6 +141,7 @@ def build_forex_paper_performance_review(
         pair.symbol: [] for pair in MAJOR_FOREX_PAIRS
     }
     sample_values: list[Decimal] = []
+    sample_fills: list[dict[str, Any]] = []
     sample_pair_values: dict[str, list[Decimal]] = {
         pair.symbol: [] for pair in MAJOR_FOREX_PAIRS
     }
@@ -189,6 +193,7 @@ def build_forex_paper_performance_review(
                 sample_start_net = running_net
                 sample_started = True
             sample_values.append(pnl)
+            sample_fills.append(item)
             sample_pair_values[pair].append(pnl)
         elif not fill_contract_id and not fill_fingerprint:
             legacy_unversioned_count += 1
@@ -217,6 +222,7 @@ def build_forex_paper_performance_review(
         starting_equity=initial + sample_start_net,
     )
     all_time_metrics = _outcome_metrics(values, starting_equity=initial)
+    trade_diagnostics = build_forex_trade_diagnostics(sample_fills)
 
     evidence_valid = bool(
         audit_chain_valid is True
@@ -353,6 +359,7 @@ def build_forex_paper_performance_review(
         ),
         "sample_size_sufficient_for_review": sample_ready,
         "all_time_summary": all_time_metrics,
+        "trade_diagnostics": trade_diagnostics,
         "pair_breakdown": pair_breakdown,
         "pair_review": pair_review,
         "sample_contract_review": sample_contract_review,

@@ -90,6 +90,25 @@ def _account() -> dict:
                 "maximum_closed_trade_drawdown_pct": "0.09",
                 "maximum_consecutive_losses": 2,
             },
+            "trade_diagnostics": {
+                "status": "COMPLETE",
+                "closed_trade_count": 1,
+                "holding_time_observed_count": 1,
+                "holding_time_missing_count": 0,
+                "average_holding_minutes": "45.00",
+                "median_holding_minutes": "45.00",
+                "shortest_holding_minutes": "45.00",
+                "longest_holding_minutes": "45.00",
+                "exit_reason_counts": {
+                    "stop_loss": 0,
+                    "take_profit": 1,
+                    "strategy": 0,
+                    "unspecified": 0,
+                },
+                "holding_time_coverage_complete": True,
+                "exit_reason_coverage_complete": True,
+                "diagnostics_complete": True,
+            },
         },
         "processed_cycle_count": 75,
         "audit_chain_valid": True,
@@ -195,6 +214,16 @@ def test_dashboard_projects_latest_safe_paper_cycle() -> None:
             "maximum_closed_trade_drawdown_pct": "0.09",
             "maximum_consecutive_losses": 2,
         }
+        diagnostics = snapshot["performance"]["trade_diagnostics"]
+        assert diagnostics["status"] == "COMPLETE"
+        assert diagnostics["average_holding_minutes"] == "45.00"
+        assert diagnostics["exit_reason_counts"] == {
+            "stop_loss": 0,
+            "take_profit": 1,
+            "strategy": 0,
+            "unspecified": 0,
+        }
+        assert diagnostics["diagnostics_complete"] is True
         assert snapshot["new_entries_paused_by_loss_streak"] is True
         assert snapshot["loss_streak_safety"] == {
             "active": True,

@@ -291,6 +291,9 @@ class ForexPaperDashboard:
             item.get("sample_contract_review")
         )
         all_time_summary = cls._metric_summary(item.get("all_time_summary"))
+        trade_diagnostics = cls._trade_diagnostics(
+            item.get("trade_diagnostics")
+        )
         return {
             "status": str(item.get("status", "COLLECTING_PAPER_SAMPLE"))[:80],
             "metric_scope": (
@@ -331,8 +334,62 @@ class ForexPaperDashboard:
             "pair_review": pair_review,
             "sample_contract_review": contract_review,
             "all_time_summary": all_time_summary,
+            "trade_diagnostics": trade_diagnostics,
             "evidence_valid": evidence_valid,
             "performance_validated": False,
+            "live_promotion_ready": False,
+        }
+
+    @classmethod
+    def _trade_diagnostics(cls, value: object) -> dict[str, Any]:
+        item = dict(value) if isinstance(value, dict) else {}
+        raw_reasons = item.get("exit_reason_counts")
+        reasons = dict(raw_reasons) if isinstance(raw_reasons, dict) else {}
+
+        def optional_minutes(key: str) -> str | None:
+            raw = item.get(key)
+            return cls._number(raw, 2) if raw is not None else None
+
+        return {
+            "status": str(item.get("status", "NO_CLOSED_TRADES"))[:40],
+            "mode": "FOREX_PAPER_TRADE_DIAGNOSTICS_READ_ONLY",
+            "closed_trade_count": cls._count(item.get("closed_trade_count")),
+            "holding_time_observed_count": cls._count(
+                item.get("holding_time_observed_count")
+            ),
+            "holding_time_missing_count": cls._count(
+                item.get("holding_time_missing_count")
+            ),
+            "average_holding_minutes": optional_minutes(
+                "average_holding_minutes"
+            ),
+            "median_holding_minutes": optional_minutes(
+                "median_holding_minutes"
+            ),
+            "shortest_holding_minutes": optional_minutes(
+                "shortest_holding_minutes"
+            ),
+            "longest_holding_minutes": optional_minutes(
+                "longest_holding_minutes"
+            ),
+            "exit_reason_counts": {
+                key: cls._count(reasons.get(key))
+                for key in (
+                    "stop_loss",
+                    "take_profit",
+                    "strategy",
+                    "unspecified",
+                )
+            },
+            "holding_time_coverage_complete": (
+                item.get("holding_time_coverage_complete") is True
+            ),
+            "exit_reason_coverage_complete": (
+                item.get("exit_reason_coverage_complete") is True
+            ),
+            "diagnostics_complete": item.get("diagnostics_complete") is True,
+            "performance_validated": False,
+            "automatic_strategy_change": False,
             "live_promotion_ready": False,
         }
 

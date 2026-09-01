@@ -153,7 +153,10 @@ model. The two earlier unversioned fills remain in all-time history but are not
 silently merged into the new frozen sample. Average result, win rate, profit
 factor and drawdown shown for review use only that current contract. A separate
 all-time summary preserves the complete account history and balance
-reconciliation without contaminating the comparable sample. The owner status
+reconciliation without contaminating the comparable sample. Current-contract
+diagnostics also report holding-time coverage and separate stop-loss,
+take-profit and strategy/rule exits; these read-only measurements cannot alter
+an entry, exit or promotion decision. The owner status
 also groups actual V1 PAPER openings into the frozen V2
 `retained` and `filtered` cohorts at entry time. This is cohort attribution, not
 a counterfactual V2 portfolio simulation, and cannot prove that V2 is better.

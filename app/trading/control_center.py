@@ -379,6 +379,16 @@ class TradingControlCenter:
         sample_contract = dict(
             performance.get("sample_contract_review", {}) or {}
         )
+        trade_diagnostics = dict(
+            performance.get("trade_diagnostics", {}) or {}
+        )
+        exit_reasons = dict(
+            trade_diagnostics.get("exit_reason_counts", {}) or {}
+        )
+        average_holding = trade_diagnostics.get("average_holding_minutes")
+        average_holding_text = (
+            f"{average_holding} min" if average_holding is not None else "n/d"
+        )
         runtime_cycle = snapshot["forex"]["last_runtime_cycle"]
         observer_runtime = snapshot["forex"]["observer_runtime"]
         data = snapshot["forex"]["data_configuration"]
@@ -553,6 +563,11 @@ class TradingControlCenter:
             f"najdłuższa seria strat "
             f"{performance.get('maximum_consecutive_losses', 0)}; "
             f"dowody {performance_evidence}.\n"
+            f"• Cykl życia próbki: średni czas {average_holding_text}; "
+            f"SL {exit_reasons.get('stop_loss', 0)}, "
+            f"TP {exit_reasons.get('take_profit', 0)}, "
+            f"sygnał/reguła {exit_reasons.get('strategy', 0)}, "
+            f"bez powodu {exit_reasons.get('unspecified', 0)}.\n"
             f"• Próbki par: do ręcznego przeglądu "
             f"{pair_review.get('ready_pair_count', 0)}/7; w trakcie "
             f"{pair_review.get('collecting_pair_count', 0)}; bez zamkniętej "

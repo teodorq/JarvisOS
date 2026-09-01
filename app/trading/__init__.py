@@ -64,6 +64,9 @@ from app.trading.forex_strategy_cohorts import (
     ForexStrategyCohortReview,
     build_forex_strategy_cohort_review,
 )
+from app.trading.forex_trade_diagnostics import (
+    build_forex_trade_diagnostics,
+)
 from app.trading.ledger import PaperTradingLedger
 from app.trading.models import (
     MarketBar,
@@ -141,6 +144,7 @@ __all__ = [
     "build_forex_paper_performance_review",
     "build_forex_paper_sample_contract",
     "build_forex_strategy_cohort_review",
+    "build_forex_trade_diagnostics",
     "sample_contracts_match",
     "verify_forex_paper_sample_contract",
     "WalkForwardPolicy",

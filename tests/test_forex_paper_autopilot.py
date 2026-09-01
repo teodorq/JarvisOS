@@ -174,6 +174,9 @@ class ForexPaperAutopilotTests(unittest.TestCase):
             ],
             self.autopilot.sample_contract["fingerprint_sha256"],
         )
+        closed_fill = result["execution"]["executions"][0]["fill"]
+        self.assertEqual(closed_fill["opened_at"], self.now.isoformat())
+        self.assertEqual(closed_fill["closed_at"], later.isoformat())
         status = self.autopilot.executor.status()
         self.assertEqual(status["position_count"], 0)
         self.assertEqual(status["fill_count"], 2)
@@ -191,6 +194,12 @@ class ForexPaperAutopilotTests(unittest.TestCase):
         self.assertFalse(performance["sample_size_sufficient_for_review"])
         self.assertFalse(performance["performance_validated"])
         self.assertFalse(performance["live_promotion_ready"])
+        diagnostics = performance["trade_diagnostics"]
+        self.assertEqual(diagnostics["status"], "COMPLETE")
+        self.assertEqual(diagnostics["holding_time_observed_count"], 1)
+        self.assertEqual(diagnostics["average_holding_minutes"], "15.00")
+        self.assertEqual(diagnostics["exit_reason_counts"]["stop_loss"], 1)
+        self.assertTrue(diagnostics["diagnostics_complete"])
         self.assertEqual(status["open_positions"], [])
 
     def test_close_only_mode_removes_entries_but_preserves_exit(self) -> None:

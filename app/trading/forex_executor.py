@@ -382,6 +382,8 @@ class ForexPaperExecutionEngine:
                 if position.take_profit is not None
                 else ""
             ),
+            "opened_at": position.opened_at.isoformat(),
+            "closed_at": now.isoformat(),
             "reason_codes": [
                 str(value)[:80]
                 for value in list(instruction.get("reason_codes", []) or [])[:8]
