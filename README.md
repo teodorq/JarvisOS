@@ -178,6 +178,11 @@ checks in the same state do not create notification spam.
 The `FOREX PAPER` toolbar projects the same bounded heartbeat as a separate
 `OCHRONA` pill, so healthy, retrying, stale, closed-market and attention states
 are visible without opening the owner text report.
+On observer start, MT5 recovery or a long runtime gap, JARVIS runs the local
+close-only position check before any full analysis cycle. New PAPER entries stay
+locked until that check returns a healthy result. This stricter execution rule is
+frozen as sample contract `FOREX_PAPER_V3_20260901`; V1 and V2 fills remain
+visible in all-time history but are excluded from the V3 comparison sample.
 The Windows task has both a logon trigger and a 15-minute recovery trigger; the
 single-instance policy ignores the recovery trigger while the observer is healthy
 and restarts it after an unexpected exit.

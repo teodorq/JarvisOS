@@ -30,6 +30,9 @@ def test_sample_contract_is_deterministic_and_paper_only() -> None:
     assert execution["position_protection_interval_seconds"] == 60
     assert execution["position_protection_source"] == "LOCAL_MT5_DEMO"
     assert execution["position_protection_actions"] == ["CLOSE_POSITION"]
+    assert execution["position_check_required_before_first_full_cycle"] is True
+    assert execution["position_check_required_after_runtime_gap"] is True
+    assert execution["new_entries_blocked_until_position_check"] is True
 
 
 def test_strategy_or_risk_change_produces_a_different_fingerprint() -> None:
@@ -73,3 +76,7 @@ def test_known_v1_contract_is_superseded_not_foreign() -> None:
         "FOREX_PAPER_V1_20260831",
         "0" * 64,
     ) is False
+    assert is_superseded_sample_contract(
+        "FOREX_PAPER_V2_20260901",
+        "8bc8a4e96bc663c034081593825885c7a181a07d588c0fef5fc0eb8ab193ae10",
+    ) is True

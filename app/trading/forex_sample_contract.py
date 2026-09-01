@@ -15,10 +15,13 @@ from app.trading.forex_risk import ForexPaperPolicy
 from app.trading.forex_scanner import ForexScannerPolicy
 
 
-CONTRACT_ID = "FOREX_PAPER_V2_20260901"
+CONTRACT_ID = "FOREX_PAPER_V3_20260901"
 SUPERSEDED_CONTRACT_FINGERPRINTS = {
     "FOREX_PAPER_V1_20260831": (
         "a77112c8f1264aab11403dabf4b51b835deb96773799c8fdea1f0ace0707276a"
+    ),
+    "FOREX_PAPER_V2_20260901": (
+        "8bc8a4e96bc663c034081593825885c7a181a07d588c0fef5fc0eb8ab193ae10"
     ),
 }
 
@@ -91,6 +94,9 @@ def build_forex_paper_sample_contract(
                 "position_protection_interval_seconds": 60,
                 "position_protection_source": "LOCAL_MT5_DEMO",
                 "position_protection_actions": ["CLOSE_POSITION"],
+                "position_check_required_before_first_full_cycle": True,
+                "position_check_required_after_runtime_gap": True,
+                "new_entries_blocked_until_position_check": True,
             },
         },
         "paper_only": True,

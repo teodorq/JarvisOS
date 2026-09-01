@@ -31,6 +31,9 @@ $script:lastProtectionStatus = "NOT_RUN"
 $script:lastProtectionCheckedAt = ""
 $script:lastProtectionReason = ""
 $script:consecutiveProtectionFailures = 0
+$script:positionCheckSatisfied = $false
+$script:lastProtectionAttemptUtc = $null
+$script:lastProtectionGapSeconds = 0
 
 foreach ($requiredPath in @(
     $terminalPath,
@@ -92,6 +95,15 @@ function Write-ObserverStatus {
         )
         protection_attention_required = (
             $script:consecutiveProtectionFailures -ge 3
+        )
+        protection_gap_seconds_before_last_check = (
+            $script:lastProtectionGapSeconds
+        )
+        position_check_required_before_full_cycle = (
+            -not $script:positionCheckSatisfied
+        )
+        new_entries_unlocked_after_position_check = (
+            $script:positionCheckSatisfied
         )
         detail = $Detail
         broker_orders_sent = $false
@@ -321,6 +333,20 @@ function Update-ProtectionHealth {
 }
 
 function Write-ProtectionObserverStatus {
+    if (-not $script:positionCheckSatisfied) {
+        $blockedStatus = if ($script:consecutiveProtectionFailures -ge 3) {
+            "PROTECTION_ATTENTION_REQUIRED"
+        }
+        else {
+            "POSITION_CHECK_REQUIRED"
+        }
+        Write-ObserverStatus `
+            $blockedStatus `
+            $true `
+            $true `
+            "Kontrola pozycji nie przeszla; nowe wejscia PAPER sa wstrzymane."
+        return
+    }
     if ($script:consecutiveProtectionFailures -ge 3) {
         Write-ObserverStatus `
             "PROTECTION_ATTENTION_REQUIRED" `
@@ -334,6 +360,62 @@ function Write-ProtectionObserverStatus {
         $true `
         $true `
         "Ochrona SL/TP aktywna; oczekiwanie na pelny cykl."
+}
+
+function Test-ProtectionResultHealthy {
+    param([object]$Result)
+
+    if ($null -eq $Result -or
+        -not ($Result.PSObject.Properties.Name -contains "status")) {
+        return $false
+    }
+    return [string]$Result.status -in @(
+        "NO_OPEN_POSITIONS",
+        "NO_PROTECTION_TRIGGER",
+        "PAPER_PROTECTION_APPLIED"
+    )
+}
+
+function Invoke-PositionSafetyCheck {
+    $attemptedAt = [DateTime]::UtcNow
+    if ($null -eq $script:lastProtectionAttemptUtc) {
+        $script:lastProtectionGapSeconds = 0
+    }
+    else {
+        $gap = [Math]::Floor(
+            ($attemptedAt - $script:lastProtectionAttemptUtc).TotalSeconds
+        )
+        $script:lastProtectionGapSeconds = [Math]::Max(
+            0,
+            [Math]::Min(604800, [int]$gap)
+        )
+        if ($script:lastProtectionGapSeconds -gt (
+            $ProtectionIntervalSeconds * 3
+        )) {
+            Write-ObserverLog (
+                "Runtime gap detected before position check; seconds=" +
+                "$($script:lastProtectionGapSeconds)."
+            )
+        }
+    }
+    $script:lastProtectionAttemptUtc = $attemptedAt
+    try {
+        $result = Invoke-ForexPaperProtection
+        Update-ProtectionHealth $result
+        $passed = Test-ProtectionResultHealthy $result
+    }
+    catch {
+        Update-ProtectionHealth $null
+        $passed = $false
+        Write-ObserverLog "Position safety check failed safely."
+    }
+    $script:positionCheckSatisfied = $passed
+    Write-ObserverLog (
+        "Position safety check $($script:lastProtectionStatus); " +
+        "gap_seconds=$($script:lastProtectionGapSeconds); " +
+        "full_cycle_unlocked=$passed."
+    )
+    return $passed
 }
 
 $mutex = New-Object Threading.Mutex($false, "Local\JARVIS_OS_FOREX_OBSERVER")
@@ -372,27 +454,49 @@ try {
                         "MT5 nie stal sie dostepny; cykl PAPER pominiety."
                 }
                 else {
-                    Write-ObserverStatus `
-                        "RUNNING_CYCLE" `
-                        $true `
-                        $true `
-                        "Trwa lokalny cykl PAPER."
-                    Invoke-ForexPaperCycle
-                    Write-ObserverStatus `
-                        "WAITING_NEXT_CYCLE" `
-                        $true `
-                        $true `
-                        "Cykl zakonczony; oczekiwanie na nastepny interwal."
+                    if (-not $script:positionCheckSatisfied) {
+                        Write-ObserverStatus `
+                            "POSITION_CHECK_RUNNING" `
+                            $true `
+                            $true `
+                            "Sprawdzam istniejaca pozycje przed pelnym cyklem."
+                        $positionCheckPassed = Invoke-PositionSafetyCheck
+                        if (-not $positionCheckPassed) {
+                            Write-ObserverLog (
+                                "Full PAPER cycle skipped until position check passes."
+                            )
+                            Write-ProtectionObserverStatus
+                        }
+                    }
+                    if ($script:positionCheckSatisfied) {
+                        Write-ObserverStatus `
+                            "RUNNING_CYCLE" `
+                            $true `
+                            $true `
+                            "Trwa lokalny cykl PAPER."
+                        Invoke-ForexPaperCycle
+                        Write-ObserverStatus `
+                            "WAITING_NEXT_CYCLE" `
+                            $true `
+                            $true `
+                            "Cykl zakonczony; oczekiwanie na nastepny interwal."
+                    }
                 }
             }
         }
         catch {
+            $script:positionCheckSatisfied = $false
             Write-ObserverLog "Cycle failed safely; no broker order execution is available."
             Write-ObserverStatus `
                 "CYCLE_FAILED_SAFE" `
                 (Test-ForexMarketWindow) `
                 ($null -ne (Get-RunningMt5Process)) `
                 "Cykl zakonczyl sie bezpiecznie bez dostepu do zlecen brokera."
+        }
+        if ((Test-ForexMarketWindow) -and
+            -not $script:positionCheckSatisfied) {
+            Start-Sleep -Seconds $ProtectionIntervalSeconds
+            continue
         }
         $remainingSeconds = $IntervalMinutes * 60
         while ($remainingSeconds -gt 0) {
@@ -402,20 +506,30 @@ try {
             )
             Start-Sleep -Seconds $sleepSeconds
             $remainingSeconds -= $sleepSeconds
-            if ((Test-ForexMarketWindow) -and
-                ($null -ne (Get-RunningMt5Process))) {
+            if (-not (Test-ForexMarketWindow)) {
+                break
+            }
+            if ($null -ne (Get-RunningMt5Process)) {
                 try {
-                    $protectionResult = Invoke-ForexPaperProtection
-                    Update-ProtectionHealth $protectionResult
+                    $positionCheckPassed = Invoke-PositionSafetyCheck
                     Write-ProtectionObserverStatus
+                    if (-not $positionCheckPassed) {
+                        break
+                    }
                 }
                 catch {
                     Write-ObserverLog (
                         "PAPER protection failed safely; full cycle remains scheduled."
                     )
                     Update-ProtectionHealth $null
+                    $script:positionCheckSatisfied = $false
                     Write-ProtectionObserverStatus
+                    break
                 }
+            }
+            else {
+                $script:positionCheckSatisfied = $false
+                break
             }
         }
     }

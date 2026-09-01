@@ -55,6 +55,12 @@ def test_watchdog_has_bounded_interval_and_single_instance() -> None:
     assert '$Result.PSObject.Properties.Name -contains "reason"' in WATCHDOG
     assert '"protection_consecutive_failure_count"' in WATCHDOG
     assert "$persistentFailures" in WATCHDOG
+    assert "position_check_required_before_full_cycle" in WATCHDOG
+    assert "new_entries_unlocked_after_position_check" in WATCHDOG
+    assert "protection_gap_seconds_before_last_check" in WATCHDOG
+    assert "Test-ProtectionResultHealthy" in WATCHDOG
+    assert "Invoke-PositionSafetyCheck" in WATCHDOG
+    assert '"POSITION_CHECK_REQUIRED"' in WATCHDOG
     assert "Test-ForexMarketWindow" in WATCHDOG
     assert "Forex market is closed; data quota preserved." in WATCHDOG
     assert "[DayOfWeek]::Sunday" in WATCHDOG
@@ -77,6 +83,12 @@ def test_watchdog_calls_only_the_local_paper_entry_point() -> None:
     assert "order_send" not in WATCHDOG
     assert "activity_history" in WATCHDOG
     assert "PAPER protection" in WATCHDOG
+    preflight = WATCHDOG.index(
+        "$positionCheckPassed = Invoke-PositionSafetyCheck"
+    )
+    full_cycle = WATCHDOG.index("Invoke-ForexPaperCycle", preflight)
+    assert preflight < full_cycle
+    assert "Full PAPER cycle skipped until position check passes." in WATCHDOG
 
 
 def test_watchdog_starts_only_the_configured_mt5_binary() -> None:
