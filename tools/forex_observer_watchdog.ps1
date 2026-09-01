@@ -27,6 +27,10 @@ $errorPath = Join-Path $dataPath "forex_paper_last.error.log"
 $statusPath = Join-Path $dataPath "forex_observer_status.json"
 $protectionOutputPath = Join-Path $dataPath "forex_paper_protection_last.json"
 $protectionErrorPath = Join-Path $dataPath "forex_paper_protection_last.error.log"
+$script:lastProtectionStatus = "NOT_RUN"
+$script:lastProtectionCheckedAt = ""
+$script:lastProtectionReason = ""
+$script:consecutiveProtectionFailures = 0
 
 foreach ($requiredPath in @(
     $terminalPath,
@@ -80,6 +84,15 @@ function Write-ObserverStatus {
         last_cycle_observed_at = $lastCycleObservedAt
         interval_minutes = $IntervalMinutes
         protection_interval_seconds = $ProtectionIntervalSeconds
+        protection_status = $script:lastProtectionStatus
+        protection_checked_at = $script:lastProtectionCheckedAt
+        protection_reason = $script:lastProtectionReason
+        protection_consecutive_failure_count = (
+            $script:consecutiveProtectionFailures
+        )
+        protection_attention_required = (
+            $script:consecutiveProtectionFailures -ge 3
+        )
         detail = $Detail
         broker_orders_sent = $false
         live_orders_sent = $false
@@ -224,7 +237,7 @@ function Invoke-ForexPaperProtection {
         Write-ObserverLog (
             "PAPER protection produced no result; exit $($process.ExitCode)."
         )
-        return
+        return $null
     }
     try {
         $result = Get-Content `
@@ -243,12 +256,67 @@ function Invoke-ForexPaperProtection {
             "broker_orders_sent=$($result.broker_orders_sent); " +
             "live_orders_sent=$($result.live_orders_sent)."
         )
+        return $result
     }
     catch {
         Write-ObserverLog (
             "PAPER protection result could not be parsed; exit $($process.ExitCode)."
         )
+        return $null
     }
+}
+
+function Update-ProtectionHealth {
+    param([object]$Result)
+
+    $script:lastProtectionCheckedAt = [DateTime]::UtcNow.ToString("o")
+    if ($null -eq $Result) {
+        $script:lastProtectionStatus = "PROTECTION_RESULT_UNAVAILABLE"
+        $script:lastProtectionReason = "Brak prawidlowego wyniku ochrony."
+        $script:consecutiveProtectionFailures += 1
+        return
+    }
+    $status = [string]$Result.status
+    $reason = ""
+    if ($Result.PSObject.Properties.Name -contains "reason") {
+        $reason = [string]$Result.reason
+    }
+    if ($reason.Length -gt 160) {
+        $reason = $reason.Substring(0, 160)
+    }
+    $script:lastProtectionStatus = if ($status) {
+        $status
+    }
+    else {
+        "PROTECTION_STATUS_MISSING"
+    }
+    $script:lastProtectionReason = $reason
+    if ($script:lastProtectionStatus -in @(
+        "NO_OPEN_POSITIONS",
+        "NO_PROTECTION_TRIGGER",
+        "PAPER_PROTECTION_APPLIED"
+    )) {
+        $script:consecutiveProtectionFailures = 0
+    }
+    else {
+        $script:consecutiveProtectionFailures += 1
+    }
+}
+
+function Write-ProtectionObserverStatus {
+    if ($script:consecutiveProtectionFailures -ge 3) {
+        Write-ObserverStatus `
+            "PROTECTION_ATTENTION_REQUIRED" `
+            $true `
+            $true `
+            "Ochrona SL/TP wymaga uwagi; pelny cykl pozostaje aktywny."
+        return
+    }
+    Write-ObserverStatus `
+        "WAITING_NEXT_CYCLE" `
+        $true `
+        $true `
+        "Ochrona SL/TP aktywna; oczekiwanie na pelny cykl."
 }
 
 $mutex = New-Object Threading.Mutex($false, "Local\JARVIS_OS_FOREX_OBSERVER")
@@ -320,17 +388,16 @@ try {
             if ((Test-ForexMarketWindow) -and
                 ($null -ne (Get-RunningMt5Process))) {
                 try {
-                    Invoke-ForexPaperProtection
-                    Write-ObserverStatus `
-                        "WAITING_NEXT_CYCLE" `
-                        $true `
-                        $true `
-                        "Ochrona SL/TP aktywna; oczekiwanie na pełny cykl."
+                    $protectionResult = Invoke-ForexPaperProtection
+                    Update-ProtectionHealth $protectionResult
+                    Write-ProtectionObserverStatus
                 }
                 catch {
                     Write-ObserverLog (
                         "PAPER protection failed safely; full cycle remains scheduled."
                     )
+                    Update-ProtectionHealth $null
+                    Write-ProtectionObserverStatus
                 }
             }
         }

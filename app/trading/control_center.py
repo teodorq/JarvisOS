@@ -245,6 +245,12 @@ class TradingControlCenter:
             "market_window_open": False,
             "mt5_running": False,
             "last_cycle_observed_at": "",
+            "protection_interval_seconds": 0,
+            "protection_status": "NOT_RUN",
+            "protection_checked_at": "",
+            "protection_reason": "",
+            "protection_consecutive_failure_count": 0,
+            "protection_attention_required": False,
             "stale": True,
             "broker_orders_sent": False,
             "live_orders_sent": False,
@@ -274,6 +280,24 @@ class TradingControlCenter:
             (datetime.now(timezone.utc) - checked_at).total_seconds(),
         )
         status = str(payload.get("status", "UNKNOWN"))[:80]
+        try:
+            protection_interval = max(
+                0,
+                min(300, int(payload.get("protection_interval_seconds", 0))),
+            )
+            protection_failures = max(
+                0,
+                min(
+                    1_000,
+                    int(payload.get(
+                        "protection_consecutive_failure_count",
+                        0,
+                    )),
+                ),
+            )
+        except (TypeError, ValueError):
+            protection_interval = 0
+            protection_failures = 0
         return {
             "available": True,
             "status": "SAFETY_VIOLATION" if unsafe else status,
@@ -283,6 +307,21 @@ class TradingControlCenter:
             "last_cycle_observed_at": str(
                 payload.get("last_cycle_observed_at", "")
             )[:64],
+            "protection_interval_seconds": protection_interval,
+            "protection_status": str(
+                payload.get("protection_status", "NOT_RUN")
+            )[:80],
+            "protection_checked_at": str(
+                payload.get("protection_checked_at", "")
+            )[:64],
+            "protection_reason": str(
+                payload.get("protection_reason", "")
+            )[:160],
+            "protection_consecutive_failure_count": protection_failures,
+            "protection_attention_required": bool(
+                payload.get("protection_attention_required") is True
+                or protection_failures >= 3
+            ),
             "stale": age_seconds > 20 * 60,
             "broker_orders_sent": False,
             "live_orders_sent": False,
@@ -480,6 +519,31 @@ class TradingControlCenter:
                 f"aktywny ({observer_runtime['status']}); MT5 "
                 f"{'działa' if observer_runtime['mt5_running'] else 'oczekuje'}"
             )
+        if observer_runtime["available"] and not observer_runtime["stale"]:
+            protection_status = observer_runtime["protection_status"]
+            protection_reason = observer_runtime["protection_reason"]
+            protection_failures = observer_runtime[
+                "protection_consecutive_failure_count"
+            ]
+            if observer_runtime["protection_attention_required"]:
+                protection_text = (
+                    "ochrona SL/TP WYMAGA UWAGI — kolejne problemy "
+                    f"{protection_failures}; {protection_reason or protection_status}"
+                )
+            elif protection_status == "NO_PROTECTION_TRIGGER":
+                protection_text = "ochrona SL/TP działa; próg nie został osiągnięty"
+            elif protection_status == "NO_OPEN_POSITIONS":
+                protection_text = "ochrona SL/TP działa; brak otwartej pozycji"
+            elif protection_status == "PAPER_PROTECTION_APPLIED":
+                protection_text = "ochrona SL/TP zamknęła pozycję PAPER"
+            elif protection_status == "PAPER_PROTECTION_BLOCKED":
+                protection_text = (
+                    "ostatnia kontrola SL/TP została bezpiecznie pominięta"
+                    f" ({protection_reason or 'dane chwilowo niedostępne'})"
+                )
+            else:
+                protection_text = "ochrona SL/TP oczekuje na pierwszą kontrolę"
+            observer_text = f"{observer_text}; {protection_text}"
         qualified = int(observation["qualified_market_open_count"])
         required = int(observation["minimum_market_open_observations"])
         days = int(observation["qualified_market_day_count"])

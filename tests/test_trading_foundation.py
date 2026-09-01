@@ -511,6 +511,51 @@ class TradingControlAndRoutingTests(unittest.TestCase):
         self.assertIn("rynek zamknięty", rendered)
         self.assertIn("MT5 uruchomi się automatycznie", rendered)
 
+    def test_status_reports_repeated_position_protection_failures(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            status_path = (
+                root / "data" / "trading" / "forex_observer_status.json"
+            )
+            status_path.parent.mkdir(parents=True)
+            status_path.write_text(
+                json.dumps({
+                    "schema_version": 1,
+                    "status": "PROTECTION_ATTENTION_REQUIRED",
+                    "checked_at": datetime.now(UTC).isoformat(),
+                    "market_window_open": True,
+                    "mt5_running": True,
+                    "last_cycle_observed_at": "2026-09-01T17:22:03+00:00",
+                    "protection_interval_seconds": 60,
+                    "protection_status": "PAPER_PROTECTION_BLOCKED",
+                    "protection_checked_at": datetime.now(UTC).isoformat(),
+                    "protection_reason": "MT5_PROTECTION_DATA_STALE",
+                    "protection_consecutive_failure_count": 3,
+                    "protection_attention_required": True,
+                    "broker_orders_sent": False,
+                    "live_orders_sent": False,
+                    "real_money_access": False,
+                }),
+                encoding="utf-8",
+            )
+            center = TradingControlCenter(root)
+            snapshot = center.status()
+            rendered = center.format_status()
+
+        heartbeat = snapshot["forex"]["observer_runtime"]
+        self.assertEqual(heartbeat["protection_interval_seconds"], 60)
+        self.assertEqual(
+            heartbeat["protection_status"],
+            "PAPER_PROTECTION_BLOCKED",
+        )
+        self.assertEqual(
+            heartbeat["protection_consecutive_failure_count"],
+            3,
+        )
+        self.assertTrue(heartbeat["protection_attention_required"])
+        self.assertIn("ochrona SL/TP WYMAGA UWAGI", rendered)
+        self.assertIn("MT5_PROTECTION_DATA_STALE", rendered)
+
     def test_status_labels_explicit_unvalidated_demo_override(self) -> None:
         with TemporaryDirectory() as directory:
             center = TradingControlCenter(directory)

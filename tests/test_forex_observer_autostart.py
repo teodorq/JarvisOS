@@ -48,6 +48,11 @@ def test_watchdog_has_bounded_interval_and_single_instance() -> None:
     assert "[int]$ProtectionIntervalSeconds = 60" in WATCHDOG
     assert "Start-Sleep -Seconds $sleepSeconds" in WATCHDOG
     assert "Invoke-ForexPaperProtection" in WATCHDOG
+    assert "protection_consecutive_failure_count" in WATCHDOG
+    assert "protection_attention_required" in WATCHDOG
+    assert "PROTECTION_ATTENTION_REQUIRED" in WATCHDOG
+    assert "Update-ProtectionHealth" in WATCHDOG
+    assert '$Result.PSObject.Properties.Name -contains "reason"' in WATCHDOG
     assert "Test-ForexMarketWindow" in WATCHDOG
     assert "Forex market is closed; data quota preserved." in WATCHDOG
     assert "[DayOfWeek]::Sunday" in WATCHDOG
