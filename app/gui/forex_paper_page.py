@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 from app.gui.business_widgets import MetricCard, SectionCard, StatusPill
 from app.gui.forex_pair_results_table import ForexPairResultsTable
 from app.gui.forex_paper_safety_view import forex_paper_safety_view
+from app.gui.forex_protection_view import forex_protection_view
 
 
 class ForexPaperPage(QWidget):
@@ -71,9 +72,11 @@ class ForexPaperPage(QWidget):
         layout.addLayout(heading)
         layout.addStretch(1)
         self.overall = StatusPill("SPRAWDZANIE", "neutral")
+        self.protection = StatusPill("OCHRONA: SPRAWDZANIE", "neutral")
         refresh = QPushButton("ODŚWIEŻ")
         refresh.setObjectName("SecondaryButton")
         refresh.clicked.connect(self.refresh)
+        layout.addWidget(self.protection)
         layout.addWidget(self.overall)
         layout.addWidget(refresh)
         return toolbar
@@ -191,6 +194,10 @@ class ForexPaperPage(QWidget):
         self.message.setObjectName("Muted")
         self.message.setWordWrap(True)
         card.content_layout.addWidget(self.message)
+        self.protection_detail = QLabel("Ochrona SL/TP: sprawdzanie.")
+        self.protection_detail.setObjectName("Muted")
+        self.protection_detail.setWordWrap(True)
+        card.content_layout.addWidget(self.protection_detail)
         return card
 
     def refresh(self) -> None:
@@ -201,6 +208,11 @@ class ForexPaperPage(QWidget):
             snapshot = {"status": "BLOCKED", "positions": [], "message": "Podgląd jest chwilowo niedostępny."}
         label, tone, safety_banner = forex_paper_safety_view(snapshot)
         self.overall.set_status(label, tone)
+        protection_label, protection_tone, protection_detail = (
+            forex_protection_view(snapshot.get("position_protection"))
+        )
+        self.protection.set_status(protection_label, protection_tone)
+        self.protection_detail.setText(protection_detail)
         self.metrics["balance"].set_value(f"{snapshot.get('balance_pln', '0.00')} PLN")
         self.metrics["equity"].set_value(f"{snapshot.get('equity_pln', '0.00')} PLN")
         pnl = str(snapshot.get("unrealized_pnl_pln", "0.00"))
@@ -274,6 +286,8 @@ class ForexPaperPage(QWidget):
             "DATA_BLOCKED": "BLOKADA DANYCH",
             "DATA_RECOVERED": "POWRÓT DANYCH",
             "SAFETY_ATTENTION": "KONTROLA BEZPIECZEŃSTWA",
+            "POSITION_PROTECTION_ATTENTION": "OCHRONA SL/TP — UWAGA",
+            "POSITION_PROTECTION_RECOVERED": "OCHRONA SL/TP — DZIAŁA",
         }
         for row, event in enumerate(reversed(events)):
             values = (

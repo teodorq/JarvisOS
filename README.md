@@ -175,6 +175,9 @@ consecutive protection failures raise `PROTECTION_ATTENTION_REQUIRED` while the
 The counter survives observer restarts. Entering the attention state and later
 recovering each create one durable event in `HISTORIA ZDARZEŃ`; repeated minute
 checks in the same state do not create notification spam.
+The `FOREX PAPER` toolbar projects the same bounded heartbeat as a separate
+`OCHRONA` pill, so healthy, retrying, stale, closed-market and attention states
+are visible without opening the owner text report.
 The Windows task has both a logon trigger and a 15-minute recovery trigger; the
 single-instance policy ignores the recovery trigger while the observer is healthy
 and restarts it after an unexpected exit.

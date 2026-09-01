@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
@@ -24,6 +25,9 @@ class ForexPaperDashboard:
     def __init__(self, project_root: str | Path | None, *, executor: Any) -> None:
         root = resolve_project_root(project_root)
         self.result_path = root / "data" / "trading" / "forex_paper_last.json"
+        self.observer_status_path = (
+            root / "data" / "trading" / "forex_observer_status.json"
+        )
         self.executor = executor
 
     def snapshot(self) -> dict[str, Any]:
@@ -141,8 +145,14 @@ class ForexPaperDashboard:
         loss_streak_safety = self._loss_streak_safety(
             account.get("loss_streak_safety")
         )
+        position_protection = self._position_protection()
         message = "Lokalna symulacja; brak zleceń u brokera."
-        if loss_streak_safety["active"]:
+        if position_protection["attention_required"]:
+            message = (
+                "Ochrona SL/TP wymaga uwagi; szczegóły są widoczne w historii. "
+                "Zlecenia LIVE pozostają niedostępne."
+            )
+        elif loss_streak_safety["active"]:
             message = (
                 "Nowe wejścia PAPER są wstrzymane po serii strat; "
                 "zweryfikowane zamknięcia nadal działają."
@@ -168,11 +178,94 @@ class ForexPaperDashboard:
             "audit_chain_valid": account.get("audit_chain_valid") is True,
             "kill_switch_active": account.get("kill_switch_active") is True,
             "loss_streak_safety": loss_streak_safety,
+            "position_protection": position_protection,
             "new_entries_paused_by_loss_streak": loss_streak_safety["active"],
             "broker_orders_sent": False,
             "live_orders_sent": False,
             "real_money_access": False,
             "message": message,
+        }
+
+    def _position_protection(self) -> dict[str, Any]:
+        empty = {
+            "available": False,
+            "status": "NO_HEARTBEAT",
+            "checked_at": "",
+            "reason": "",
+            "interval_seconds": 0,
+            "consecutive_failure_count": 0,
+            "attention_required": False,
+            "stale": True,
+            "market_window_open": False,
+            "mt5_running": False,
+            "broker_orders_sent": False,
+            "live_orders_sent": False,
+            "real_money_access": False,
+        }
+        try:
+            size = self.observer_status_path.stat().st_size
+            if size <= 0 or size > 65_536:
+                return empty
+            value = json.loads(
+                self.observer_status_path.read_text(encoding="utf-8-sig")
+            )
+            payload = dict(value) if isinstance(value, dict) else {}
+            if payload.get("schema_version") != 1:
+                return empty
+            checked_at = datetime.fromisoformat(
+                str(payload.get("checked_at", "")).replace("Z", "+00:00")
+            ).astimezone(timezone.utc)
+            interval = max(
+                0,
+                min(300, int(payload.get("protection_interval_seconds", 0))),
+            )
+            failures = max(0, min(1_000, int(
+                payload.get("protection_consecutive_failure_count", 0)
+            )))
+        except (
+            OSError,
+            UnicodeError,
+            json.JSONDecodeError,
+            TypeError,
+            ValueError,
+        ):
+            return empty
+        market_open = payload.get("market_window_open") is True
+        age = (datetime.now(timezone.utc) - checked_at).total_seconds()
+        unsafe = any(
+            payload.get(key) is not False
+            for key in (
+                "broker_orders_sent",
+                "live_orders_sent",
+                "real_money_access",
+            )
+        )
+        return {
+            "available": True,
+            "status": (
+                "SAFETY_VIOLATION"
+                if unsafe
+                else str(payload.get("protection_status", "NOT_RUN"))[:80]
+            ),
+            "checked_at": checked_at.isoformat(),
+            "reason": " ".join(
+                str(payload.get("protection_reason", "")).split()
+            )[:160],
+            "interval_seconds": interval,
+            "consecutive_failure_count": failures,
+            "attention_required": bool(
+                unsafe
+                or payload.get("protection_attention_required") is True
+                or failures >= 3
+            ),
+            "stale": bool(
+                age < -5 or age > (180 if market_open else 20 * 60)
+            ),
+            "market_window_open": market_open,
+            "mt5_running": payload.get("mt5_running") is True,
+            "broker_orders_sent": False,
+            "live_orders_sent": False,
+            "real_money_access": False,
         }
 
     @classmethod

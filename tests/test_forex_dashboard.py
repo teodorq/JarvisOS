@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -157,6 +158,38 @@ def _write_safe_block(root: Path, *, live: bool = False) -> None:
     }), encoding="utf-8")
 
 
+def _write_observer_status(
+    root: Path,
+    *,
+    failures: int = 0,
+    attention: bool = False,
+    live: bool = False,
+    checked_at: datetime | None = None,
+) -> None:
+    path = root / "data" / "trading" / "forex_observer_status.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({
+        "schema_version": 1,
+        "status": "WAITING_NEXT_CYCLE",
+        "checked_at": (checked_at or datetime.now(timezone.utc)).isoformat(),
+        "market_window_open": True,
+        "mt5_running": True,
+        "protection_interval_seconds": 60,
+        "protection_status": (
+            "PAPER_PROTECTION_BLOCKED"
+            if failures
+            else "NO_PROTECTION_TRIGGER"
+        ),
+        "protection_checked_at": datetime.now(timezone.utc).isoformat(),
+        "protection_reason": "MT5_PROTECTION_DATA_STALE" if failures else "",
+        "protection_consecutive_failure_count": failures,
+        "protection_attention_required": attention,
+        "broker_orders_sent": False,
+        "live_orders_sent": live,
+        "real_money_access": False,
+    }), encoding="utf-8")
+
+
 def test_dashboard_projects_latest_safe_paper_cycle() -> None:
     with TemporaryDirectory() as temporary:
         root = Path(temporary)
@@ -237,6 +270,65 @@ def test_dashboard_projects_latest_safe_paper_cycle() -> None:
         }
         assert "wstrzymane" in snapshot["message"]
         assert snapshot["live_orders_sent"] is False
+
+
+def test_dashboard_projects_position_protection_attention_safely() -> None:
+    with TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        _write_result(root, _account())
+        _write_observer_status(root, failures=3, attention=True)
+
+        snapshot = ForexPaperDashboard(
+            root,
+            executor=_Executor({}),
+        ).snapshot()
+
+        protection = snapshot["position_protection"]
+        assert protection["available"] is True
+        assert protection["status"] == "PAPER_PROTECTION_BLOCKED"
+        assert protection["interval_seconds"] == 60
+        assert protection["consecutive_failure_count"] == 3
+        assert protection["attention_required"] is True
+        assert protection["live_orders_sent"] is False
+        assert "wymaga uwagi" in snapshot["message"]
+
+
+def test_dashboard_sanitizes_an_unsafe_observer_heartbeat() -> None:
+    with TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        _write_result(root, _account())
+        _write_observer_status(root, live=True)
+
+        snapshot = ForexPaperDashboard(
+            root,
+            executor=_Executor({}),
+        ).snapshot()
+
+        protection = snapshot["position_protection"]
+        assert protection["status"] == "SAFETY_VIOLATION"
+        assert protection["attention_required"] is True
+        assert protection["live_orders_sent"] is False
+        assert snapshot["live_orders_sent"] is False
+
+
+def test_dashboard_marks_a_future_observer_heartbeat_as_stale() -> None:
+    with TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        _write_result(root, _account())
+        _write_observer_status(
+            root,
+            checked_at=datetime.now(timezone.utc) + timedelta(minutes=5),
+        )
+
+        snapshot = ForexPaperDashboard(
+            root,
+            executor=_Executor({}),
+        ).snapshot()
+
+        protection = snapshot["position_protection"]
+        assert protection["available"] is True
+        assert protection["stale"] is True
+        assert protection["live_orders_sent"] is False
 
 
 def test_dashboard_blocks_result_that_claims_live_execution() -> None:

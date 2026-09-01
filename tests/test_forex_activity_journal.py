@@ -304,7 +304,7 @@ def test_new_activity_modules_remain_bounded() -> None:
     limits = {
         "app/trading/forex_activity_journal.py": 540,
         "app/trading/forex_activity.py": 260,
-        "app/gui/forex_paper_page.py": 340,
+        "app/gui/forex_paper_page.py": 380,
     }
     for relative, limit in limits.items():
         assert len((root / relative).read_text(encoding="utf-8").splitlines()) < limit

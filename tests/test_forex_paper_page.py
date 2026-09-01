@@ -59,20 +59,39 @@ class _Dashboard:
                 "threshold": 3,
             },
             "message": "Lokalna symulacja; brak zleceń u brokera.",
+            "position_protection": {
+                "available": True,
+                "status": "NO_PROTECTION_TRIGGER",
+                "reason": "",
+                "consecutive_failure_count": 0,
+                "attention_required": False,
+                "stale": False,
+                "market_window_open": True,
+            },
         }
 
 
 class _Activity:
     def history(self, *, limit: int = 50) -> list[dict]:
         assert limit == 50
-        return [{
-            "sequence": 1,
-            "occurred_at": "2026-08-21T10:09:38+00:00",
-            "kind": "POSITION_OPENED",
-            "message": "Forex PAPER: otworzyłem pozycję SHORT na USD/CHF.",
-            "delivered": False,
-            "delivery_status": "OCZEKUJE",
-        }]
+        return [
+            {
+                "sequence": 1,
+                "occurred_at": "2026-08-21T10:09:38+00:00",
+                "kind": "POSITION_OPENED",
+                "message": "Forex PAPER: otworzyłem pozycję SHORT na USD/CHF.",
+                "delivered": False,
+                "delivery_status": "OCZEKUJE",
+            },
+            {
+                "sequence": 2,
+                "occurred_at": "2026-08-21T10:12:38+00:00",
+                "kind": "POSITION_PROTECTION_ATTENTION",
+                "message": "Ochrona SL/TP wymaga uwagi.",
+                "delivered": False,
+                "delivery_status": "OCZEKUJE",
+            },
+        ]
 
 
 def test_forex_page_shows_position_and_has_no_execution_controls() -> None:
@@ -96,11 +115,14 @@ def test_forex_page_shows_position_and_has_no_execution_controls() -> None:
         assert page.pair_table.item(3, 7).text() == "0.0000"
         assert page.pair_table.item(3, 8).text() == "1/20"
         assert page.pair_table.item(3, 9).text() == "ZBIERANIE"
-        assert page.history_table.rowCount() == 1
-        assert page.history_table.item(0, 1).text() == "OTWARCIE"
+        assert page.history_table.rowCount() == 2
+        assert page.history_table.item(0, 1).text() == "OCHRONA SL/TP — UWAGA"
+        assert page.history_table.item(1, 1).text() == "OTWARCIE"
         assert page.history_table.item(0, 3).text() == "OCZEKUJE"
-        assert page.pending_history.text() == "Nieodczytane zdarzenia: 1"
+        assert page.pending_history.text() == "Nieodczytane zdarzenia: 2"
         assert page.overall.full_text == "PAPER — PRZERWA"
+        assert page.protection.full_text == "OCHRONA: DZIAŁA"
+        assert "brak działania" in page.protection_detail.text()
         assert "NOWE WEJŚCIA: PRZERWA" in page.safety.text()
         labels = [button.text() for button in page.findChildren(QPushButton)]
         assert labels == ["ODŚWIEŻ"]
