@@ -95,6 +95,23 @@ def test_block_and_recovery_are_recorded_only_on_transitions() -> None:
         ]
 
 
+def test_protection_close_is_healthy_and_does_not_fake_a_recovery() -> None:
+    with TemporaryDirectory() as temporary:
+        journal = ForexPaperActivityJournal(Path(temporary))
+        journal.record(_payload(30))
+        journal.record(_payload(
+            31,
+            action="CLOSE_LONG",
+            status="PAPER_PROTECTION_APPLIED",
+        ))
+        journal.record(_payload(32))
+
+        events = journal.events(limit=10)
+
+        assert [event["kind"] for event in events] == ["POSITION_CLOSED"]
+        assert journal.status()["last_health"] == "HEALTHY"
+
+
 def test_existing_ledger_fills_are_history_but_not_replayed_as_alerts() -> None:
     with TemporaryDirectory() as temporary:
         root = Path(temporary)
@@ -193,6 +210,20 @@ def test_hidden_runner_records_history_before_printing_result() -> None:
     assert "activity_history.initialize()" in source
     assert "activity_history.record(result)" in source
     assert source.index("activity_history.record(result)") < source.index(
+        "print(json.dumps"
+    )
+
+
+def test_protection_runner_records_an_applied_close_before_printing() -> None:
+    source = (
+        Path(__file__).resolve().parents[1]
+        / "tools"
+        / "run_forex_paper_protection.py"
+    ).read_text(encoding="utf-8")
+
+    assert "ForexPaperActivityJournal" in source
+    assert 'result.get("status") == "PAPER_PROTECTION_APPLIED"' in source
+    assert source.index("ForexPaperActivityJournal") < source.index(
         "print(json.dumps"
     )
 

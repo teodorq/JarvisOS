@@ -5,6 +5,7 @@ from app.trading.forex_risk import ForexPaperPolicy
 from app.trading.forex_sample_contract import (
     CONTRACT_ID,
     build_forex_paper_sample_contract,
+    is_superseded_sample_contract,
     sample_contracts_match,
     verify_forex_paper_sample_contract,
 )
@@ -24,6 +25,11 @@ def test_sample_contract_is_deterministic_and_paper_only() -> None:
     assert first["automatic_live_promotion"] is False
     assert verify_forex_paper_sample_contract(first) is True
     assert sample_contracts_match(first, second) is True
+    execution = first["specification"]["execution_model"]
+    assert execution["entry_and_signal_exit_interval_seconds"] == 900
+    assert execution["position_protection_interval_seconds"] == 60
+    assert execution["position_protection_source"] == "LOCAL_MT5_DEMO"
+    assert execution["position_protection_actions"] == ["CLOSE_POSITION"]
 
 
 def test_strategy_or_risk_change_produces_a_different_fingerprint() -> None:
@@ -56,3 +62,14 @@ def test_tampering_or_live_flag_invalidates_contract() -> None:
     assert verify_forex_paper_sample_contract(fingerprint_tampered) is False
     assert verify_forex_paper_sample_contract(live_tampered) is False
     assert sample_contracts_match(baseline, fingerprint_tampered) is False
+
+
+def test_known_v1_contract_is_superseded_not_foreign() -> None:
+    assert is_superseded_sample_contract(
+        "FOREX_PAPER_V1_20260831",
+        "a77112c8f1264aab11403dabf4b51b835deb96773799c8fdea1f0ace0707276a",
+    ) is True
+    assert is_superseded_sample_contract(
+        "FOREX_PAPER_V1_20260831",
+        "0" * 64,
+    ) is False

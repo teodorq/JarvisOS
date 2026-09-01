@@ -449,6 +449,9 @@ class ForexPaperDashboard:
             "foreign_contract_closed_trade_count": cls._count(
                 item.get("foreign_contract_closed_trade_count")
             ),
+            "superseded_contract_closed_trade_count": cls._count(
+                item.get("superseded_contract_closed_trade_count")
+            ),
             "all_time_closed_trade_count": cls._count(
                 item.get("all_time_closed_trade_count")
             ),

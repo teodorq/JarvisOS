@@ -7,6 +7,7 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any, Iterable, Mapping
 
 from app.trading.forex_models import MAJOR_FOREX_PAIRS
+from app.trading.forex_sample_contract import is_superseded_sample_contract
 from app.trading.forex_trade_diagnostics import (
     build_forex_trade_diagnostics,
 )
@@ -159,6 +160,7 @@ def build_forex_paper_performance_review(
     )
     legacy_unversioned_count = 0
     foreign_contract_count = 0
+    superseded_contract_count = 0
     invalid_fill_count = 0
     running_net = Decimal("0")
     sample_start_net = Decimal("0")
@@ -195,6 +197,11 @@ def build_forex_paper_performance_review(
             sample_values.append(pnl)
             sample_fills.append(item)
             sample_pair_values[pair].append(pnl)
+        elif is_superseded_sample_contract(
+            fill_contract_id,
+            fill_fingerprint,
+        ):
+            superseded_contract_count += 1
         elif not fill_contract_id and not fill_fingerprint:
             legacy_unversioned_count += 1
         else:
@@ -332,9 +339,13 @@ def build_forex_paper_performance_review(
         "current_contract_closed_trade_count": len(sample_values),
         "legacy_unversioned_closed_trade_count": legacy_unversioned_count,
         "foreign_contract_closed_trade_count": foreign_contract_count,
+        "superseded_contract_closed_trade_count": superseded_contract_count,
         "all_time_closed_trade_count": len(values),
         "legacy_fills_excluded_from_current_sample": contract_tracking_enabled,
         "foreign_fills_excluded_from_current_sample": contract_tracking_enabled,
+        "superseded_fills_excluded_from_current_sample": (
+            contract_tracking_enabled
+        ),
         "sample_contract_consistent": foreign_contract_count == 0,
         "automatic_sample_merge": False,
         "automatic_strategy_change": False,

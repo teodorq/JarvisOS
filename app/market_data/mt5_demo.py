@@ -9,7 +9,12 @@ import re
 import time
 from typing import Any, Iterable, Mapping
 
-from app.trading.forex_models import ForexBar, ForexPair, ForexQuote
+from app.trading.forex_models import (
+    ForexBar,
+    ForexPair,
+    ForexQuote,
+    USD_PLN_CONVERSION_PAIR,
+)
 from app.trading.models import TradingValidationError, aware_utc
 
 
@@ -88,7 +93,11 @@ class Mt5DemoReadOnlySource:
             not symbols
             or len(set(symbols)) != len(symbols)
             or not 31 <= bar_count <= 499
-            or any(not pair.tradable for pair in selected)
+            or any(
+                not pair.tradable
+                and pair.symbol != USD_PLN_CONVERSION_PAIR.symbol
+                for pair in selected
+            )
         ):
             raise TradingValidationError("mt5_demo: invalid_market_request")
 

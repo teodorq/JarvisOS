@@ -15,7 +15,12 @@ from app.trading.forex_risk import ForexPaperPolicy
 from app.trading.forex_scanner import ForexScannerPolicy
 
 
-CONTRACT_ID = "FOREX_PAPER_V1_20260831"
+CONTRACT_ID = "FOREX_PAPER_V2_20260901"
+SUPERSEDED_CONTRACT_FINGERPRINTS = {
+    "FOREX_PAPER_V1_20260831": (
+        "a77112c8f1264aab11403dabf4b51b835deb96773799c8fdea1f0ace0707276a"
+    ),
+}
 
 
 def _value(value: object) -> object:
@@ -82,6 +87,10 @@ def build_forex_paper_sample_contract(
                 "commission_model": "NONE",
                 "swap_model": "NONE",
                 "extra_slippage_model": "NONE",
+                "entry_and_signal_exit_interval_seconds": 900,
+                "position_protection_interval_seconds": 60,
+                "position_protection_source": "LOCAL_MT5_DEMO",
+                "position_protection_actions": ["CLOSE_POSITION"],
             },
         },
         "paper_only": True,
@@ -135,9 +144,24 @@ def sample_contracts_match(left: object, right: object) -> bool:
     )
 
 
+def is_superseded_sample_contract(
+    contract_id: object,
+    fingerprint_sha256: object,
+) -> bool:
+    expected = SUPERSEDED_CONTRACT_FINGERPRINTS.get(str(contract_id or ""))
+    fingerprint = str(fingerprint_sha256 or "")
+    return bool(
+        expected
+        and len(fingerprint) == 64
+        and hmac.compare_digest(expected, fingerprint)
+    )
+
+
 __all__ = [
     "CONTRACT_ID",
+    "SUPERSEDED_CONTRACT_FINGERPRINTS",
     "build_forex_paper_sample_contract",
+    "is_superseded_sample_contract",
     "sample_contracts_match",
     "verify_forex_paper_sample_contract",
 ]

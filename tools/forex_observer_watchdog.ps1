@@ -4,7 +4,9 @@ param(
     [ValidateRange(5, 60)]
     [int]$IntervalMinutes = 15,
     [ValidateRange(15, 180)]
-    [int]$StartupWaitSeconds = 90
+    [int]$StartupWaitSeconds = 90,
+    [ValidateRange(30, 300)]
+    [int]$ProtectionIntervalSeconds = 60
 )
 
 Set-StrictMode -Version Latest
@@ -14,17 +16,23 @@ $projectPath = [IO.Path]::GetFullPath($ProjectRoot)
 $terminalPath = [IO.Path]::GetFullPath($Mt5Path)
 $pythonPath = Join-Path $projectPath ".venv\Scripts\python.exe"
 $runnerPath = Join-Path $projectPath "tools\run_forex_paper_cycle.py"
+$protectionRunnerPath = Join-Path $projectPath (
+    "tools\run_forex_paper_protection.py"
+)
 $readinessPath = Join-Path $projectPath "tools\check_mt5_market_ready.py"
 $dataPath = Join-Path $projectPath "data\trading"
 $logPath = Join-Path $dataPath "forex_paper_watchdog.log"
 $outputPath = Join-Path $dataPath "forex_paper_last.json"
 $errorPath = Join-Path $dataPath "forex_paper_last.error.log"
 $statusPath = Join-Path $dataPath "forex_observer_status.json"
+$protectionOutputPath = Join-Path $dataPath "forex_paper_protection_last.json"
+$protectionErrorPath = Join-Path $dataPath "forex_paper_protection_last.error.log"
 
 foreach ($requiredPath in @(
     $terminalPath,
     $pythonPath,
     $runnerPath,
+    $protectionRunnerPath,
     $readinessPath
 )) {
     if (-not (Test-Path -LiteralPath $requiredPath -PathType Leaf)) {
@@ -71,6 +79,7 @@ function Write-ObserverStatus {
         mt5_running = $Mt5Running
         last_cycle_observed_at = $lastCycleObservedAt
         interval_minutes = $IntervalMinutes
+        protection_interval_seconds = $ProtectionIntervalSeconds
         detail = $Detail
         broker_orders_sent = $false
         live_orders_sent = $false
@@ -198,6 +207,50 @@ function Invoke-ForexPaperCycle {
     }
 }
 
+function Invoke-ForexPaperProtection {
+    Remove-Item -LiteralPath $protectionOutputPath -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $protectionErrorPath -Force -ErrorAction SilentlyContinue
+    $runnerArgument = '"' + $protectionRunnerPath + '"'
+    $process = Start-Process `
+        -FilePath $pythonPath `
+        -ArgumentList $runnerArgument `
+        -WorkingDirectory $projectPath `
+        -WindowStyle Hidden `
+        -RedirectStandardOutput $protectionOutputPath `
+        -RedirectStandardError $protectionErrorPath `
+        -Wait `
+        -PassThru
+    if (-not (Test-Path -LiteralPath $protectionOutputPath -PathType Leaf)) {
+        Write-ObserverLog (
+            "PAPER protection produced no result; exit $($process.ExitCode)."
+        )
+        return
+    }
+    try {
+        $result = Get-Content `
+            -LiteralPath $protectionOutputPath `
+            -Raw `
+            -Encoding UTF8 | ConvertFrom-Json
+        $executionCount = 0
+        $positionCount = ""
+        if ($result.PSObject.Properties.Name -contains "paper") {
+            $executionCount = @($result.paper.execution.executions).Count
+            $positionCount = $result.paper.account.position_count
+        }
+        Write-ObserverLog (
+            "PAPER protection $($result.status); " +
+            "executions=$executionCount; positions=$positionCount; " +
+            "broker_orders_sent=$($result.broker_orders_sent); " +
+            "live_orders_sent=$($result.live_orders_sent)."
+        )
+    }
+    catch {
+        Write-ObserverLog (
+            "PAPER protection result could not be parsed; exit $($process.ExitCode)."
+        )
+    }
+}
+
 $mutex = New-Object Threading.Mutex($false, "Local\JARVIS_OS_FOREX_OBSERVER")
 $ownsMutex = $false
 
@@ -256,7 +309,31 @@ try {
                 ($null -ne (Get-RunningMt5Process)) `
                 "Cykl zakonczyl sie bezpiecznie bez dostepu do zlecen brokera."
         }
-        Start-Sleep -Seconds ($IntervalMinutes * 60)
+        $remainingSeconds = $IntervalMinutes * 60
+        while ($remainingSeconds -gt 0) {
+            $sleepSeconds = [Math]::Min(
+                $ProtectionIntervalSeconds,
+                $remainingSeconds
+            )
+            Start-Sleep -Seconds $sleepSeconds
+            $remainingSeconds -= $sleepSeconds
+            if ((Test-ForexMarketWindow) -and
+                ($null -ne (Get-RunningMt5Process))) {
+                try {
+                    Invoke-ForexPaperProtection
+                    Write-ObserverStatus `
+                        "WAITING_NEXT_CYCLE" `
+                        $true `
+                        $true `
+                        "Ochrona SL/TP aktywna; oczekiwanie na pełny cykl."
+                }
+                catch {
+                    Write-ObserverLog (
+                        "PAPER protection failed safely; full cycle remains scheduled."
+                    )
+                }
+            }
+        }
     }
 }
 finally {

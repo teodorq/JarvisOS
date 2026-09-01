@@ -57,6 +57,7 @@ from app.trading.forex_scanner import (
 from app.trading.forex_sample_contract import (
     CONTRACT_ID as FOREX_PAPER_SAMPLE_CONTRACT_ID,
     build_forex_paper_sample_contract,
+    is_superseded_sample_contract,
     sample_contracts_match,
     verify_forex_paper_sample_contract,
 )
@@ -143,6 +144,7 @@ __all__ = [
     "major_pair",
     "build_forex_paper_performance_review",
     "build_forex_paper_sample_contract",
+    "is_superseded_sample_contract",
     "build_forex_strategy_cohort_review",
     "build_forex_trade_diagnostics",
     "sample_contracts_match",

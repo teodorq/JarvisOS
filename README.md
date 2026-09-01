@@ -96,6 +96,10 @@ The limited interactive task starts only the configured OANDA TMS MT5 terminal,
 waits for all seven local ticks and closed-bar series to become fresh, and runs
 one local PAPER cycle every 15 minutes while the Forex market is open. This
 readiness probe never calls the external providers and has no order surface.
+Between full cycles, a close-only guard checks existing positions every 60
+seconds using only local MT5 DEMO ticks and the local USD/PLN quote. It can
+apply an existing stop loss or take profit but cannot create an entry, call an
+external market-data provider or send a broker order.
 MT5 stamps each candle at its opening time, so JARVIS
 accepts the previous fully closed M15 candle for at most two M15 periods plus a
 one-minute synchronization allowance; older data still fails closed. Set

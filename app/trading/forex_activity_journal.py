@@ -287,7 +287,10 @@ class ForexPaperActivityJournal:
             return "SAFETY_ATTENTION"
         return (
             "HEALTHY"
-            if payload.get("status") == "PAPER_CYCLE_COMPLETED"
+            if payload.get("status") in {
+                "PAPER_CYCLE_COMPLETED",
+                "PAPER_PROTECTION_APPLIED",
+            }
             else "BLOCKED"
         )
 

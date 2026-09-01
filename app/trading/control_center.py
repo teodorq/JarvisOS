@@ -580,6 +580,8 @@ class TradingControlCenter:
             f"{sample_contract.get('legacy_unversioned_closed_trade_count', 0)}; "
             f"obce odciski "
             f"{sample_contract.get('foreign_contract_closed_trade_count', 0)}; "
+            f"poprzedni kontrakt "
+            f"{sample_contract.get('superseded_contract_closed_trade_count', 0)}; "
             "automatyczne łączenie próbek jest wyłączone.\n"
             f"• Kohorty V1/V2: faktyczny V1 — sygnały "
             f"{v1_cohort.get('open_signal_count', 0)}, zamknięte "

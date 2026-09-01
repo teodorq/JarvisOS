@@ -28,6 +28,25 @@ foreach ($requiredPath in @($terminalPath, $watchdogPath)) {
     }
 }
 
+$existingTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+if ($null -ne $existingTask -and $existingTask.State -eq "Running") {
+    Stop-ScheduledTask -TaskName $taskName -ErrorAction Stop
+    $stopDeadline = (Get-Date).AddSeconds(10)
+    do {
+        Start-Sleep -Milliseconds 200
+        $existingTask = Get-ScheduledTask `
+            -TaskName $taskName `
+            -ErrorAction SilentlyContinue
+    } while (
+        $null -ne $existingTask -and
+        $existingTask.State -eq "Running" -and
+        (Get-Date) -lt $stopDeadline
+    )
+    if ($null -ne $existingTask -and $existingTask.State -eq "Running") {
+        throw "Existing Forex observer did not stop before update."
+    }
+}
+
 $userId = [Security.Principal.WindowsIdentity]::GetCurrent().Name
 $powershellPath = Join-Path $env:SystemRoot (
     "System32\WindowsPowerShell\v1.0\powershell.exe"
@@ -67,7 +86,8 @@ $definition = New-ScheduledTask `
     -Description (
         "Starts OANDA TMS MT5 after sign-in and runs autonomous local JARVIS OS " +
         "Forex PAPER cycles every 15 minutes. A recovery trigger restarts the " +
-        "observer if it exits. It cannot send broker orders."
+        "observer if it exits. Existing PAPER positions receive a local MT5 " +
+        "SL/TP check every minute. It cannot send broker orders."
     )
 
 Register-ScheduledTask `

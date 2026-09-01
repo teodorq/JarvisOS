@@ -8,6 +8,7 @@ from app.trading.forex_paper_performance import (
     ForexPaperPerformancePolicy,
     build_forex_paper_performance_review,
 )
+from app.trading.forex_sample_contract import build_forex_paper_sample_contract
 from app.trading.models import TradingValidationError
 
 
@@ -189,3 +190,27 @@ def test_contract_tracking_excludes_legacy_and_foreign_fills_from_sample() -> No
     assert eur["all_time_closed_trade_count"] == 3
     assert eur["net_realized_pnl_pln"] == "5.00"
     assert eur["all_time_net_realized_pnl_pln"] == "13.00"
+
+
+def test_known_predecessor_is_excluded_without_marking_sample_inconsistent() -> None:
+    expected = build_forex_paper_sample_contract()
+    predecessor = _fill("7", 1)
+    predecessor["sample_contract_id"] = "FOREX_PAPER_V1_20260831"
+    predecessor["sample_contract_fingerprint_sha256"] = (
+        "a77112c8f1264aab11403dabf4b51b835deb96773799c8fdea1f0ace0707276a"
+    )
+
+    review = build_forex_paper_performance_review(
+        [predecessor],
+        initial_balance_pln="100000",
+        current_balance_pln="100007",
+        audit_chain_valid=True,
+        execution_audit_matches_ledger=True,
+        expected_sample_contract=expected,
+    )
+
+    contract = review["sample_contract_review"]
+    assert review["valid_closed_trade_count"] == 0
+    assert contract["superseded_contract_closed_trade_count"] == 1
+    assert contract["foreign_contract_closed_trade_count"] == 0
+    assert contract["sample_contract_consistent"] is True

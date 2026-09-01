@@ -30,11 +30,24 @@ def test_installer_has_reversible_remove_path() -> None:
     assert "Unregister-ScheduledTask" in INSTALLER
 
 
+def test_installer_stops_running_instance_before_registering_update() -> None:
+    update_stop = INSTALLER.index("$existingTask = Get-ScheduledTask")
+    registration = INSTALLER.index("Register-ScheduledTask")
+    assert update_stop < registration
+    update_section = INSTALLER[update_stop:registration]
+    assert "Stop-ScheduledTask -TaskName $taskName" in update_section
+    assert "$stopDeadline = (Get-Date).AddSeconds(10)" in update_section
+    assert "Existing Forex observer did not stop before update." in update_section
+
+
 def test_watchdog_has_bounded_interval_and_single_instance() -> None:
     assert "[ValidateRange(5, 60)]" in WATCHDOG
     assert "[int]$IntervalMinutes = 15" in WATCHDOG
     assert "Local\\JARVIS_OS_FOREX_OBSERVER" in WATCHDOG
-    assert "Start-Sleep -Seconds ($IntervalMinutes * 60)" in WATCHDOG
+    assert "[ValidateRange(30, 300)]" in WATCHDOG
+    assert "[int]$ProtectionIntervalSeconds = 60" in WATCHDOG
+    assert "Start-Sleep -Seconds $sleepSeconds" in WATCHDOG
+    assert "Invoke-ForexPaperProtection" in WATCHDOG
     assert "Test-ForexMarketWindow" in WATCHDOG
     assert "Forex market is closed; data quota preserved." in WATCHDOG
     assert "[DayOfWeek]::Sunday" in WATCHDOG
@@ -49,12 +62,14 @@ def test_watchdog_has_bounded_interval_and_single_instance() -> None:
 
 def test_watchdog_calls_only_the_local_paper_entry_point() -> None:
     assert '"tools\\run_forex_paper_cycle.py"' in WATCHDOG
+    assert '"tools\\run_forex_paper_protection.py"' in WATCHDOG
     assert "forex_paper_last.json" in WATCHDOG
     assert "ForexPaperExecutionEngine" not in WATCHDOG
     assert "apply_plan" not in WATCHDOG
     assert "submit_live_order" not in WATCHDOG
     assert "order_send" not in WATCHDOG
     assert "activity_history" in WATCHDOG
+    assert "PAPER protection" in WATCHDOG
 
 
 def test_watchdog_starts_only_the_configured_mt5_binary() -> None:
