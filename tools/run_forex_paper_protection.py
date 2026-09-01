@@ -39,9 +39,31 @@ def main() -> int:
         PROJECT_ROOT,
         settings=settings,
     ).run_once(cycle_id=cycle_id, now=now)
+    activity_history = ForexPaperActivityJournal(PROJECT_ROOT)
+    try:
+        protection_health = activity_history.record_protection_health(result)
+        result["protection_health_status"] = protection_health["status"]
+        result["protection_consecutive_failure_count"] = protection_health[
+            "consecutive_failure_count"
+        ]
+        result["protection_attention_required"] = protection_health[
+            "attention_required"
+        ]
+        result["protection_health_events_recorded"] = protection_health[
+            "events_recorded"
+        ]
+    except (
+        KeyError,
+        OSError,
+        RuntimeError,
+        TimeoutError,
+        TypeError,
+        ValueError,
+    ):
+        result["protection_health_status"] = "WRITE_FAILED"
     if result.get("status") == "PAPER_PROTECTION_APPLIED":
         try:
-            history = ForexPaperActivityJournal(PROJECT_ROOT).record(result)
+            history = activity_history.record(result)
             result["activity_history_status"] = history["status"]
             result["activity_history_events_recorded"] = history[
                 "events_recorded"

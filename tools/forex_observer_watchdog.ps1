@@ -291,6 +291,23 @@ function Update-ProtectionHealth {
         "PROTECTION_STATUS_MISSING"
     }
     $script:lastProtectionReason = $reason
+    if ($Result.PSObject.Properties.Name -contains (
+        "protection_consecutive_failure_count"
+    )) {
+        try {
+            $persistentFailures = [int](
+                $Result.protection_consecutive_failure_count
+            )
+            $script:consecutiveProtectionFailures = [Math]::Max(
+                0,
+                [Math]::Min(1000, $persistentFailures)
+            )
+            return
+        }
+        catch {
+            # Fall back to the in-process counter below.
+        }
+    }
     if ($script:lastProtectionStatus -in @(
         "NO_OPEN_POSITIONS",
         "NO_PROTECTION_TRIGGER",

@@ -172,6 +172,9 @@ heartbeat also reports the last minute-protection result and a consecutive
 failure counter. One stale local tick remains a safe skipped check; three
 consecutive protection failures raise `PROTECTION_ATTENTION_REQUIRED` while the
 15-minute PAPER cycle continues and all broker-order routes remain unavailable.
+The counter survives observer restarts. Entering the attention state and later
+recovering each create one durable event in `HISTORIA ZDARZEŃ`; repeated minute
+checks in the same state do not create notification spam.
 The Windows task has both a logon trigger and a 15-minute recovery trigger; the
 single-instance policy ignores the recovery trigger while the observer is healthy
 and restarts it after an unexpected exit.

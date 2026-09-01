@@ -178,6 +178,7 @@ def test_guard_blocks_configuration_before_any_market_read() -> None:
         ).run_once(cycle_id="paper-protection-provider", now=NOW)
 
         assert disabled["status"] == "PAPER_PROTECTION_BLOCKED"
+        assert disabled["observed_at"] == NOW.isoformat()
         assert disabled["reason"] == "PAPER_AUTOPILOT_NOT_ENABLED"
         assert wrong_provider["reason"] == "MT5_DEMO_PRIMARY_REQUIRED"
         assert disabled["market_data_source"] == "LOCAL_MT5_DEMO"

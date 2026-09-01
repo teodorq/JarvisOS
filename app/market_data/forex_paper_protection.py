@@ -62,9 +62,17 @@ class ForexPaperProtectionRuntime:
         selected_id = str(cycle_id or "").strip()
         selected_now = aware_utc(now or datetime.now(timezone.utc), "now")
         if not self.settings.paper_autopilot_enabled:
-            return self._blocked(selected_id, "PAPER_AUTOPILOT_NOT_ENABLED")
+            return self._blocked(
+                selected_id,
+                "PAPER_AUTOPILOT_NOT_ENABLED",
+                selected_now,
+            )
         if self.settings.primary_provider != "MT5_DEMO":
-            return self._blocked(selected_id, "MT5_DEMO_PRIMARY_REQUIRED")
+            return self._blocked(
+                selected_id,
+                "MT5_DEMO_PRIMARY_REQUIRED",
+                selected_now,
+            )
         try:
             positions = self.executor.positions()
             if not positions:
@@ -87,7 +95,11 @@ class ForexPaperProtectionRuntime:
                 bars,
                 now=selected_now,
             ):
-                return self._blocked(selected_id, "MT5_PROTECTION_DATA_STALE")
+                return self._blocked(
+                    selected_id,
+                    "MT5_PROTECTION_DATA_STALE",
+                    selected_now,
+                )
             rates = ForexRateBook(quotes.values(), now=selected_now)
             account = self.executor.status(
                 quotes=quotes,
@@ -109,7 +121,11 @@ class ForexPaperProtectionRuntime:
                 or item.get("action") != "CLOSE_POSITION"
                 for item in instructions
             ):
-                return self._blocked(selected_id, "PROTECTION_PLAN_NOT_CLOSE_ONLY")
+                return self._blocked(
+                    selected_id,
+                    "PROTECTION_PLAN_NOT_CLOSE_ONLY",
+                    selected_now,
+                )
             if not instructions:
                 return self._result(
                     "NO_PROTECTION_TRIGGER",
@@ -136,6 +152,7 @@ class ForexPaperProtectionRuntime:
             return self._blocked(
                 selected_id,
                 str(error)[:160] or "PAPER_PROTECTION_FAILED",
+                selected_now,
             )
 
     @staticmethod
@@ -183,11 +200,16 @@ class ForexPaperProtectionRuntime:
         }
 
     @staticmethod
-    def _blocked(cycle_id: str, reason: str) -> dict[str, Any]:
+    def _blocked(
+        cycle_id: str,
+        reason: str,
+        now: datetime,
+    ) -> dict[str, Any]:
         return {
             "status": "PAPER_PROTECTION_BLOCKED",
             "mode": "FOREX_PAPER_POSITION_PROTECTION_ONLY",
             "cycle_id": cycle_id,
+            "observed_at": now.isoformat(),
             "reason": reason,
             "market_data_source": "LOCAL_MT5_DEMO",
             "external_market_data_requests": False,

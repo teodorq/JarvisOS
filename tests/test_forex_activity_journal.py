@@ -112,6 +112,75 @@ def test_protection_close_is_healthy_and_does_not_fake_a_recovery() -> None:
         assert journal.status()["last_health"] == "HEALTHY"
 
 
+def test_sustained_protection_failure_and_recovery_are_notified_once() -> None:
+    with TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        for cycle in range(40, 42):
+            result = ForexPaperActivityJournal(root).record_protection_health(
+                _payload(cycle, status="PAPER_PROTECTION_BLOCKED")
+            )
+            assert result["events_recorded"] == 0
+            assert result["attention_required"] is False
+        attention = ForexPaperActivityJournal(root).record_protection_health(
+            _payload(42, status="PAPER_PROTECTION_BLOCKED")
+        )
+        repeated = ForexPaperActivityJournal(root).record_protection_health(
+            _payload(43, status="PAPER_PROTECTION_BLOCKED")
+        )
+        recovered = ForexPaperActivityJournal(root).record_protection_health(
+            _payload(44, status="NO_PROTECTION_TRIGGER")
+        )
+        healthy = ForexPaperActivityJournal(root).record_protection_health(
+            _payload(45, status="NO_PROTECTION_TRIGGER")
+        )
+
+        events = ForexPaperActivityJournal(root).events(limit=10)
+
+        assert attention["events_recorded"] == 1
+        assert attention["consecutive_failure_count"] == 3
+        assert attention["attention_required"] is True
+        assert repeated["events_recorded"] == 0
+        assert recovered["events_recorded"] == 1
+        assert recovered["consecutive_failure_count"] == 0
+        assert healthy["events_recorded"] == 0
+        assert [event["kind"] for event in events] == [
+            "POSITION_PROTECTION_ATTENTION",
+            "POSITION_PROTECTION_RECOVERED",
+        ]
+        assert all(
+            event["origin"] == "PROTECTION_WATCHDOG" for event in events
+        )
+        feed = ForexPaperActivityFeed(root, settings=_settings())
+        first = feed.poll()
+        second = feed.poll()
+        assert first is not None
+        assert first["activity_kind"] == "POSITION_PROTECTION_ATTENTION"
+        assert second is not None
+        assert second["activity_kind"] == "POSITION_PROTECTION_RECOVERED"
+        assert feed.poll() is None
+
+
+def test_protection_health_rejects_an_unsafe_report_without_state_change() -> None:
+    with TemporaryDirectory() as temporary:
+        journal = ForexPaperActivityJournal(Path(temporary))
+        journal.record_protection_health(
+            _payload(46, status="NO_PROTECTION_TRIGGER")
+        )
+        unsafe = _payload(47, status="PAPER_PROTECTION_BLOCKED")
+        unsafe["live_orders_sent"] = True
+
+        result = journal.record_protection_health(unsafe)
+        status = journal.status()
+
+        assert result == {
+            "status": "INVALID_PROTECTION_HEALTH",
+            "events_recorded": 0,
+        }
+        assert status["last_protection_health"] == "HEALTHY"
+        assert status["protection_consecutive_failure_count"] == 0
+        assert journal.events(limit=10) == []
+
+
 def test_existing_ledger_fills_are_history_but_not_replayed_as_alerts() -> None:
     with TemporaryDirectory() as temporary:
         root = Path(temporary)
@@ -222,6 +291,8 @@ def test_protection_runner_records_an_applied_close_before_printing() -> None:
     ).read_text(encoding="utf-8")
 
     assert "ForexPaperActivityJournal" in source
+    assert "record_protection_health(result)" in source
+    assert "protection_consecutive_failure_count" in source
     assert 'result.get("status") == "PAPER_PROTECTION_APPLIED"' in source
     assert source.index("ForexPaperActivityJournal") < source.index(
         "print(json.dumps"
@@ -231,7 +302,7 @@ def test_protection_runner_records_an_applied_close_before_printing() -> None:
 def test_new_activity_modules_remain_bounded() -> None:
     root = Path(__file__).resolve().parents[1]
     limits = {
-        "app/trading/forex_activity_journal.py": 440,
+        "app/trading/forex_activity_journal.py": 540,
         "app/trading/forex_activity.py": 260,
         "app/gui/forex_paper_page.py": 340,
     }

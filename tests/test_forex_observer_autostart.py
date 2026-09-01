@@ -53,6 +53,8 @@ def test_watchdog_has_bounded_interval_and_single_instance() -> None:
     assert "PROTECTION_ATTENTION_REQUIRED" in WATCHDOG
     assert "Update-ProtectionHealth" in WATCHDOG
     assert '$Result.PSObject.Properties.Name -contains "reason"' in WATCHDOG
+    assert '"protection_consecutive_failure_count"' in WATCHDOG
+    assert "$persistentFailures" in WATCHDOG
     assert "Test-ForexMarketWindow" in WATCHDOG
     assert "Forex market is closed; data quota preserved." in WATCHDOG
     assert "[DayOfWeek]::Sunday" in WATCHDOG

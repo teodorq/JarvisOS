@@ -43,6 +43,8 @@ class ForexPaperActivityJournal:
             "next_sequence": 1,
             "last_cycle_key": "",
             "last_health": "",
+            "last_protection_health": "",
+            "protection_consecutive_failure_count": 0,
             "recent_cycle_keys": [],
             "events": [],
             "dropped_event_count": 0,
@@ -118,6 +120,79 @@ class ForexPaperActivityJournal:
         ]
         return selected[-selected_limit:] if newest else selected[:selected_limit]
 
+    def record_protection_health(self, payload: object) -> dict[str, Any]:
+        """Persist sustained protection trouble and its recovery without spam."""
+        value = dict(payload) if isinstance(payload, dict) else {}
+        cycle_key = self._cycle_key(value)
+        if not cycle_key or any(
+            value.get(key) is not False
+            for key in (
+                "broker_orders_sent",
+                "live_orders_sent",
+                "real_money_access",
+            )
+        ):
+            return {"status": "INVALID_PROTECTION_HEALTH", "events_recorded": 0}
+        result_status = str(value.get("status", ""))[:80]
+        healthy = result_status in {
+            "NO_OPEN_POSITIONS",
+            "NO_PROTECTION_TRIGGER",
+            "PAPER_PROTECTION_APPLIED",
+        }
+        reason = " ".join(str(value.get("reason", "")).split())[:160]
+        occurred_at = " ".join(str(value.get("observed_at", "")).split())[:64]
+        self.initialize()
+        with self._exclusive_lock():
+            state = self._normalized(self.store.load())
+            previous = state["last_protection_health"]
+            failures = 0 if healthy else min(
+                1_000,
+                int(state["protection_consecutive_failure_count"]) + 1,
+            )
+            current = "HEALTHY" if healthy else (
+                "ATTENTION" if failures >= 3 else "DEGRADED"
+            )
+            spec = None
+            if current == "ATTENTION" and previous != "ATTENTION":
+                detail = reason or result_status or "wynik ochrony jest niedostępny"
+                spec = self._spec(
+                    "POSITION_PROTECTION_ATTENTION",
+                    "important",
+                    "Ochrona SL/TP pozycji PAPER nie przeszła trzech kolejnych "
+                    f"kontroli ({detail}). Pełny cykl pozostaje aktywny, a "
+                    "zlecenia LIVE są niedostępne.",
+                    occurred_at,
+                    f"protection-attention:{cycle_key}",
+                )
+            elif current == "HEALTHY" and previous == "ATTENTION":
+                spec = self._spec(
+                    "POSITION_PROTECTION_RECOVERED",
+                    "brief",
+                    "Ochrona SL/TP pozycji PAPER ponownie działa prawidłowo; "
+                    "licznik kolejnych problemów został wyzerowany.",
+                    occurred_at,
+                    f"protection-recovered:{cycle_key}",
+                )
+            recorded = 0
+            if spec is not None:
+                recorded = self._append(
+                    state,
+                    spec,
+                    cycle_key=cycle_key,
+                    origin="PROTECTION_WATCHDOG",
+                )
+            state["last_protection_health"] = current
+            state["protection_consecutive_failure_count"] = failures
+            self._trim(state)
+            self.store.save(state)
+        return {
+            "status": "RECORDED",
+            "events_recorded": recorded,
+            "protection_health": current,
+            "consecutive_failure_count": failures,
+            "attention_required": current == "ATTENTION",
+        }
+
     def status(self) -> dict[str, Any]:
         state = self._normalized(self.store.load())
         return {
@@ -129,6 +204,10 @@ class ForexPaperActivityJournal:
             ),
             "dropped_event_count": state["dropped_event_count"],
             "last_health": state["last_health"],
+            "last_protection_health": state["last_protection_health"],
+            "protection_consecutive_failure_count": state[
+                "protection_consecutive_failure_count"
+            ],
             "broker_orders_sent": False,
             "live_orders_sent": False,
         }
@@ -347,6 +426,21 @@ class ForexPaperActivityJournal:
         health = str(state.get("last_health", ""))
         state["last_health"] = (
             health if health in {"HEALTHY", "BLOCKED", "SAFETY_ATTENTION"} else ""
+        )
+        protection_health = str(state.get("last_protection_health", ""))
+        state["last_protection_health"] = (
+            protection_health
+            if protection_health in {"HEALTHY", "DEGRADED", "ATTENTION"}
+            else ""
+        )
+        try:
+            protection_failures = int(
+                state.get("protection_consecutive_failure_count", 0) or 0
+            )
+        except (TypeError, ValueError):
+            protection_failures = 0
+        state["protection_consecutive_failure_count"] = max(
+            0, min(protection_failures, 1_000)
         )
         recent = state.get("recent_cycle_keys")
         recent = recent if isinstance(recent, list) else []
