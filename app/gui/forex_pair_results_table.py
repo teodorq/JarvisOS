@@ -22,7 +22,7 @@ class ForexPairResultsTable(QTableWidget):
     )
     HEADERS = (
         "PARA",
-        "ZAMKNIĘTE",
+        "PRÓBKA",
         "WYGRANE",
         "PRZEGRANE",
         "WIN RATE",

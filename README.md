@@ -150,7 +150,11 @@ pair sample only opens a manual review; it never enables, disables or promotes a
 pair automatically. Every new opening must also carry the exact deterministic
 sample-contract fingerprint covering the scanner, risk limits, universe and fill
 model. The two earlier unversioned fills remain in all-time history but are not
-silently merged into the new frozen sample. The owner status also groups actual V1 PAPER openings into the frozen V2
+silently merged into the new frozen sample. Average result, win rate, profit
+factor and drawdown shown for review use only that current contract. A separate
+all-time summary preserves the complete account history and balance
+reconciliation without contaminating the comparable sample. The owner status
+also groups actual V1 PAPER openings into the frozen V2
 `retained` and `filtered` cohorts at entry time. This is cohort attribution, not
 a counterfactual V2 portfolio simulation, and cannot prove that V2 is better.
 The observer also writes an atomic, bounded heartbeat to

@@ -38,6 +38,7 @@ def _account() -> dict:
         "closed_trade_count": 0,
         "performance": {
             "status": "COLLECTING_PAPER_SAMPLE",
+            "metric_scope": "CURRENT_SAMPLE_CONTRACT",
             "valid_closed_trade_count": 1,
             "all_time_closed_trade_count": 2,
             "minimum_closed_trades_for_review": 20,
@@ -51,10 +52,12 @@ def _account() -> dict:
                 "USD_CHF": {
                     "closed_trade_count": 1,
                     "sample_contract_closed_trade_count": 1,
+                    "all_time_closed_trade_count": 2,
                     "winning_trade_count": 0,
                     "losing_trade_count": 1,
                     "win_rate_pct": "0.00",
                     "net_realized_pnl_pln": "-44.26",
+                    "all_time_net_realized_pnl_pln": "-85.88",
                     "average_trade_pnl_pln": "-44.26",
                     "profit_factor": "0.0000",
                     "minimum_closed_trades_for_review": 20,
@@ -74,6 +77,18 @@ def _account() -> dict:
                 "foreign_contract_closed_trade_count": 0,
                 "all_time_closed_trade_count": 2,
                 "sample_contract_consistent": True,
+            },
+            "all_time_summary": {
+                "closed_trade_count": 2,
+                "winning_trade_count": 0,
+                "losing_trade_count": 2,
+                "win_rate_pct": "0.00",
+                "net_realized_pnl_pln": "-85.88",
+                "average_trade_pnl_pln": "-42.94",
+                "profit_factor": "0.0000",
+                "maximum_closed_trade_drawdown_pln": "85.88",
+                "maximum_closed_trade_drawdown_pct": "0.09",
+                "maximum_consecutive_losses": 2,
             },
         },
         "processed_cycle_count": 75,
@@ -150,7 +165,9 @@ def test_dashboard_projects_latest_safe_paper_cycle() -> None:
         assert snapshot["performance"]["live_promotion_ready"] is False
         pair = snapshot["performance"]["pair_breakdown"]["USD_CHF"]
         assert pair["closed_trade_count"] == 1
+        assert pair["all_time_closed_trade_count"] == 2
         assert pair["net_realized_pnl_pln"] == "-44.26"
+        assert pair["all_time_net_realized_pnl_pln"] == "-85.88"
         assert pair["profit_factor"] == "0.0000"
         assert pair["performance_validated"] is False
         assert pair["review_status"] == "COLLECTING_PAIR_SAMPLE"
@@ -166,6 +183,18 @@ def test_dashboard_projects_latest_safe_paper_cycle() -> None:
         assert contract["current_contract_closed_trade_count"] == 1
         assert contract["legacy_unversioned_closed_trade_count"] == 1
         assert contract["automatic_sample_merge"] is False
+        assert snapshot["performance"]["all_time_summary"] == {
+            "closed_trade_count": 2,
+            "winning_trade_count": 0,
+            "losing_trade_count": 2,
+            "win_rate_pct": "0.00",
+            "net_realized_pnl_pln": "-85.88",
+            "average_trade_pnl_pln": "-42.94",
+            "profit_factor": "0.0000",
+            "maximum_closed_trade_drawdown_pln": "85.88",
+            "maximum_closed_trade_drawdown_pct": "0.09",
+            "maximum_consecutive_losses": 2,
+        }
         assert snapshot["new_entries_paused_by_loss_streak"] is True
         assert snapshot["loss_streak_safety"] == {
             "active": True,
@@ -205,6 +234,23 @@ def test_dashboard_uses_safe_local_ledger_when_result_is_missing() -> None:
         assert snapshot["status"] == "READY"
         assert snapshot["source"] == "LOCAL_PAPER_LEDGER"
         assert snapshot["position_count"] == 1
+
+
+def test_dashboard_rebuilds_metrics_from_ledger_after_report_upgrade() -> None:
+    with TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        stale_account = _account()
+        stale_account["performance"].pop("metric_scope")
+        _write_result(root, stale_account)
+        dashboard = ForexPaperDashboard(root, executor=_Executor(_account()))
+
+        snapshot = dashboard.snapshot()
+
+        assert snapshot["status"] == "READY"
+        assert snapshot["source"] == "LOCAL_PAPER_LEDGER_AFTER_REPORT_UPGRADE"
+        assert snapshot["performance"]["metric_scope"] == (
+            "CURRENT_SAMPLE_CONTRACT"
+        )
 
 
 def test_dashboard_uses_ledger_after_safe_block_without_account() -> None:

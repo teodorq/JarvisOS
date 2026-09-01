@@ -32,6 +32,80 @@ def _text(value: Decimal, quantum: Decimal = _MONEY) -> str:
     return str(value.quantize(quantum, rounding=ROUND_HALF_UP))
 
 
+def _outcome_metrics(
+    values: list[Decimal],
+    *,
+    starting_equity: Decimal,
+) -> dict[str, Any]:
+    profits = [value for value in values if value > 0]
+    losses = [value for value in values if value < 0]
+    net = sum(values, Decimal("0"))
+    gross_profit = sum(profits, Decimal("0"))
+    gross_loss_abs = abs(sum(losses, Decimal("0")))
+    average = net / Decimal(len(values)) if values else Decimal("0")
+    average_win = (
+        gross_profit / Decimal(len(profits)) if profits else Decimal("0")
+    )
+    average_loss = (
+        -gross_loss_abs / Decimal(len(losses)) if losses else Decimal("0")
+    )
+    win_rate = (
+        Decimal(len(profits)) * Decimal("100") / Decimal(len(values))
+        if values
+        else Decimal("0")
+    )
+    equity = starting_equity
+    peak = starting_equity
+    maximum_drawdown = Decimal("0")
+    maximum_drawdown_pct = Decimal("0")
+    current_loss_streak = 0
+    maximum_loss_streak = 0
+    for pnl in values:
+        equity += pnl
+        peak = max(peak, equity)
+        drawdown = max(Decimal("0"), peak - equity)
+        drawdown_pct = (
+            drawdown * Decimal("100") / peak if peak > 0 else Decimal("0")
+        )
+        maximum_drawdown = max(maximum_drawdown, drawdown)
+        maximum_drawdown_pct = max(maximum_drawdown_pct, drawdown_pct)
+        if pnl < 0:
+            current_loss_streak += 1
+            maximum_loss_streak = max(maximum_loss_streak, current_loss_streak)
+        else:
+            current_loss_streak = 0
+    if gross_loss_abs > 0:
+        profit_factor = _text(gross_profit / gross_loss_abs, _RATIO)
+        profit_factor_status = "CALCULATED"
+    elif values:
+        profit_factor = None
+        profit_factor_status = "NO_GROSS_LOSS"
+    else:
+        profit_factor = None
+        profit_factor_status = "NO_CLOSED_TRADES"
+    return {
+        "closed_trade_count": len(values),
+        "winning_trade_count": len(profits),
+        "losing_trade_count": len(losses),
+        "breakeven_trade_count": len(values) - len(profits) - len(losses),
+        "win_rate_pct": _text(win_rate, _PERCENT),
+        "net_realized_pnl_pln": _text(net),
+        "gross_profit_pln": _text(gross_profit),
+        "gross_loss_abs_pln": _text(gross_loss_abs),
+        "average_trade_pnl_pln": _text(average),
+        "average_win_pnl_pln": _text(average_win),
+        "average_loss_pnl_pln": _text(average_loss),
+        "profit_factor": profit_factor,
+        "profit_factor_status": profit_factor_status,
+        "maximum_closed_trade_drawdown_pln": _text(maximum_drawdown),
+        "maximum_closed_trade_drawdown_pct": _text(
+            maximum_drawdown_pct, _PERCENT
+        ),
+        "maximum_consecutive_losses": maximum_loss_streak,
+        "current_consecutive_losses": current_loss_streak,
+    }
+
+
 @dataclass(frozen=True, slots=True)
 class ForexPaperPerformancePolicy:
     """A sample threshold for manual review, never for automatic promotion."""
@@ -82,6 +156,9 @@ def build_forex_paper_performance_review(
     legacy_unversioned_count = 0
     foreign_contract_count = 0
     invalid_fill_count = 0
+    running_net = Decimal("0")
+    sample_start_net = Decimal("0")
+    sample_started = False
     for raw in tuple(closed_fills):
         if not isinstance(raw, Mapping):
             invalid_fill_count += 1
@@ -103,16 +180,21 @@ def build_forex_paper_performance_review(
         fill_fingerprint = str(
             item.get("sample_contract_fingerprint_sha256", "")
         )
-        if not contract_tracking_enabled or (
+        belongs_to_sample = not contract_tracking_enabled or (
             fill_contract_id == expected_contract_id
             and fill_fingerprint == expected_fingerprint
-        ):
+        )
+        if belongs_to_sample:
+            if not sample_started:
+                sample_start_net = running_net
+                sample_started = True
             sample_values.append(pnl)
             sample_pair_values[pair].append(pnl)
         elif not fill_contract_id and not fill_fingerprint:
             legacy_unversioned_count += 1
         else:
             foreign_contract_count += 1
+        running_net += pnl
 
     initial_balance = _decimal(initial_balance_pln)
     current_balance = _decimal(current_balance_pln)
@@ -124,64 +206,17 @@ def build_forex_paper_performance_review(
     )
     initial = initial_balance or Decimal("0")
     current = current_balance or Decimal("0")
-    net = sum(values, Decimal("0"))
-    reconciliation_delta = current - (initial + net)
+    all_time_net = sum(values, Decimal("0"))
+    reconciliation_delta = current - (initial + all_time_net)
     balance_reconciled = bool(
         balance_values_valid and abs(reconciliation_delta) <= _MONEY
     )
 
-    profits = [value for value in values if value > 0]
-    losses = [value for value in values if value < 0]
-    breakeven_count = len(values) - len(profits) - len(losses)
-    gross_profit = sum(profits, Decimal("0"))
-    gross_loss_abs = abs(sum(losses, Decimal("0")))
-    average = net / Decimal(len(values)) if values else Decimal("0")
-    average_win = (
-        gross_profit / Decimal(len(profits)) if profits else Decimal("0")
+    sample_metrics = _outcome_metrics(
+        sample_values,
+        starting_equity=initial + sample_start_net,
     )
-    average_loss = (
-        -gross_loss_abs / Decimal(len(losses)) if losses else Decimal("0")
-    )
-    win_rate = (
-        Decimal(len(profits)) * Decimal("100") / Decimal(len(values))
-        if values
-        else Decimal("0")
-    )
-
-    equity = initial
-    peak = initial
-    maximum_drawdown = Decimal("0")
-    maximum_drawdown_pct = Decimal("0")
-    current_loss_streak = 0
-    maximum_loss_streak = 0
-    for pnl in values:
-        equity += pnl
-        peak = max(peak, equity)
-        drawdown = max(Decimal("0"), peak - equity)
-        drawdown_pct = (
-            drawdown * Decimal("100") / peak
-            if peak > 0
-            else Decimal("0")
-        )
-        maximum_drawdown = max(maximum_drawdown, drawdown)
-        maximum_drawdown_pct = max(maximum_drawdown_pct, drawdown_pct)
-        if pnl < 0:
-            current_loss_streak += 1
-            maximum_loss_streak = max(
-                maximum_loss_streak, current_loss_streak
-            )
-        else:
-            current_loss_streak = 0
-
-    if gross_loss_abs > 0:
-        profit_factor = _text(gross_profit / gross_loss_abs, _RATIO)
-        profit_factor_status = "CALCULATED"
-    elif values:
-        profit_factor = None
-        profit_factor_status = "NO_GROSS_LOSS"
-    else:
-        profit_factor = None
-        profit_factor_status = "NO_CLOSED_TRADES"
+    all_time_metrics = _outcome_metrics(values, starting_equity=initial)
 
     evidence_valid = bool(
         audit_chain_valid is True
@@ -206,31 +241,12 @@ def build_forex_paper_performance_review(
     blocked_pairs: list[str] = []
     for pair, outcomes in pair_values.items():
         sample_outcomes = sample_pair_values[pair]
-        pair_profits = [value for value in outcomes if value > 0]
-        pair_losses = [value for value in outcomes if value < 0]
-        pair_net = sum(outcomes, Decimal("0"))
-        pair_gross_profit = sum(pair_profits, Decimal("0"))
-        pair_gross_loss = abs(sum(pair_losses, Decimal("0")))
-        pair_average = (
-            pair_net / Decimal(len(outcomes))
-            if outcomes
-            else Decimal("0")
+        pair_metrics = _outcome_metrics(
+            sample_outcomes, starting_equity=Decimal("0")
         )
-        pair_win_rate = (
-            Decimal(len(pair_profits)) * 100 / Decimal(len(outcomes))
-            if outcomes
-            else Decimal("0")
+        pair_all_time = _outcome_metrics(
+            outcomes, starting_equity=Decimal("0")
         )
-        pair_loss_streak = 0
-        pair_maximum_loss_streak = 0
-        for outcome in outcomes:
-            if outcome < 0:
-                pair_loss_streak += 1
-                pair_maximum_loss_streak = max(
-                    pair_maximum_loss_streak, pair_loss_streak
-                )
-            else:
-                pair_loss_streak = 0
         pair_remaining = max(0, required - len(sample_outcomes))
         pair_sample_ready = bool(
             evidence_valid and len(sample_outcomes) >= required
@@ -248,22 +264,13 @@ def build_forex_paper_performance_review(
             pair_review_status = "COLLECTING_PAIR_SAMPLE"
             collecting_pairs.append(pair)
         pair_breakdown[pair] = {
-            "closed_trade_count": len(outcomes),
+            **pair_metrics,
+            "closed_trade_count": len(sample_outcomes),
             "sample_contract_closed_trade_count": len(sample_outcomes),
-            "winning_trade_count": len(pair_profits),
-            "losing_trade_count": len(pair_losses),
-            "breakeven_trade_count": (
-                len(outcomes) - len(pair_profits) - len(pair_losses)
-            ),
-            "win_rate_pct": _text(pair_win_rate, _PERCENT),
-            "net_realized_pnl_pln": _text(pair_net),
-            "average_trade_pnl_pln": _text(pair_average),
-            "profit_factor": (
-                _text(pair_gross_profit / pair_gross_loss, _RATIO)
-                if pair_gross_loss > 0
-                else None
-            ),
-            "maximum_consecutive_losses": pair_maximum_loss_streak,
+            "all_time_closed_trade_count": len(outcomes),
+            "all_time_net_realized_pnl_pln": pair_all_time[
+                "net_realized_pnl_pln"
+            ],
             "minimum_closed_trades_for_review": required,
             "remaining_closed_trades_for_review": pair_remaining,
             "sample_progress_pct": _text(
@@ -329,8 +336,10 @@ def build_forex_paper_performance_review(
     }
 
     return {
+        **sample_metrics,
         "status": status,
         "mode": "FOREX_PAPER_PERFORMANCE_READ_ONLY",
+        "metric_scope": "CURRENT_SAMPLE_CONTRACT",
         "minimum_closed_trades_for_review": required,
         "valid_closed_trade_count": len(sample_values),
         "all_time_closed_trade_count": len(values),
@@ -343,24 +352,7 @@ def build_forex_paper_performance_review(
             _PERCENT,
         ),
         "sample_size_sufficient_for_review": sample_ready,
-        "winning_trade_count": len(profits),
-        "losing_trade_count": len(losses),
-        "breakeven_trade_count": breakeven_count,
-        "win_rate_pct": _text(win_rate, _PERCENT),
-        "net_realized_pnl_pln": _text(net),
-        "gross_profit_pln": _text(gross_profit),
-        "gross_loss_abs_pln": _text(gross_loss_abs),
-        "average_trade_pnl_pln": _text(average),
-        "average_win_pnl_pln": _text(average_win),
-        "average_loss_pnl_pln": _text(average_loss),
-        "profit_factor": profit_factor,
-        "profit_factor_status": profit_factor_status,
-        "maximum_closed_trade_drawdown_pln": _text(maximum_drawdown),
-        "maximum_closed_trade_drawdown_pct": _text(
-            maximum_drawdown_pct, _PERCENT
-        ),
-        "maximum_consecutive_losses": maximum_loss_streak,
-        "current_consecutive_losses": current_loss_streak,
+        "all_time_summary": all_time_metrics,
         "pair_breakdown": pair_breakdown,
         "pair_review": pair_review,
         "sample_contract_review": sample_contract_review,

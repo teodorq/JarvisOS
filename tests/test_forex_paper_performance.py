@@ -169,6 +169,13 @@ def test_contract_tracking_excludes_legacy_and_foreign_fills_from_sample() -> No
     assert review["valid_closed_trade_count"] == 1
     assert review["all_time_closed_trade_count"] == 3
     assert review["sample_progress_pct"] == "5.00"
+    assert review["winning_trade_count"] == 1
+    assert review["losing_trade_count"] == 0
+    assert review["net_realized_pnl_pln"] == "5.00"
+    assert review["average_trade_pnl_pln"] == "5.00"
+    assert review["profit_factor"] is None
+    assert review["all_time_summary"]["closed_trade_count"] == 3
+    assert review["all_time_summary"]["net_realized_pnl_pln"] == "13.00"
     contract = review["sample_contract_review"]
     assert contract["current_contract_closed_trade_count"] == 1
     assert contract["legacy_unversioned_closed_trade_count"] == 1
@@ -177,3 +184,8 @@ def test_contract_tracking_excludes_legacy_and_foreign_fills_from_sample() -> No
     assert review["pair_breakdown"]["EUR_USD"][
         "sample_contract_closed_trade_count"
     ] == 1
+    eur = review["pair_breakdown"]["EUR_USD"]
+    assert eur["closed_trade_count"] == 1
+    assert eur["all_time_closed_trade_count"] == 3
+    assert eur["net_realized_pnl_pln"] == "5.00"
+    assert eur["all_time_net_realized_pnl_pln"] == "13.00"

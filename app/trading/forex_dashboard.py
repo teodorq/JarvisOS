@@ -34,6 +34,11 @@ class ForexPaperDashboard:
                 paper = dict(paper) if isinstance(paper, dict) else {}
                 account = paper.get("account")
                 account = dict(account) if isinstance(account, dict) else {}
+                if not self._performance_scope_is_current(account):
+                    return self._local_snapshot(
+                        observed_at=str(payload.get("observed_at", "")),
+                        source="LOCAL_PAPER_LEDGER_AFTER_REPORT_UPGRADE",
+                    )
                 return self._project(
                     account,
                     observed_at=str(payload.get("observed_at", "")),
@@ -107,6 +112,21 @@ class ForexPaperDashboard:
             str(account.get("mode", "")) == "FOREX_PAPER_ONLY"
             and account.get("live_trading_enabled") is False
             and account.get("network_access") is False
+        )
+
+    @staticmethod
+    def _performance_scope_is_current(account: dict[str, Any]) -> bool:
+        performance = account.get("performance")
+        performance = (
+            dict(performance) if isinstance(performance, dict) else {}
+        )
+        contract = performance.get("sample_contract_review")
+        contract = dict(contract) if isinstance(contract, dict) else {}
+        if contract.get("contract_tracking_enabled") is not True:
+            return True
+        return bool(
+            performance.get("metric_scope") == "CURRENT_SAMPLE_CONTRACT"
+            and isinstance(performance.get("all_time_summary"), dict)
         )
 
     def _project(
@@ -222,6 +242,9 @@ class ForexPaperDashboard:
             pairs[pair] = {
                 "closed_trade_count": count,
                 "sample_contract_closed_trade_count": sample_count,
+                "all_time_closed_trade_count": cls._count(
+                    metrics.get("all_time_closed_trade_count", count)
+                ),
                 "winning_trade_count": cls._count(
                     metrics.get("winning_trade_count")
                 ),
@@ -233,6 +256,13 @@ class ForexPaperDashboard:
                 ),
                 "net_realized_pnl_pln": cls._number(
                     metrics.get("net_realized_pnl_pln"), 2
+                ),
+                "all_time_net_realized_pnl_pln": cls._number(
+                    metrics.get(
+                        "all_time_net_realized_pnl_pln",
+                        metrics.get("net_realized_pnl_pln"),
+                    ),
+                    2,
                 ),
                 "average_trade_pnl_pln": cls._number(
                     metrics.get("average_trade_pnl_pln"), 2
@@ -260,8 +290,14 @@ class ForexPaperDashboard:
         contract_review = cls._sample_contract_review(
             item.get("sample_contract_review")
         )
+        all_time_summary = cls._metric_summary(item.get("all_time_summary"))
         return {
             "status": str(item.get("status", "COLLECTING_PAPER_SAMPLE"))[:80],
+            "metric_scope": (
+                "CURRENT_SAMPLE_CONTRACT"
+                if item.get("metric_scope") == "CURRENT_SAMPLE_CONTRACT"
+                else "UNVERIFIED"
+            ),
             "valid_closed_trade_count": cls._count(
                 item.get("valid_closed_trade_count")
             ),
@@ -294,9 +330,39 @@ class ForexPaperDashboard:
             "pair_breakdown": pairs,
             "pair_review": pair_review,
             "sample_contract_review": contract_review,
+            "all_time_summary": all_time_summary,
             "evidence_valid": evidence_valid,
             "performance_validated": False,
             "live_promotion_ready": False,
+        }
+
+    @classmethod
+    def _metric_summary(cls, value: object) -> dict[str, Any]:
+        item = dict(value) if isinstance(value, dict) else {}
+        factor = item.get("profit_factor")
+        return {
+            "closed_trade_count": cls._count(item.get("closed_trade_count")),
+            "winning_trade_count": cls._count(item.get("winning_trade_count")),
+            "losing_trade_count": cls._count(item.get("losing_trade_count")),
+            "win_rate_pct": cls._number(item.get("win_rate_pct"), 2),
+            "net_realized_pnl_pln": cls._number(
+                item.get("net_realized_pnl_pln"), 2
+            ),
+            "average_trade_pnl_pln": cls._number(
+                item.get("average_trade_pnl_pln"), 2
+            ),
+            "profit_factor": (
+                cls._number(factor, 4) if factor is not None else None
+            ),
+            "maximum_closed_trade_drawdown_pln": cls._number(
+                item.get("maximum_closed_trade_drawdown_pln"), 2
+            ),
+            "maximum_closed_trade_drawdown_pct": cls._number(
+                item.get("maximum_closed_trade_drawdown_pct"), 2
+            ),
+            "maximum_consecutive_losses": cls._count(
+                item.get("maximum_consecutive_losses")
+            ),
         }
 
     @classmethod
