@@ -58,6 +58,11 @@ def test_watchdog_has_bounded_interval_and_single_instance() -> None:
     assert "position_check_required_before_full_cycle" in WATCHDOG
     assert "new_entries_unlocked_after_position_check" in WATCHDOG
     assert "protection_gap_seconds_before_last_check" in WATCHDOG
+    assert "previous_protection_check_restored" in WATCHDOG
+    assert "last_recovery_gap_seconds" in WATCHDOG
+    assert "last_recovery_gap_detected_at" in WATCHDOG
+    assert "Restore-PreviousProtectionState" in WATCHDOG
+    assert "Runtime gap detected before position check" in WATCHDOG
     assert "Test-ProtectionResultHealthy" in WATCHDOG
     assert "Invoke-PositionSafetyCheck" in WATCHDOG
     assert '"POSITION_CHECK_REQUIRED"' in WATCHDOG
@@ -89,6 +94,10 @@ def test_watchdog_calls_only_the_local_paper_entry_point() -> None:
     full_cycle = WATCHDOG.index("Invoke-ForexPaperCycle", preflight)
     assert preflight < full_cycle
     assert "Full PAPER cycle skipped until position check passes." in WATCHDOG
+    assert (
+        "Restore-PreviousProtectionState\n"
+        '    Write-ObserverLog "Forex runtime started'
+    ) in WATCHDOG
 
 
 def test_watchdog_starts_only_the_configured_mt5_binary() -> None:

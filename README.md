@@ -183,6 +183,9 @@ close-only position check before any full analysis cycle. New PAPER entries stay
 locked until that check returns a healthy result. This stricter execution rule is
 frozen as sample contract `FOREX_PAPER_V3_20260901`; V1 and V2 fills remain
 visible in all-time history but are excluded from the V3 comparison sample.
+The observer restores the last successful protection timestamp across Windows
+restarts and keeps the most recent long recovery gap in its bounded heartbeat.
+This makes overnight and sleep recovery visible without weakening the entry lock.
 The Windows task has both a logon trigger and a 15-minute recovery trigger; the
 single-instance policy ignores the recovery trigger while the observer is healthy
 and restarts it after an unexpected exit.

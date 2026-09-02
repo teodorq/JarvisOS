@@ -47,6 +47,16 @@ def forex_protection_view(value: object) -> tuple[str, str, str]:
             "healthy",
             "Ochrona zastosowała SL lub TP wyłącznie w lokalnym PAPER.",
         )
+    if (
+        item.get("recent_recovery")
+        and status in {"NO_PROTECTION_TRIGGER", "NO_OPEN_POSITIONS"}
+    ):
+        gap = _duration(item.get("last_recovery_gap_seconds"))
+        return (
+            "OCHRONA: WZNOWIONA",
+            "healthy",
+            f"Po przerwie {gap} ochrona sprawdziła pozycje przed nowym cyklem.",
+        )
     if status in {"NO_PROTECTION_TRIGGER", "NO_OPEN_POSITIONS"}:
         return (
             "OCHRONA: DZIAŁA",
@@ -65,6 +75,20 @@ def _count(value: object) -> int:
         return max(0, min(1_000, int(value or 0)))
     except (TypeError, ValueError):
         return 0
+
+
+def _duration(value: object) -> str:
+    try:
+        seconds = max(0, min(604_800, int(value or 0)))
+    except (TypeError, ValueError):
+        seconds = 0
+    minutes = max(1, seconds // 60)
+    if minutes < 60:
+        return f"{minutes} min"
+    hours, remainder = divmod(minutes, 60)
+    if remainder:
+        return f"{hours} godz. {remainder} min"
+    return f"{hours} godz."
 
 
 __all__ = ["forex_protection_view"]

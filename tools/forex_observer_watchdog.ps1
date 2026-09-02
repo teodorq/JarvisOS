@@ -34,6 +34,9 @@ $script:consecutiveProtectionFailures = 0
 $script:positionCheckSatisfied = $false
 $script:lastProtectionAttemptUtc = $null
 $script:lastProtectionGapSeconds = 0
+$script:previousProtectionCheckRestored = $false
+$script:lastRecoveryGapSeconds = 0
+$script:lastRecoveryGapDetectedAt = ""
 
 foreach ($requiredPath in @(
     $terminalPath,
@@ -99,6 +102,11 @@ function Write-ObserverStatus {
         protection_gap_seconds_before_last_check = (
             $script:lastProtectionGapSeconds
         )
+        previous_protection_check_restored = (
+            $script:previousProtectionCheckRestored
+        )
+        last_recovery_gap_seconds = $script:lastRecoveryGapSeconds
+        last_recovery_gap_detected_at = $script:lastRecoveryGapDetectedAt
         position_check_required_before_full_cycle = (
             -not $script:positionCheckSatisfied
         )
@@ -120,6 +128,59 @@ function Write-ObserverStatus {
     }
     finally {
         Remove-Item -LiteralPath $temporaryStatusPath -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Restore-PreviousProtectionState {
+    if (-not (Test-Path -LiteralPath $statusPath -PathType Leaf)) {
+        return
+    }
+    try {
+        if ((Get-Item -LiteralPath $statusPath).Length -gt 65536) {
+            return
+        }
+        $previous = Get-Content -LiteralPath $statusPath -Raw -Encoding UTF8 |
+            ConvertFrom-Json
+        $properties = @($previous.PSObject.Properties.Name)
+        if ($properties -notcontains "protection_checked_at") {
+            return
+        }
+        $rawCheckedAt = [string]$previous.protection_checked_at
+        if ([string]::IsNullOrWhiteSpace($rawCheckedAt)) {
+            return
+        }
+        $parsed = [DateTimeOffset]::Parse(
+            $rawCheckedAt,
+            [Globalization.CultureInfo]::InvariantCulture,
+            [Globalization.DateTimeStyles]::AssumeUniversal
+        ).UtcDateTime
+        if ($parsed -gt [DateTime]::UtcNow.AddMinutes(5)) {
+            return
+        }
+        $script:lastProtectionAttemptUtc = $parsed
+        $script:previousProtectionCheckRestored = $true
+        if ($properties -contains "last_recovery_gap_seconds") {
+            $previousGap = [long]$previous.last_recovery_gap_seconds
+            $script:lastRecoveryGapSeconds = [Math]::Max(
+                0,
+                [Math]::Min(604800, $previousGap)
+            )
+        }
+        if ($properties -contains "last_recovery_gap_detected_at") {
+            $previousDetectedAt = (
+                [string]$previous.last_recovery_gap_detected_at
+            )
+            $script:lastRecoveryGapDetectedAt = $previousDetectedAt.Substring(
+                0,
+                [Math]::Min(80, $previousDetectedAt.Length)
+            )
+        }
+    }
+    catch {
+        $script:lastProtectionAttemptUtc = $null
+        $script:previousProtectionCheckRestored = $false
+        $script:lastRecoveryGapSeconds = 0
+        $script:lastRecoveryGapDetectedAt = ""
     }
 }
 
@@ -392,6 +453,10 @@ function Invoke-PositionSafetyCheck {
         if ($script:lastProtectionGapSeconds -gt (
             $ProtectionIntervalSeconds * 3
         )) {
+            $script:lastRecoveryGapSeconds = (
+                $script:lastProtectionGapSeconds
+            )
+            $script:lastRecoveryGapDetectedAt = $attemptedAt.ToString("o")
             Write-ObserverLog (
                 "Runtime gap detected before position check; seconds=" +
                 "$($script:lastProtectionGapSeconds)."
@@ -431,6 +496,7 @@ try {
     if (-not $ownsMutex) {
         exit 0
     }
+    Restore-PreviousProtectionState
     Write-ObserverLog "Forex runtime started in AUTONOMOUS_LOCAL_PAPER mode."
     Write-ObserverStatus "STARTING" $false $false "Observer uruchomiony."
     while ($true) {

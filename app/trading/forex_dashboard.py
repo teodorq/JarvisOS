@@ -198,6 +198,10 @@ class ForexPaperDashboard:
             "stale": True,
             "market_window_open": False,
             "mt5_running": False,
+            "previous_check_restored": False,
+            "last_recovery_gap_seconds": 0,
+            "last_recovery_gap_detected_at": "",
+            "recent_recovery": False,
             "broker_orders_sent": False,
             "live_orders_sent": False,
             "real_money_access": False,
@@ -222,6 +226,10 @@ class ForexPaperDashboard:
             failures = max(0, min(1_000, int(
                 payload.get("protection_consecutive_failure_count", 0)
             )))
+            recovery_gap = max(0, min(
+                604_800,
+                int(payload.get("last_recovery_gap_seconds", 0)),
+            ))
         except (
             OSError,
             UnicodeError,
@@ -232,6 +240,27 @@ class ForexPaperDashboard:
             return empty
         market_open = payload.get("market_window_open") is True
         age = (datetime.now(timezone.utc) - checked_at).total_seconds()
+        recovery_detected_at = ""
+        recent_recovery = False
+        try:
+            raw_recovery_at = str(
+                payload.get("last_recovery_gap_detected_at", "")
+            )[:80]
+            if raw_recovery_at:
+                recovery_at = datetime.fromisoformat(
+                    raw_recovery_at.replace("Z", "+00:00")
+                ).astimezone(timezone.utc)
+                recovery_detected_at = recovery_at.isoformat()
+                recovery_age = (
+                    datetime.now(timezone.utc) - recovery_at
+                ).total_seconds()
+                recent_recovery = bool(
+                    recovery_gap > max(180, interval * 3)
+                    and -5 <= recovery_age <= 20 * 60
+                )
+        except (TypeError, ValueError):
+            recovery_detected_at = ""
+            recent_recovery = False
         unsafe = any(
             payload.get(key) is not False
             for key in (
@@ -263,6 +292,12 @@ class ForexPaperDashboard:
             ),
             "market_window_open": market_open,
             "mt5_running": payload.get("mt5_running") is True,
+            "previous_check_restored": (
+                payload.get("previous_protection_check_restored") is True
+            ),
+            "last_recovery_gap_seconds": recovery_gap,
+            "last_recovery_gap_detected_at": recovery_detected_at,
+            "recent_recovery": recent_recovery,
             "broker_orders_sent": False,
             "live_orders_sent": False,
             "real_money_access": False,

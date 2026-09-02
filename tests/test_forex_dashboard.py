@@ -165,6 +165,8 @@ def _write_observer_status(
     attention: bool = False,
     live: bool = False,
     checked_at: datetime | None = None,
+    recovery_gap_seconds: int = 0,
+    recovery_detected_at: datetime | None = None,
 ) -> None:
     path = root / "data" / "trading" / "forex_observer_status.json"
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -184,6 +186,11 @@ def _write_observer_status(
         "protection_reason": "MT5_PROTECTION_DATA_STALE" if failures else "",
         "protection_consecutive_failure_count": failures,
         "protection_attention_required": attention,
+        "previous_protection_check_restored": True,
+        "last_recovery_gap_seconds": recovery_gap_seconds,
+        "last_recovery_gap_detected_at": (
+            recovery_detected_at.isoformat() if recovery_detected_at else ""
+        ),
         "broker_orders_sent": False,
         "live_orders_sent": live,
         "real_money_access": False,
@@ -328,6 +335,28 @@ def test_dashboard_marks_a_future_observer_heartbeat_as_stale() -> None:
         protection = snapshot["position_protection"]
         assert protection["available"] is True
         assert protection["stale"] is True
+        assert protection["live_orders_sent"] is False
+
+
+def test_dashboard_projects_recent_restart_recovery_gap() -> None:
+    with TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        _write_result(root, _account())
+        _write_observer_status(
+            root,
+            recovery_gap_seconds=77_100,
+            recovery_detected_at=datetime.now(timezone.utc),
+        )
+
+        protection = ForexPaperDashboard(
+            root,
+            executor=_Executor({}),
+        ).snapshot()["position_protection"]
+
+        assert protection["previous_check_restored"] is True
+        assert protection["last_recovery_gap_seconds"] == 77_100
+        assert protection["last_recovery_gap_detected_at"]
+        assert protection["recent_recovery"] is True
         assert protection["live_orders_sent"] is False
 
 

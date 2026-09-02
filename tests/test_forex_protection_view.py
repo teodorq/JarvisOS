@@ -42,3 +42,15 @@ def test_protection_view_handles_missing_stale_and_single_skip() -> None:
         status="PAPER_PROTECTION_BLOCKED",
         consecutive_failure_count=1,
     ))[0] == "OCHRONA: PONOWI PRÓBĘ"
+
+
+def test_protection_view_explains_recent_safe_recovery() -> None:
+    resumed = forex_protection_view(_value(
+        status="NO_OPEN_POSITIONS",
+        recent_recovery=True,
+        last_recovery_gap_seconds=77_100,
+    ))
+
+    assert resumed[:2] == ("OCHRONA: WZNOWIONA", "healthy")
+    assert "21 godz. 25 min" in resumed[2]
+    assert "przed nowym cyklem" in resumed[2]
