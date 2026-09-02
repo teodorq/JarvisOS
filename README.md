@@ -186,6 +186,10 @@ visible in all-time history but are excluded from the V3 comparison sample.
 The observer restores the last successful protection timestamp across Windows
 restarts and keeps the most recent long recovery gap in its bounded heartbeat.
 This makes overnight and sleep recovery visible without weakening the entry lock.
+For an open position it replays bounded, closed M1 bars from that checkpoint before
+using the current quote. The first historical SL/TP touch wins; if one minute can
+contain both, the PAPER ledger records the stop-loss conservatively together with
+the M1 timestamp. Recovery evidence is local, bounded and never reaches an order API.
 The Windows task has both a logon trigger and a 15-minute recovery trigger; the
 single-instance policy ignores the recovery trigger while the observer is healthy
 and restarts it after an unexpected exit.

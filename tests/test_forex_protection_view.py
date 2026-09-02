@@ -54,3 +54,16 @@ def test_protection_view_explains_recent_safe_recovery() -> None:
     assert resumed[:2] == ("OCHRONA: WZNOWIONA", "healthy")
     assert "21 godz. 25 min" in resumed[2]
     assert "przed nowym cyklem" in resumed[2]
+
+
+def test_protection_view_explains_conservative_m1_replay() -> None:
+    replayed = forex_protection_view(_value(
+        status="NO_OPEN_POSITIONS",
+        recent_recovery_replay=True,
+        last_recovery_replay_exit_count=1,
+        last_recovery_replay_ambiguous_count=1,
+    ))
+
+    assert replayed[:2] == ("OCHRONA: ODTWORZONA", "healthy")
+    assert "minutowych świec" in replayed[2]
+    assert "konserwatywnie SL" in replayed[2]

@@ -21,6 +21,15 @@ from app.market_data.forex_paper_protection import (  # noqa: E402
     ForexPaperProtectionRuntime,
 )
 from app.trading.forex_activity_journal import ForexPaperActivityJournal  # noqa: E402
+from app.trading.models import aware_utc  # noqa: E402
+
+
+def _utc_datetime(value: str) -> datetime:
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        return aware_utc(parsed, "recovery_since")
+    except (TypeError, ValueError) as error:
+        raise argparse.ArgumentTypeError("invalid UTC recovery timestamp") from error
 
 
 def main() -> int:
@@ -28,6 +37,7 @@ def main() -> int:
         description="JARVIS OS: lokalna ochrona SL/TP istniejacej pozycji PAPER."
     )
     parser.add_argument("--cycle-id", default="")
+    parser.add_argument("--recovery-since", type=_utc_datetime, default=None)
     arguments = parser.parse_args()
     load_forex_environment(PROJECT_ROOT)
     settings = ForexDataSettings.from_environment()
@@ -38,7 +48,11 @@ def main() -> int:
     result = ForexPaperProtectionRuntime(
         PROJECT_ROOT,
         settings=settings,
-    ).run_once(cycle_id=cycle_id, now=now)
+    ).run_once(
+        cycle_id=cycle_id,
+        now=now,
+        recovery_since=arguments.recovery_since,
+    )
     activity_history = ForexPaperActivityJournal(PROJECT_ROOT)
     try:
         protection_health = activity_history.record_protection_health(result)

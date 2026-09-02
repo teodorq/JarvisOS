@@ -167,6 +167,9 @@ def _write_observer_status(
     checked_at: datetime | None = None,
     recovery_gap_seconds: int = 0,
     recovery_detected_at: datetime | None = None,
+    replay_exit_count: int = 0,
+    replay_ambiguous_count: int = 0,
+    replay_at: datetime | None = None,
 ) -> None:
     path = root / "data" / "trading" / "forex_observer_status.json"
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -191,6 +194,12 @@ def _write_observer_status(
         "last_recovery_gap_detected_at": (
             recovery_detected_at.isoformat() if recovery_detected_at else ""
         ),
+        "last_recovery_replay_status": (
+            "RECOVERY_REPLAY_APPLIED" if replay_exit_count else ""
+        ),
+        "last_recovery_replay_at": replay_at.isoformat() if replay_at else "",
+        "last_recovery_replay_exit_count": replay_exit_count,
+        "last_recovery_replay_ambiguous_count": replay_ambiguous_count,
         "broker_orders_sent": False,
         "live_orders_sent": live,
         "real_money_access": False,
@@ -358,6 +367,31 @@ def test_dashboard_projects_recent_restart_recovery_gap() -> None:
         assert protection["last_recovery_gap_detected_at"]
         assert protection["recent_recovery"] is True
         assert protection["live_orders_sent"] is False
+
+
+def test_dashboard_projects_recent_m1_recovery_replay() -> None:
+    with TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        _write_result(root, _account())
+        _write_observer_status(
+            root,
+            replay_exit_count=1,
+            replay_ambiguous_count=1,
+            replay_at=datetime.now(timezone.utc),
+        )
+
+        protection = ForexPaperDashboard(
+            root,
+            executor=_Executor({}),
+        ).snapshot()["position_protection"]
+
+        assert protection["last_recovery_replay_status"] == (
+            "RECOVERY_REPLAY_APPLIED"
+        )
+        assert protection["last_recovery_replay_exit_count"] == 1
+        assert protection["last_recovery_replay_ambiguous_count"] == 1
+        assert protection["recent_recovery_replay"] is True
+        assert protection["real_money_access"] is False
 
 
 def test_dashboard_blocks_result_that_claims_live_execution() -> None:

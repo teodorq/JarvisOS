@@ -172,6 +172,7 @@ class FakeMt5Module:
     ACCOUNT_TRADE_MODE_DEMO = 0
     ACCOUNT_TRADE_MODE_REAL = 2
     TIMEFRAME_M15 = 15
+    TIMEFRAME_M1 = 1
 
     def __init__(
         self,
@@ -223,8 +224,9 @@ class FakeMt5Module:
         self.calls.append(("copy_rates_from_pos", symbol, timeframe, start_pos, count))
         pair = next(pair for pair in MAJOR_FOREX_PAIRS if pair.symbol.replace("_", "") == symbol)
         price = PRICES[pair.symbol]
+        minutes = 1 if timeframe == self.TIMEFRAME_M1 else 15
         return [{
-            "time": int((NOW - timedelta(minutes=(count - index) * 15)).timestamp()),
+            "time": int((NOW - timedelta(minutes=(count - index) * minutes)).timestamp()),
             "open": float(price),
             "high": float(price + pair.pip_size),
             "low": float(price - pair.pip_size),
@@ -346,6 +348,25 @@ class ProviderParserTests(unittest.TestCase):
         rate_calls = [call for call in fake.calls if call[0] == "copy_rates_from_pos"]
         self.assertEqual(rate_calls, [("copy_rates_from_pos", "EURUSD", 15, 1, 200)])
         self.assertEqual(fake.calls[-1], ("shutdown",))
+
+    def test_mt5_demo_reads_bounded_closed_m1_protection_bars(self) -> None:
+        fake = FakeMt5Module()
+        quotes, bars = Mt5DemoReadOnlySource(module=fake).fetch_market(
+            (major_pair("EUR_USD"),),
+            bar_count=120,
+            timeframe_minutes=1,
+            now=NOW,
+        )
+
+        self.assertEqual(tuple(quotes), ("EUR_USD",))
+        self.assertEqual(len(bars["EUR_USD"]), 120)
+        rate_calls = [
+            call for call in fake.calls if call[0] == "copy_rates_from_pos"
+        ]
+        self.assertEqual(
+            rate_calls,
+            [("copy_rates_from_pos", "EURUSD", 1, 1, 120)],
+        )
 
     def test_mt5_history_blocks_real_account_before_market_read(self) -> None:
         fake = FakeMt5Module(trade_mode=FakeMt5Module.ACCOUNT_TRADE_MODE_REAL)

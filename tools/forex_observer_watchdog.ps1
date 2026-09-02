@@ -37,6 +37,10 @@ $script:lastProtectionGapSeconds = 0
 $script:previousProtectionCheckRestored = $false
 $script:lastRecoveryGapSeconds = 0
 $script:lastRecoveryGapDetectedAt = ""
+$script:lastRecoveryReplayStatus = ""
+$script:lastRecoveryReplayAt = ""
+$script:lastRecoveryReplayExitCount = 0
+$script:lastRecoveryReplayAmbiguousCount = 0
 
 foreach ($requiredPath in @(
     $terminalPath,
@@ -92,6 +96,14 @@ function Write-ObserverStatus {
         protection_interval_seconds = $ProtectionIntervalSeconds
         protection_status = $script:lastProtectionStatus
         protection_checked_at = $script:lastProtectionCheckedAt
+        last_successful_protection_at = if (
+            $null -eq $script:lastProtectionAttemptUtc
+        ) {
+            ""
+        }
+        else {
+            $script:lastProtectionAttemptUtc.ToString("o")
+        }
         protection_reason = $script:lastProtectionReason
         protection_consecutive_failure_count = (
             $script:consecutiveProtectionFailures
@@ -107,6 +119,14 @@ function Write-ObserverStatus {
         )
         last_recovery_gap_seconds = $script:lastRecoveryGapSeconds
         last_recovery_gap_detected_at = $script:lastRecoveryGapDetectedAt
+        last_recovery_replay_status = $script:lastRecoveryReplayStatus
+        last_recovery_replay_at = $script:lastRecoveryReplayAt
+        last_recovery_replay_exit_count = (
+            $script:lastRecoveryReplayExitCount
+        )
+        last_recovery_replay_ambiguous_count = (
+            $script:lastRecoveryReplayAmbiguousCount
+        )
         position_check_required_before_full_cycle = (
             -not $script:positionCheckSatisfied
         )
@@ -142,10 +162,28 @@ function Restore-PreviousProtectionState {
         $previous = Get-Content -LiteralPath $statusPath -Raw -Encoding UTF8 |
             ConvertFrom-Json
         $properties = @($previous.PSObject.Properties.Name)
-        if ($properties -notcontains "protection_checked_at") {
+        $timestampProperty = if (
+            $properties -contains "last_successful_protection_at"
+        ) {
+            "last_successful_protection_at"
+        }
+        elseif (
+            $properties -contains "protection_checked_at" -and
+            [string]$previous.protection_status -in @(
+                "NO_OPEN_POSITIONS",
+                "NO_PROTECTION_TRIGGER",
+                "PAPER_PROTECTION_APPLIED"
+            )
+        ) {
+            "protection_checked_at"
+        }
+        else {
+            ""
+        }
+        if ([string]::IsNullOrWhiteSpace($timestampProperty)) {
             return
         }
-        $rawCheckedAt = [string]$previous.protection_checked_at
+        $rawCheckedAt = [string]$previous.$timestampProperty
         if ([string]::IsNullOrWhiteSpace($rawCheckedAt)) {
             return
         }
@@ -173,6 +211,29 @@ function Restore-PreviousProtectionState {
             $script:lastRecoveryGapDetectedAt = $previousDetectedAt.Substring(
                 0,
                 [Math]::Min(80, $previousDetectedAt.Length)
+            )
+        }
+        if ($properties -contains "last_recovery_replay_status" -and
+            [string]$previous.last_recovery_replay_status -eq (
+                "RECOVERY_REPLAY_APPLIED"
+            )) {
+            $script:lastRecoveryReplayStatus = "RECOVERY_REPLAY_APPLIED"
+            $script:lastRecoveryReplayAt = (
+                [string]$previous.last_recovery_replay_at
+            )
+            $script:lastRecoveryReplayExitCount = [Math]::Max(
+                0,
+                [Math]::Min(
+                    2,
+                    [int]$previous.last_recovery_replay_exit_count
+                )
+            )
+            $script:lastRecoveryReplayAmbiguousCount = [Math]::Max(
+                0,
+                [Math]::Min(
+                    $script:lastRecoveryReplayExitCount,
+                    [int]$previous.last_recovery_replay_ambiguous_count
+                )
             )
         }
     }
@@ -294,9 +355,18 @@ function Invoke-ForexPaperCycle {
 }
 
 function Invoke-ForexPaperProtection {
+    param([object]$RecoverySinceUtc = $null)
+
     Remove-Item -LiteralPath $protectionOutputPath -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $protectionErrorPath -Force -ErrorAction SilentlyContinue
     $runnerArgument = '"' + $protectionRunnerPath + '"'
+    if ($null -ne $RecoverySinceUtc) {
+        $runnerArgument += (
+            ' --recovery-since "' +
+            ([DateTime]$RecoverySinceUtc).ToString("o") +
+            '"'
+        )
+    }
     $process = Start-Process `
         -FilePath $pythonPath `
         -ArgumentList $runnerArgument `
@@ -319,13 +389,49 @@ function Invoke-ForexPaperProtection {
             -Encoding UTF8 | ConvertFrom-Json
         $executionCount = 0
         $positionCount = ""
+        $replayStatus = "NOT_REPORTED"
+        $replayExitCount = 0
+        $replayAmbiguousCount = 0
         if ($result.PSObject.Properties.Name -contains "paper") {
             $executionCount = @($result.paper.execution.executions).Count
             $positionCount = $result.paper.account.position_count
         }
+        if ($result.PSObject.Properties.Name -contains "recovery_replay") {
+            $replay = $result.recovery_replay
+            $replayStatus = [string]$replay.status
+            if ($replay.PSObject.Properties.Name -contains (
+                "historical_exit_count"
+            )) {
+                $replayExitCount = [Math]::Max(
+                    0,
+                    [Math]::Min(2, [int]$replay.historical_exit_count)
+                )
+            }
+            if ($replay.PSObject.Properties.Name -contains (
+                "ambiguous_bar_count"
+            )) {
+                $replayAmbiguousCount = [Math]::Max(
+                    0,
+                    [Math]::Min(
+                        $replayExitCount,
+                        [int]$replay.ambiguous_bar_count
+                    )
+                )
+            }
+            if ($replayStatus -eq "RECOVERY_REPLAY_APPLIED") {
+                $script:lastRecoveryReplayStatus = $replayStatus
+                $script:lastRecoveryReplayAt = [string]$result.observed_at
+                $script:lastRecoveryReplayExitCount = $replayExitCount
+                $script:lastRecoveryReplayAmbiguousCount = (
+                    $replayAmbiguousCount
+                )
+            }
+        }
         Write-ObserverLog (
             "PAPER protection $($result.status); " +
             "executions=$executionCount; positions=$positionCount; " +
+            "replay=$replayStatus; replay_exits=$replayExitCount; " +
+            "ambiguous=$replayAmbiguousCount; " +
             "broker_orders_sent=$($result.broker_orders_sent); " +
             "live_orders_sent=$($result.live_orders_sent)."
         )
@@ -439,6 +545,7 @@ function Test-ProtectionResultHealthy {
 
 function Invoke-PositionSafetyCheck {
     $attemptedAt = [DateTime]::UtcNow
+    $recoverySinceUtc = $script:lastProtectionAttemptUtc
     if ($null -eq $script:lastProtectionAttemptUtc) {
         $script:lastProtectionGapSeconds = 0
     }
@@ -463,11 +570,14 @@ function Invoke-PositionSafetyCheck {
             )
         }
     }
-    $script:lastProtectionAttemptUtc = $attemptedAt
     try {
-        $result = Invoke-ForexPaperProtection
+        $result = Invoke-ForexPaperProtection `
+            -RecoverySinceUtc $recoverySinceUtc
         Update-ProtectionHealth $result
         $passed = Test-ProtectionResultHealthy $result
+        if ($passed) {
+            $script:lastProtectionAttemptUtc = $attemptedAt
+        }
     }
     catch {
         Update-ProtectionHealth $null

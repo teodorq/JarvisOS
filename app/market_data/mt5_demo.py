@@ -84,6 +84,7 @@ class Mt5DemoReadOnlySource:
         pairs: Iterable[ForexPair],
         *,
         bar_count: int = 31,
+        timeframe_minutes: int = 15,
         now: datetime | None = None,
     ) -> tuple[dict[str, ForexQuote], dict[str, tuple[ForexBar, ...]]]:
         selected = tuple(pairs)
@@ -92,7 +93,12 @@ class Mt5DemoReadOnlySource:
         if (
             not symbols
             or len(set(symbols)) != len(symbols)
-            or not 31 <= bar_count <= 499
+            or timeframe_minutes not in {1, 15}
+            or not (
+                (2 <= bar_count <= 10_080)
+                if timeframe_minutes == 1
+                else (31 <= bar_count <= 499)
+            )
             or any(
                 not pair.tradable
                 and pair.symbol != USD_PLN_CONVERSION_PAIR.symbol
@@ -153,6 +159,7 @@ class Mt5DemoReadOnlySource:
                             terminal_symbol,
                             bar_count,
                             server_offset_seconds,
+                            timeframe_minutes=timeframe_minutes,
                         )
                     except TradingValidationError as error:
                         last_sync_error = error
@@ -375,8 +382,14 @@ class Mt5DemoReadOnlySource:
         terminal_symbol: str,
         count: int,
         server_offset_seconds: int,
+        *,
+        timeframe_minutes: int = 15,
     ) -> tuple[ForexBar, ...]:
-        timeframe = getattr(mt5, "TIMEFRAME_M15", None)
+        timeframe_name = {
+            1: "TIMEFRAME_M1",
+            15: "TIMEFRAME_M15",
+        }.get(timeframe_minutes, "")
+        timeframe = getattr(mt5, timeframe_name, None)
         if timeframe is None:
             raise TradingValidationError("mt5_demo: timeframe_unavailable")
         rows = mt5.copy_rates_from_pos(terminal_symbol, timeframe, 1, count)

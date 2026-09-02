@@ -63,6 +63,10 @@ def test_watchdog_has_bounded_interval_and_single_instance() -> None:
     assert "last_recovery_gap_detected_at" in WATCHDOG
     assert "Restore-PreviousProtectionState" in WATCHDOG
     assert "Runtime gap detected before position check" in WATCHDOG
+    assert "last_successful_protection_at" in WATCHDOG
+    assert "--recovery-since" in WATCHDOG
+    assert "last_recovery_replay_status" in WATCHDOG
+    assert "RECOVERY_REPLAY_APPLIED" in WATCHDOG
     assert "Test-ProtectionResultHealthy" in WATCHDOG
     assert "Invoke-PositionSafetyCheck" in WATCHDOG
     assert '"POSITION_CHECK_REQUIRED"' in WATCHDOG
@@ -94,6 +98,13 @@ def test_watchdog_calls_only_the_local_paper_entry_point() -> None:
     full_cycle = WATCHDOG.index("Invoke-ForexPaperCycle", preflight)
     assert preflight < full_cycle
     assert "Full PAPER cycle skipped until position check passes." in WATCHDOG
+    checkpoint = WATCHDOG.index("$recoverySinceUtc = $script:lastProtectionAttemptUtc")
+    replay_call = WATCHDOG.index("-RecoverySinceUtc $recoverySinceUtc", checkpoint)
+    successful_advance = WATCHDOG.index(
+        "$script:lastProtectionAttemptUtc = $attemptedAt",
+        replay_call,
+    )
+    assert checkpoint < replay_call < successful_advance
     assert (
         "Restore-PreviousProtectionState\n"
         '    Write-ObserverLog "Forex runtime started'

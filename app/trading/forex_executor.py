@@ -397,8 +397,105 @@ class ForexPaperExecutionEngine:
                 stored_position.get("sample_contract_fingerprint_sha256", "")
             ),
         }
+        protection_replay = self._protection_replay_evidence(
+            instruction,
+            position,
+            exit_price,
+            now,
+        )
+        if protection_replay is not None:
+            fill["protection_replay"] = protection_replay
         state["fills"] = list(state.get("fills", []) or []) + [fill]
         return {"status": "EXECUTED", "fill": deepcopy(fill)}
+
+    @staticmethod
+    def _protection_replay_evidence(
+        instruction: Mapping[str, Any],
+        position: ForexPosition,
+        exit_price: Decimal,
+        now: datetime,
+    ) -> dict[str, Any] | None:
+        raw = instruction.get("protection_replay")
+        if raw is None:
+            return None
+        if not isinstance(raw, Mapping):
+            raise TradingValidationError(
+                "forex_execution: invalid_protection_replay"
+            )
+        timeframe = str(raw.get("timeframe", ""))
+        trigger = str(raw.get("trigger", ""))
+        spread_policy = str(raw.get("spread_policy", ""))
+        ambiguous = raw.get("ambiguous_bar")
+        reasons = tuple(
+            str(value)
+            for value in list(instruction.get("reason_codes", []) or [])[:8]
+        )
+        expected_reason = (
+            "STOP_LOSS_TRIGGERED"
+            if trigger.startswith("STOP_LOSS")
+            else "TAKE_PROFIT_TRIGGERED"
+        )
+        if (
+            timeframe != "M1_CLOSED_BARS"
+            or trigger not in {
+                "STOP_LOSS_TRIGGERED",
+                "STOP_LOSS_AMBIGUOUS_BAR",
+                "STOP_LOSS_GAP",
+                "TAKE_PROFIT_TRIGGERED",
+                "TAKE_PROFIT_GAP",
+            }
+            or spread_policy != "CURRENT_MT5_SPREAD"
+            or type(ambiguous) is not bool
+            or ambiguous != (trigger == "STOP_LOSS_AMBIGUOUS_BAR")
+            or not reasons
+            or reasons[0] != expected_reason
+            or "RECOVERY_M1_REPLAY" not in reasons
+            or (
+                ("STOP_LOSS_AMBIGUOUS_BAR" in reasons)
+                != bool(ambiguous)
+            )
+        ):
+            raise TradingValidationError(
+                "forex_execution: invalid_protection_replay"
+            )
+        try:
+            bar_timestamp = aware_utc(
+                datetime.fromisoformat(str(raw.get("bar_timestamp", ""))),
+                "protection_replay_bar_timestamp",
+            )
+        except (TypeError, ValueError) as error:
+            raise TradingValidationError(
+                "forex_execution: invalid_protection_replay"
+            ) from error
+        if bar_timestamp < position.opened_at or bar_timestamp >= now:
+            raise TradingValidationError(
+                "forex_execution: invalid_protection_replay"
+            )
+        if trigger == "STOP_LOSS_GAP":
+            valid_exit = (
+                exit_price <= position.stop_loss
+                if position.side == "LONG"
+                else exit_price >= position.stop_loss
+            )
+        elif trigger.startswith("STOP_LOSS"):
+            valid_exit = exit_price == position.stop_loss
+        else:
+            valid_exit = (
+                position.take_profit is not None
+                and exit_price == position.take_profit
+            )
+        if not valid_exit:
+            raise TradingValidationError(
+                "forex_execution: invalid_protection_replay"
+            )
+        return {
+            "timeframe": timeframe,
+            "bar_timestamp": bar_timestamp.isoformat(),
+            "trigger": trigger,
+            "ambiguous_bar": ambiguous,
+            "spread_policy": spread_policy,
+            "paper_only": True,
+        }
 
     def positions(self) -> dict[str, ForexPosition]:
         return self._positions(self.ledger.snapshot())

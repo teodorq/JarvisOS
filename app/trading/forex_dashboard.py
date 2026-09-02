@@ -202,6 +202,11 @@ class ForexPaperDashboard:
             "last_recovery_gap_seconds": 0,
             "last_recovery_gap_detected_at": "",
             "recent_recovery": False,
+            "last_recovery_replay_status": "",
+            "last_recovery_replay_at": "",
+            "last_recovery_replay_exit_count": 0,
+            "last_recovery_replay_ambiguous_count": 0,
+            "recent_recovery_replay": False,
             "broker_orders_sent": False,
             "live_orders_sent": False,
             "real_money_access": False,
@@ -229,6 +234,14 @@ class ForexPaperDashboard:
             recovery_gap = max(0, min(
                 604_800,
                 int(payload.get("last_recovery_gap_seconds", 0)),
+            ))
+            replay_exits = max(0, min(
+                2,
+                int(payload.get("last_recovery_replay_exit_count", 0)),
+            ))
+            replay_ambiguous = max(0, min(
+                replay_exits,
+                int(payload.get("last_recovery_replay_ambiguous_count", 0)),
             ))
         except (
             OSError,
@@ -261,6 +274,29 @@ class ForexPaperDashboard:
         except (TypeError, ValueError):
             recovery_detected_at = ""
             recent_recovery = False
+        replay_status = str(
+            payload.get("last_recovery_replay_status", "")
+        )[:80]
+        replay_at_text = ""
+        recent_recovery_replay = False
+        try:
+            raw_replay_at = str(
+                payload.get("last_recovery_replay_at", "")
+            )[:80]
+            if replay_status == "RECOVERY_REPLAY_APPLIED" and raw_replay_at:
+                replay_at = datetime.fromisoformat(
+                    raw_replay_at.replace("Z", "+00:00")
+                ).astimezone(timezone.utc)
+                replay_at_text = replay_at.isoformat()
+                replay_age = (
+                    datetime.now(timezone.utc) - replay_at
+                ).total_seconds()
+                recent_recovery_replay = bool(
+                    replay_exits > 0 and -5 <= replay_age <= 20 * 60
+                )
+        except (TypeError, ValueError):
+            replay_at_text = ""
+            recent_recovery_replay = False
         unsafe = any(
             payload.get(key) is not False
             for key in (
@@ -298,6 +334,11 @@ class ForexPaperDashboard:
             "last_recovery_gap_seconds": recovery_gap,
             "last_recovery_gap_detected_at": recovery_detected_at,
             "recent_recovery": recent_recovery,
+            "last_recovery_replay_status": replay_status,
+            "last_recovery_replay_at": replay_at_text,
+            "last_recovery_replay_exit_count": replay_exits,
+            "last_recovery_replay_ambiguous_count": replay_ambiguous,
+            "recent_recovery_replay": recent_recovery_replay,
             "broker_orders_sent": False,
             "live_orders_sent": False,
             "real_money_access": False,

@@ -41,6 +41,22 @@ def forex_protection_view(value: object) -> tuple[str, str, str]:
             "accent",
             "Pojedyncza kontrola została bezpiecznie pominięta; ponowię ją za minutę.",
         )
+    if item.get("recent_recovery_replay"):
+        exits = _count(item.get("last_recovery_replay_exit_count"))
+        ambiguous = _count(
+            item.get("last_recovery_replay_ambiguous_count")
+        )
+        suffix = (
+            " Przy niejednoznacznej świecy wybrano konserwatywnie SL."
+            if ambiguous
+            else ""
+        )
+        return (
+            "OCHRONA: ODTWORZONA",
+            "healthy",
+            f"Z minutowych świec odtworzono przerwę i zamknięto {exits} "
+            f"pozycje PAPER.{suffix}",
+        )
     if status == "PAPER_PROTECTION_APPLIED":
         return (
             "OCHRONA: ZADZIAŁAŁA",

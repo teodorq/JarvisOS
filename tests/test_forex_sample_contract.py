@@ -33,6 +33,13 @@ def test_sample_contract_is_deterministic_and_paper_only() -> None:
     assert execution["position_check_required_before_first_full_cycle"] is True
     assert execution["position_check_required_after_runtime_gap"] is True
     assert execution["new_entries_blocked_until_position_check"] is True
+    assert execution["position_recovery_replay_timeframe"] == "M1_CLOSED_BARS"
+    assert execution["position_recovery_bar_limit"] == 10_080
+    assert (
+        execution["position_recovery_ambiguous_bar_policy"]
+        == "STOP_FIRST_CONSERVATIVE"
+    )
+    assert execution["position_recovery_spread_policy"] == "CURRENT_MT5_SPREAD"
 
 
 def test_strategy_or_risk_change_produces_a_different_fingerprint() -> None:
@@ -79,4 +86,8 @@ def test_known_v1_contract_is_superseded_not_foreign() -> None:
     assert is_superseded_sample_contract(
         "FOREX_PAPER_V2_20260901",
         "8bc8a4e96bc663c034081593825885c7a181a07d588c0fef5fc0eb8ab193ae10",
+    ) is True
+    assert is_superseded_sample_contract(
+        "FOREX_PAPER_V3_20260901",
+        "e77c29140ba9f78f50f3ac7b7dac8f225bcdd41ea9749ef253d8dd51c7781578",
     ) is True
