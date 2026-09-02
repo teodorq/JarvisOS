@@ -8,6 +8,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtWidgets import QApplication, QPushButton
 
 from app.gui.forex_paper_page import ForexPaperPage
+from app.gui.forex_paper_safety_view import forex_paper_safety_view
+from app.gui.forex_paper_safety_view import forex_paper_safety_view
 
 
 class _Dashboard:
@@ -142,3 +144,27 @@ def test_main_window_exposes_forex_page_without_exceeding_limit() -> None:
     assert '"forex": self.forex_page' in source
     assert "activity=self.assistant.trading.forex_activity" in source
     assert len(source.splitlines()) < 440
+
+
+def test_safety_banner_shows_weekly_loss_pause() -> None:
+    label, tone, banner = forex_paper_safety_view({
+        "status": "READY",
+        "loss_streak_safety": {"active": False},
+        "weekly_loss_safety": {"active": True},
+    })
+
+    assert label == "PAPER — PRZERWA"
+    assert tone == "neutral"
+    assert "LIMIT TYGODNIOWY" in banner
+
+
+def test_safety_banner_shows_weekly_loss_pause() -> None:
+    label, tone, banner = forex_paper_safety_view({
+        "status": "READY",
+        "loss_streak_safety": {"active": False},
+        "weekly_loss_safety": {"active": True},
+    })
+
+    assert label == "PAPER — PRZERWA"
+    assert tone == "neutral"
+    assert "LIMIT TYGODNIOWY" in banner

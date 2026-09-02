@@ -145,12 +145,20 @@ class ForexPaperDashboard:
         loss_streak_safety = self._loss_streak_safety(
             account.get("loss_streak_safety")
         )
+        weekly_loss_safety = self._weekly_loss_safety(
+            account.get("weekly_loss_safety")
+        )
         position_protection = self._position_protection()
         message = "Lokalna symulacja; brak zleceń u brokera."
         if position_protection["attention_required"]:
             message = (
                 "Ochrona SL/TP wymaga uwagi; szczegóły są widoczne w historii. "
                 "Zlecenia LIVE pozostają niedostępne."
+            )
+        elif weekly_loss_safety["active"]:
+            message = (
+                "Nowe wejścia PAPER są wstrzymane przez tygodniowy limit "
+                "straty; zweryfikowane zamknięcia nadal działają."
             )
         elif loss_streak_safety["active"]:
             message = (
@@ -178,8 +186,10 @@ class ForexPaperDashboard:
             "audit_chain_valid": account.get("audit_chain_valid") is True,
             "kill_switch_active": account.get("kill_switch_active") is True,
             "loss_streak_safety": loss_streak_safety,
+            "weekly_loss_safety": weekly_loss_safety,
             "position_protection": position_protection,
             "new_entries_paused_by_loss_streak": loss_streak_safety["active"],
+            "new_entries_paused_by_weekly_loss": weekly_loss_safety["active"],
             "broker_orders_sent": False,
             "live_orders_sent": False,
             "real_money_access": False,
@@ -370,6 +380,46 @@ class ForexPaperDashboard:
             )[:64],
             "remaining_seconds": cls._count(
                 item.get("remaining_seconds")
+            ),
+            "paper_only": True,
+        }
+
+    @classmethod
+    def _weekly_loss_safety(cls, value: object) -> dict[str, Any]:
+        item = dict(value) if isinstance(value, dict) else {}
+        code = str(item.get("code", "READY")).strip().upper()
+        if code not in {
+            "READY",
+            "WEEKLY_LOSS_LIMIT",
+            "INVALID_ACCOUNT_BALANCE",
+            "AUDIT_CHAIN_INVALID",
+            "EXECUTION_AUDIT_MISMATCH",
+            "INVALID_WEEKLY_HISTORY",
+        }:
+            code = "UNKNOWN"
+        return {
+            "active": item.get("active") is True,
+            "code": code,
+            "weekly_pnl_pln": cls._number(
+                item.get("weekly_pnl_pln"), 2
+            ),
+            "loss_limit_pln": cls._number(
+                item.get("loss_limit_pln"), 2
+            ),
+            "remaining_loss_capacity_pln": cls._number(
+                item.get("remaining_loss_capacity_pln"), 2
+            ),
+            "maximum_loss_pct": cls._number(
+                item.get("maximum_loss_pct"), 2
+            ),
+            "week_start_at": " ".join(
+                str(item.get("week_start_at", "")).split()
+            )[:64],
+            "reset_at": " ".join(
+                str(item.get("reset_at", "")).split()
+            )[:64],
+            "closed_trade_count": cls._count(
+                item.get("closed_trade_count")
             ),
             "paper_only": True,
         }

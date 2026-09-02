@@ -117,8 +117,11 @@ Run one enabled cycle manually with:
 ```
 
 This explicit demo override may test an unvalidated strategy, but it still
-enforces 0.25% risk per trade, 0.5% total open risk, a 1% daily loss stop and at
-most two local PAPER positions. After three consecutive closed losses it also
+enforces 0.25% risk per trade, 0.5% total open risk, a 1% daily loss stop, a 2%
+weekly loss stop against the initial PAPER balance and at most two local PAPER
+positions. The weekly gate uses audited closed PAPER fills from Monday 00:00 UTC;
+it blocks only new entries and resets automatically with the next week. After
+three consecutive closed losses it also
 pauses new entries for six hours. The cooldown is derived from the persistent
 tamper-evident fill history, survives restarts and never blocks verified position
 closes. It cannot send MT5, broker or real-money orders.
@@ -190,6 +193,10 @@ For an open position it replays bounded, closed M1 bars from that checkpoint bef
 using the current quote. The first historical SL/TP touch wins; if one minute can
 contain both, the PAPER ledger records the stop-loss conservatively together with
 the M1 timestamp. Recovery evidence is local, bounded and never reaches an order API.
+This M1 recovery model is frozen as `FOREX_PAPER_V4_20260902`. The next sample
+contract, `FOREX_PAPER_V5_20260902`, adds the audited 2% weekly entry brake.
+Any mismatch between close fills and their tamper-evident execution audit fails
+closed for new entries, while verified position closes remain available.
 The Windows task has both a logon trigger and a 15-minute recovery trigger; the
 single-instance policy ignores the recovery trigger while the observer is healthy
 and restarts it after an unexpected exit.

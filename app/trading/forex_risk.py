@@ -23,6 +23,7 @@ class ForexPaperPolicy:
     risk_per_trade_pct: Decimal = Decimal("0.0025")
     max_total_open_risk_pct: Decimal = Decimal("0.005")
     max_daily_loss_pct: Decimal = Decimal("0.01")
+    max_weekly_loss_pct: Decimal = Decimal("0.02")
     max_currency_gross_exposure_pct: Decimal = Decimal("0.10")
     max_open_positions: int = 2
     minimum_units: Decimal = Decimal("100")
@@ -47,6 +48,11 @@ class ForexPaperPolicy:
                 Decimal("0.01"),
             ),
             ("max_daily_loss_pct", self.max_daily_loss_pct, Decimal("0.02")),
+            (
+                "max_weekly_loss_pct",
+                self.max_weekly_loss_pct,
+                Decimal("0.05"),
+            ),
             (
                 "max_currency_gross_exposure_pct",
                 self.max_currency_gross_exposure_pct,

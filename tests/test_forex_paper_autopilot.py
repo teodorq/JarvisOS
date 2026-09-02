@@ -326,6 +326,275 @@ class ForexPaperAutopilotTests(unittest.TestCase):
             "unsafe_loss_streak_cooldown_minutes",
         ):
             ForexPaperPolicy(loss_streak_cooldown_minutes=14)
+        with self.assertRaisesRegex(
+            TradingValidationError,
+            "unsafe_max_weekly_loss_pct",
+        ):
+            ForexPaperPolicy(max_weekly_loss_pct=Decimal("0.051"))
+
+    def test_weekly_loss_limit_blocks_entries_and_resets_next_week(self) -> None:
+        self.autopilot = ForexPaperAutopilot(
+            self.temporary.name,
+            policy=ForexPaperPolicy(
+                max_weekly_loss_pct=Decimal("0.0001"),
+            ),
+        )
+        self.run_cycle("forex-weekly-open")
+        closed_at = self.now + timedelta(minutes=15)
+        closed = self.run_cycle(
+            "forex-weekly-close",
+            now=closed_at,
+            direction="DOWN",
+        )
+
+        safety = closed["account"]["weekly_loss_safety"]
+        self.assertTrue(safety["active"])
+        self.assertEqual(safety["code"], "WEEKLY_LOSS_LIMIT")
+        self.assertEqual(safety["loss_limit_pln"], "10.00")
+        self.assertLess(Decimal(safety["weekly_pnl_pln"]), Decimal("-10"))
+        self.assertEqual(safety["remaining_loss_capacity_pln"], "0.00")
+
+        blocked = self.run_cycle(
+            "forex-weekly-blocked",
+            now=closed_at + timedelta(minutes=15),
+            direction="UP",
+        )
+        self.assertEqual(blocked["execution"]["status"], "NO_EXECUTION")
+        self.assertEqual(
+            blocked["execution"]["rejections"][0]["code"],
+            "WEEKLY_LOSS_LIMIT",
+        )
+        self.assertTrue(
+            blocked["account"]["new_entries_paused_by_weekly_loss"]
+        )
+
+        resumed = self.run_cycle(
+            "forex-weekly-reset",
+            now=self.now + timedelta(days=7),
+            direction="UP",
+        )
+        self.assertEqual(resumed["execution"]["status"], "APPLIED")
+        self.assertFalse(
+            resumed["account"]["new_entries_paused_by_weekly_loss"]
+        )
+        self.assertEqual(
+            resumed["account"]["weekly_loss_safety"]["weekly_pnl_pln"],
+            "0.00",
+        )
+
+    def test_weekly_gate_fails_closed_when_fill_and_audit_diverge(self) -> None:
+        self.run_cycle("forex-weekly-audit-open")
+        closed_at = self.now + timedelta(minutes=15)
+        self.run_cycle(
+            "forex-weekly-audit-close",
+            now=closed_at,
+            direction="DOWN",
+        )
+
+        def tamper(state: dict) -> None:
+            state["fills"][-1]["realized_pnl_pln"] = "0.00"
+
+        self.autopilot.executor.ledger.transaction(tamper)
+        safety = self.autopilot.executor.status(
+            now=closed_at + timedelta(minutes=1)
+        )["weekly_loss_safety"]
+        self.assertTrue(safety["active"])
+        self.assertEqual(safety["code"], "EXECUTION_AUDIT_MISMATCH")
+
+        blocked = self.run_cycle(
+            "forex-weekly-audit-blocked",
+            now=closed_at + timedelta(minutes=15),
+            direction="UP",
+        )
+        self.assertEqual(
+            blocked["execution"]["rejections"][0]["code"],
+            "EXECUTION_AUDIT_MISMATCH",
+        )
+
+    def test_weekly_loss_limit_never_blocks_existing_position_close(self) -> None:
+        self.autopilot = ForexPaperAutopilot(
+            self.temporary.name,
+            policy=ForexPaperPolicy(
+                max_weekly_loss_pct=Decimal("0.0001"),
+            ),
+        )
+        quotes, _bars, _contexts, _conversion = market(
+            self.now,
+            eur_direction="UP",
+        )
+
+        def rates_at(selected_quotes: dict[str, ForexQuote], now: datetime):
+            return ForexRateBook(
+                list(selected_quotes.values()) + [
+                    ForexQuote.create(
+                        pair=USD_PLN_CONVERSION_PAIR,
+                        bid="3.999",
+                        ask="4.001",
+                        timestamp=now,
+                    )
+                ],
+                now=now,
+            )
+
+        for index, symbol in enumerate(("EUR_USD", "GBP_USD"), 1):
+            quote = quotes[symbol]
+            stop = quote.ask - quote.pair.pip_size * Decimal("10")
+            target = quote.ask + quote.pair.pip_size * Decimal("20")
+            result = self.autopilot.executor.apply_plan(
+                {
+                    "mode": "FOREX_PAPER_ONLY",
+                    "live_orders_sent": False,
+                    "sample_contract": self.autopilot.sample_contract,
+                    "instructions": [{
+                        "action": "OPEN_LONG",
+                        "pair": symbol,
+                        "units": "1000",
+                        "stop_loss": str(stop),
+                        "take_profit": str(target),
+                    }],
+                },
+                quotes=quotes,
+                rates=rates_at(quotes, self.now),
+                cycle_id=f"forex-weekly-close-open-{index}",
+                now=self.now,
+            )
+            self.assertEqual(result["status"], "APPLIED")
+
+        close_at = self.now + timedelta(minutes=15)
+        close_quotes, _bars, _contexts, _conversion = market(
+            close_at,
+            eur_direction="DOWN",
+        )
+        close_plan = {
+            "mode": "FOREX_PAPER_ONLY",
+            "live_orders_sent": False,
+            "instructions": [{
+                "action": "CLOSE_POSITION",
+                "pair": "EUR_USD",
+                "units": "1000",
+                "reason_codes": ["STOP_LOSS_TRIGGERED"],
+            }],
+        }
+        first_close = self.autopilot.executor.apply_plan(
+            close_plan,
+            quotes=close_quotes,
+            rates=rates_at(close_quotes, close_at),
+            cycle_id="forex-weekly-close-limit-trigger",
+            now=close_at,
+        )
+        self.assertEqual(first_close["status"], "APPLIED")
+        self.assertTrue(
+            self.autopilot.executor.status(now=close_at)[
+                "weekly_loss_safety"
+            ]["active"]
+        )
+
+        second_close = self.autopilot.executor.apply_plan(
+            {
+                **close_plan,
+                "instructions": [{
+                    **close_plan["instructions"][0],
+                    "pair": "GBP_USD",
+                }],
+            },
+            quotes=close_quotes,
+            rates=rates_at(close_quotes, close_at),
+            cycle_id="forex-weekly-close-still-allowed",
+            now=close_at,
+        )
+        self.assertEqual(second_close["status"], "APPLIED")
+        self.assertEqual(
+            second_close["executions"][0]["fill"]["action"],
+            "CLOSE_LONG",
+        )
+        self.assertEqual(
+            self.autopilot.executor.status(now=close_at)["position_count"],
+            0,
+        )
+        with self.assertRaisesRegex(
+            TradingValidationError,
+            "unsafe_max_weekly_loss_pct",
+        ):
+            ForexPaperPolicy(max_weekly_loss_pct=Decimal("0.051"))
+
+    def test_weekly_loss_limit_blocks_entries_and_resets_next_week(self) -> None:
+        self.autopilot = ForexPaperAutopilot(
+            self.temporary.name,
+            policy=ForexPaperPolicy(
+                max_weekly_loss_pct=Decimal("0.0001"),
+            ),
+        )
+        self.run_cycle("forex-weekly-open")
+        closed_at = self.now + timedelta(minutes=15)
+        closed = self.run_cycle(
+            "forex-weekly-close",
+            now=closed_at,
+            direction="DOWN",
+        )
+
+        safety = closed["account"]["weekly_loss_safety"]
+        self.assertTrue(safety["active"])
+        self.assertEqual(safety["code"], "WEEKLY_LOSS_LIMIT")
+        self.assertEqual(safety["loss_limit_pln"], "10.00")
+        self.assertLess(Decimal(safety["weekly_pnl_pln"]), Decimal("-10"))
+        self.assertEqual(safety["remaining_loss_capacity_pln"], "0.00")
+
+        blocked = self.run_cycle(
+            "forex-weekly-blocked",
+            now=closed_at + timedelta(minutes=15),
+            direction="UP",
+        )
+        self.assertEqual(blocked["execution"]["status"], "NO_EXECUTION")
+        self.assertEqual(
+            blocked["execution"]["rejections"][0]["code"],
+            "WEEKLY_LOSS_LIMIT",
+        )
+        self.assertTrue(
+            blocked["account"]["new_entries_paused_by_weekly_loss"]
+        )
+
+        resumed = self.run_cycle(
+            "forex-weekly-reset",
+            now=self.now + timedelta(days=7),
+            direction="UP",
+        )
+        self.assertEqual(resumed["execution"]["status"], "APPLIED")
+        self.assertFalse(
+            resumed["account"]["new_entries_paused_by_weekly_loss"]
+        )
+        self.assertEqual(
+            resumed["account"]["weekly_loss_safety"]["weekly_pnl_pln"],
+            "0.00",
+        )
+
+    def test_weekly_gate_fails_closed_when_fill_and_audit_diverge(self) -> None:
+        self.run_cycle("forex-weekly-audit-open")
+        closed_at = self.now + timedelta(minutes=15)
+        self.run_cycle(
+            "forex-weekly-audit-close",
+            now=closed_at,
+            direction="DOWN",
+        )
+
+        def tamper(state: dict) -> None:
+            state["fills"][-1]["realized_pnl_pln"] = "0.00"
+
+        self.autopilot.executor.ledger.transaction(tamper)
+        safety = self.autopilot.executor.status(
+            now=closed_at + timedelta(minutes=1)
+        )["weekly_loss_safety"]
+        self.assertTrue(safety["active"])
+        self.assertEqual(safety["code"], "EXECUTION_AUDIT_MISMATCH")
+
+        blocked = self.run_cycle(
+            "forex-weekly-audit-blocked",
+            now=closed_at + timedelta(minutes=15),
+            direction="UP",
+        )
+        self.assertEqual(
+            blocked["execution"]["rejections"][0]["code"],
+            "EXECUTION_AUDIT_MISMATCH",
+        )
 
     def test_executor_rechecks_forged_oversized_instruction(self) -> None:
         quotes, _bars, _contexts, conversion = market(

@@ -124,6 +124,30 @@ def _account() -> dict:
             "remaining_seconds": 10800,
             "paper_only": True,
         },
+        "weekly_loss_safety": {
+            "active": False,
+            "code": "READY",
+            "weekly_pnl_pln": "-44.26",
+            "loss_limit_pln": "2000.00",
+            "remaining_loss_capacity_pln": "1955.74",
+            "maximum_loss_pct": "2.00",
+            "week_start_at": "2026-08-17T00:00:00+00:00",
+            "reset_at": "2026-08-24T00:00:00+00:00",
+            "closed_trade_count": 1,
+            "paper_only": True,
+        },
+        "weekly_loss_safety": {
+            "active": False,
+            "code": "READY",
+            "weekly_pnl_pln": "-44.26",
+            "loss_limit_pln": "2000.00",
+            "remaining_loss_capacity_pln": "1955.74",
+            "maximum_loss_pct": "2.00",
+            "week_start_at": "2026-08-17T00:00:00+00:00",
+            "reset_at": "2026-08-24T00:00:00+00:00",
+            "closed_trade_count": 1,
+            "paper_only": True,
+        },
     }
 
 
@@ -274,6 +298,32 @@ def test_dashboard_projects_latest_safe_paper_cycle() -> None:
         }
         assert diagnostics["diagnostics_complete"] is True
         assert snapshot["new_entries_paused_by_loss_streak"] is True
+        assert snapshot["new_entries_paused_by_weekly_loss"] is False
+        assert snapshot["weekly_loss_safety"] == {
+            "active": False,
+            "code": "READY",
+            "weekly_pnl_pln": "-44.26",
+            "loss_limit_pln": "2000.00",
+            "remaining_loss_capacity_pln": "1955.74",
+            "maximum_loss_pct": "2.00",
+            "week_start_at": "2026-08-17T00:00:00+00:00",
+            "reset_at": "2026-08-24T00:00:00+00:00",
+            "closed_trade_count": 1,
+            "paper_only": True,
+        }
+        assert snapshot["new_entries_paused_by_weekly_loss"] is False
+        assert snapshot["weekly_loss_safety"] == {
+            "active": False,
+            "code": "READY",
+            "weekly_pnl_pln": "-44.26",
+            "loss_limit_pln": "2000.00",
+            "remaining_loss_capacity_pln": "1955.74",
+            "maximum_loss_pct": "2.00",
+            "week_start_at": "2026-08-17T00:00:00+00:00",
+            "reset_at": "2026-08-24T00:00:00+00:00",
+            "closed_trade_count": 1,
+            "paper_only": True,
+        }
         assert snapshot["loss_streak_safety"] == {
             "active": True,
             "code": "CONSECUTIVE_LOSS_COOLDOWN",
@@ -286,6 +336,42 @@ def test_dashboard_projects_latest_safe_paper_cycle() -> None:
         }
         assert "wstrzymane" in snapshot["message"]
         assert snapshot["live_orders_sent"] is False
+
+
+def test_dashboard_prioritizes_weekly_loss_pause_message() -> None:
+    with TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        account = _account()
+        account["loss_streak_safety"]["active"] = False
+        account["weekly_loss_safety"]["active"] = True
+        account["weekly_loss_safety"]["code"] = "WEEKLY_LOSS_LIMIT"
+        _write_result(root, account)
+
+        snapshot = ForexPaperDashboard(
+            root,
+            executor=_Executor({}),
+        ).snapshot()
+
+        assert snapshot["new_entries_paused_by_weekly_loss"] is True
+        assert "tygodniowy limit straty" in snapshot["message"]
+
+
+def test_dashboard_prioritizes_weekly_loss_pause_message() -> None:
+    with TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        account = _account()
+        account["loss_streak_safety"]["active"] = False
+        account["weekly_loss_safety"]["active"] = True
+        account["weekly_loss_safety"]["code"] = "WEEKLY_LOSS_LIMIT"
+        _write_result(root, account)
+
+        snapshot = ForexPaperDashboard(
+            root,
+            executor=_Executor({}),
+        ).snapshot()
+
+        assert snapshot["new_entries_paused_by_weekly_loss"] is True
+        assert "tygodniowy limit straty" in snapshot["message"]
 
 
 def test_dashboard_projects_position_protection_attention_safely() -> None:

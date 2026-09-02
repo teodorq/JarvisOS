@@ -481,6 +481,20 @@ class TradingControlCenter:
                 f"{loss_streak_safety.get('threshold', 3)}"
             )
         )
+        weekly_loss_safety = dict(
+            forex_account.get("weekly_loss_safety", {}) or {}
+        )
+        weekly_loss_text = (
+            "PRZERWA W NOWYCH WEJŚCIACH; zamknięcia pozostają aktywne; "
+            f"reset {weekly_loss_safety.get('reset_at', 'w następnym tygodniu')}"
+            if weekly_loss_safety.get("active") is True
+            else (
+                f"gotowy; wynik tygodnia "
+                f"{weekly_loss_safety.get('weekly_pnl_pln', '0.00')} PLN; "
+                f"pozostały limit straty "
+                f"{weekly_loss_safety.get('remaining_loss_capacity_pln', '0.00')} PLN"
+            )
+        )
         audit = (
             "prawidłowy" if forex_account["audit_chain_valid"] else "USZKODZONY"
         )
@@ -607,6 +621,7 @@ class TradingControlCenter:
             "oraz kontrola odcisków, synchronizacji, wolumenu i luk — gotowe.\n"
             "• Ryzyko: limity zlecenia, pozycji, ekspozycji, dziennej straty, "
             "spreadu i liczby zleceń — aktywne.\n"
+            f"• Bezpiecznik tygodniowy: {weekly_loss_text}.\n"
             f"• Bezpiecznik serii strat: {loss_streak_text}.\n"
             "• Forex: skaner 7 głównych par, ranking i wspólne limity walutowe "
             "— gotowe lokalnie.\n"

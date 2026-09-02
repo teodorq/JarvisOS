@@ -11,7 +11,10 @@ def forex_paper_safety_view(
     ready = snapshot.get("status") == "READY"
     raw = snapshot.get("loss_streak_safety")
     safety = dict(raw) if isinstance(raw, dict) else {}
-    paused = safety.get("active") is True
+    raw_weekly = snapshot.get("weekly_loss_safety")
+    weekly = dict(raw_weekly) if isinstance(raw_weekly, dict) else {}
+    weekly_paused = weekly.get("active") is True
+    paused = safety.get("active") is True or weekly_paused
     label = (
         "PAPER — PRZERWA"
         if ready and paused
@@ -20,11 +23,12 @@ def forex_paper_safety_view(
     tone = "neutral" if ready and paused else "healthy" if ready else "danger"
     current = _count(safety.get("current_consecutive_losses"), 0)
     threshold = max(2, _count(safety.get("threshold"), 3))
-    entry_state = (
-        "NOWE WEJŚCIA: PRZERWA"
-        if paused
-        else f"SERIA STRAT: {current}/{threshold}"
-    )
+    if weekly_paused:
+        entry_state = "NOWE WEJŚCIA: PRZERWA (LIMIT TYGODNIOWY)"
+    elif paused:
+        entry_state = "NOWE WEJŚCIA: PRZERWA"
+    else:
+        entry_state = f"SERIA STRAT: {current}/{threshold}"
     banner = (
         "● PAPER ONLY   ● BROKER: BRAK ZLECEŃ   "
         "● PRAWDZIWE PIENIĄDZE: BRAK DOSTĘPU   ● " + entry_state

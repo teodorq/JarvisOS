@@ -40,6 +40,23 @@ def test_sample_contract_is_deterministic_and_paper_only() -> None:
         == "STOP_FIRST_CONSERVATIVE"
     )
     assert execution["position_recovery_spread_policy"] == "CURRENT_MT5_SPREAD"
+    assert execution["weekly_loss_window"] == "MONDAY_00_00_UTC"
+    assert execution["weekly_loss_source"] == "AUDITED_CLOSED_PAPER_FILLS"
+    assert execution["weekly_loss_reference"] == "INITIAL_PAPER_BALANCE"
+    assert execution["weekly_loss_blocks"] == ["OPEN_LONG", "OPEN_SHORT"]
+    assert execution["weekly_loss_allows"] == ["CLOSE_POSITION"]
+    assert (
+        first["specification"]["paper_risk_policy"]["max_weekly_loss_pct"]
+        == "0.02"
+    )
+    assert execution["weekly_loss_window"] == "MONDAY_00_00_UTC"
+    assert execution["weekly_loss_source"] == "AUDITED_CLOSED_PAPER_FILLS"
+    assert execution["weekly_loss_blocks"] == ["OPEN_LONG", "OPEN_SHORT"]
+    assert execution["weekly_loss_allows"] == ["CLOSE_POSITION"]
+    assert (
+        first["specification"]["paper_risk_policy"]["max_weekly_loss_pct"]
+        == "0.02"
+    )
 
 
 def test_strategy_or_risk_change_produces_a_different_fingerprint() -> None:
@@ -90,4 +107,12 @@ def test_known_v1_contract_is_superseded_not_foreign() -> None:
     assert is_superseded_sample_contract(
         "FOREX_PAPER_V3_20260901",
         "e77c29140ba9f78f50f3ac7b7dac8f225bcdd41ea9749ef253d8dd51c7781578",
+    ) is True
+    assert is_superseded_sample_contract(
+        "FOREX_PAPER_V4_20260902",
+        "4ac87dc85189f8c0846ae3f097712e51c54f7060fefc01b2aa7c2714249b0645",
+    ) is True
+    assert is_superseded_sample_contract(
+        "FOREX_PAPER_V4_20260902",
+        "4ac87dc85189f8c0846ae3f097712e51c54f7060fefc01b2aa7c2714249b0645",
     ) is True

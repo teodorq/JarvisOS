@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from pathlib import Path
 import re
 from typing import Any, Mapping
@@ -172,6 +172,15 @@ class ForexPaperExecutionEngine:
                 elif action in {"OPEN_LONG", "OPEN_SHORT"}:
                     if bool(dict(state.get("kill_switch", {}) or {}).get("active")):
                         result = {"status": "REJECTED", "code": "KILL_SWITCH_ACTIVE"}
+                    elif (
+                        weekly_safety := self._weekly_loss_safety(
+                            state, selected_now
+                        )
+                    )["active"]:
+                        result = {
+                            "status": "REJECTED",
+                            "code": weekly_safety["code"],
+                        }
                     elif self._loss_streak_safety(state, selected_now)["active"]:
                         result = {
                             "status": "REJECTED",
@@ -572,6 +581,7 @@ class ForexPaperExecutionEngine:
             expected_sample_contract=self.sample_contract,
         )
         loss_streak_safety = self._loss_streak_safety(state, selected_now)
+        weekly_loss_safety = self._weekly_loss_safety(state, selected_now)
         return {
             "status": "READY" if state.get("mode") == "FOREX_PAPER_ONLY" else "BLOCKED",
             "mode": str(state.get("mode", "")),
@@ -579,6 +589,7 @@ class ForexPaperExecutionEngine:
             "unrealized_pnl_pln": _text(unrealized),
             "equity_pln": _text(balance + unrealized),
             "daily_pnl_pln": _text(_decimal(state.get("daily_pnl_pln"))),
+            "weekly_pnl_pln": weekly_loss_safety["weekly_pnl_pln"],
             "realized_pnl_pln": _text(realized),
             "position_count": len(positions),
             "open_positions": [
@@ -640,10 +651,111 @@ class ForexPaperExecutionEngine:
                 dict(state.get("kill_switch", {}) or {}).get("active")
             ),
             "loss_streak_safety": loss_streak_safety,
+            "weekly_loss_safety": weekly_loss_safety,
             "new_entries_paused_by_loss_streak": loss_streak_safety["active"],
+            "new_entries_paused_by_weekly_loss": weekly_loss_safety["active"],
             "audit_chain_valid": audit_chain_valid,
             "live_trading_enabled": False,
             "network_access": False,
+        }
+
+    def _weekly_loss_safety(
+        self,
+        state: Mapping[str, Any],
+        now: datetime,
+    ) -> dict[str, Any]:
+        """Derive a fail-closed weekly entry brake from audited PAPER fills."""
+
+        selected_now = aware_utc(now, "now")
+        week_start = (selected_now - timedelta(days=selected_now.weekday())).replace(
+            hour=0,
+            minute=0,
+            second=0,
+            microsecond=0,
+        )
+        reset_at = week_start + timedelta(days=7)
+        try:
+            initial_balance = Decimal(str(state.get("initial_balance_pln", "")))
+            if not initial_balance.is_finite() or initial_balance <= 0:
+                raise ValueError("invalid initial balance")
+        except (InvalidOperation, TypeError, ValueError):
+            initial_balance = Decimal("0")
+        loss_limit = initial_balance * self.policy.max_weekly_loss_pct
+        base = {
+            "active": False,
+            "code": "READY",
+            "weekly_pnl_pln": "0.00",
+            "loss_limit_pln": _text(loss_limit),
+            "remaining_loss_capacity_pln": _text(loss_limit),
+            "maximum_loss_pct": _text(
+                self.policy.max_weekly_loss_pct * Decimal("100")
+            ),
+            "week_start_at": week_start.isoformat(),
+            "reset_at": reset_at.isoformat(),
+            "closed_trade_count": 0,
+            "paper_only": True,
+        }
+        if initial_balance <= 0:
+            return {**base, "active": True, "code": "INVALID_ACCOUNT_BALANCE"}
+        if not self.ledger.verify_audit(dict(state)):
+            return {**base, "active": True, "code": "AUDIT_CHAIN_INVALID"}
+
+        ledger_closed = [
+            dict(item)
+            for item in list(state.get("fills", []) or [])
+            if isinstance(item, Mapping)
+            and str(item.get("action", "")).startswith("CLOSE_")
+        ]
+        audited_closed: list[dict[str, Any]] = []
+        for raw_event in list(state.get("audit", []) or []):
+            event = dict(raw_event) if isinstance(raw_event, Mapping) else {}
+            if event.get("event_type") != "FOREX_PAPER_CYCLE":
+                continue
+            details = dict(event.get("details", {}) or {})
+            for raw_fill in list(details.get("executions", []) or []):
+                fill = dict(raw_fill) if isinstance(raw_fill, Mapping) else {}
+                if str(fill.get("action", "")).startswith("CLOSE_"):
+                    audited_closed.append(fill)
+        if ledger_closed != audited_closed:
+            return {
+                **base,
+                "active": True,
+                "code": "EXECUTION_AUDIT_MISMATCH",
+            }
+
+        weekly_pnl = Decimal("0")
+        weekly_count = 0
+        try:
+            for fill in audited_closed:
+                closed_at = aware_utc(
+                    datetime.fromisoformat(
+                        str(fill.get("closed_at") or fill.get("filled_at") or "")
+                    ),
+                    "weekly_fill_closed_at",
+                )
+                pnl = Decimal(str(fill.get("realized_pnl_pln", "")))
+                if not pnl.is_finite():
+                    raise ValueError("invalid weekly pnl")
+                if week_start <= closed_at < reset_at:
+                    weekly_pnl += pnl
+                    weekly_count += 1
+        except (
+            InvalidOperation,
+            TradingValidationError,
+            TypeError,
+            ValueError,
+        ):
+            return {**base, "active": True, "code": "INVALID_WEEKLY_HISTORY"}
+
+        remaining = max(Decimal("0"), loss_limit + weekly_pnl)
+        active = weekly_pnl <= -loss_limit
+        return {
+            **base,
+            "active": active,
+            "code": "WEEKLY_LOSS_LIMIT" if active else "READY",
+            "weekly_pnl_pln": _text(weekly_pnl),
+            "remaining_loss_capacity_pln": _text(remaining),
+            "closed_trade_count": weekly_count,
         }
 
     def _loss_streak_safety(

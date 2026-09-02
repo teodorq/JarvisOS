@@ -15,7 +15,7 @@ from app.trading.forex_risk import ForexPaperPolicy
 from app.trading.forex_scanner import ForexScannerPolicy
 
 
-CONTRACT_ID = "FOREX_PAPER_V4_20260902"
+CONTRACT_ID = "FOREX_PAPER_V5_20260902"
 SUPERSEDED_CONTRACT_FINGERPRINTS = {
     "FOREX_PAPER_V1_20260831": (
         "a77112c8f1264aab11403dabf4b51b835deb96773799c8fdea1f0ace0707276a"
@@ -25,6 +25,9 @@ SUPERSEDED_CONTRACT_FINGERPRINTS = {
     ),
     "FOREX_PAPER_V3_20260901": (
         "e77c29140ba9f78f50f3ac7b7dac8f225bcdd41ea9749ef253d8dd51c7781578"
+    ),
+    "FOREX_PAPER_V4_20260902": (
+        "4ac87dc85189f8c0846ae3f097712e51c54f7060fefc01b2aa7c2714249b0645"
     ),
 }
 
@@ -106,6 +109,11 @@ def build_forex_paper_sample_contract(
                     "STOP_FIRST_CONSERVATIVE"
                 ),
                 "position_recovery_spread_policy": "CURRENT_MT5_SPREAD",
+                "weekly_loss_window": "MONDAY_00_00_UTC",
+                "weekly_loss_source": "AUDITED_CLOSED_PAPER_FILLS",
+                "weekly_loss_reference": "INITIAL_PAPER_BALANCE",
+                "weekly_loss_blocks": ["OPEN_LONG", "OPEN_SHORT"],
+                "weekly_loss_allows": ["CLOSE_POSITION"],
             },
         },
         "paper_only": True,
