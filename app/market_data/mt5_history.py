@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import csv
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import json
 import os
 from pathlib import Path
@@ -29,6 +29,8 @@ _MAJOR_SYMBOLS = frozenset(pair.symbol for pair in MAJOR_FOREX_PAIRS)
 _HISTORICAL_SYMBOLS = frozenset(pair.symbol for pair in HISTORICAL_FOREX_PAIRS)
 _EXPORT_DIRECTORY = re.compile(r"^mt5-demo-m15-[0-9]{8}T[0-9]{12}Z$")
 _FINGERPRINT = re.compile(r"^[0-9a-f]{64}$")
+_ALIGNMENT_BUFFER_BARS = 32
+_MAX_HISTORY_BARS = 50_000
 
 
 def _integer(value: object, code: str) -> int:
@@ -67,13 +69,17 @@ class Mt5DemoHistoricalExporter:
             or len(set(symbols)) != len(symbols)
             or any(symbol not in _HISTORICAL_SYMBOLS for symbol in symbols)
             or type(bar_count) is not int
-            or not 200 <= bar_count <= 50_000
+            or not 200 <= bar_count <= _MAX_HISTORY_BARS
         ):
             raise TradingValidationError("mt5_history: invalid_major_pair_set")
         selected_now = aware_utc(now or datetime.now(timezone.utc), "now")
+        source_bar_count = min(
+            _MAX_HISTORY_BARS,
+            bar_count + _ALIGNMENT_BUFFER_BARS,
+        )
         history = self.source.fetch_history(
             selected,
-            bar_count=bar_count,
+            bar_count=source_bar_count,
             now=selected_now,
         )
         if set(history) != set(symbols):
@@ -81,8 +87,21 @@ class Mt5DemoHistoricalExporter:
         normalized_history = {
             symbol: tuple(history[symbol]) for symbol in symbols
         }
-        if any(len(normalized_history[symbol]) != bar_count for symbol in symbols):
+        if any(
+            len(normalized_history[symbol]) != source_bar_count
+            for symbol in symbols
+        ):
             raise TradingValidationError("mt5_history: incomplete_pair_history")
+        normalized_history, alignment = self._latest_common_history(
+            normalized_history,
+            symbols=symbols,
+            bar_count=bar_count,
+        )
+        if any(
+            series[-1].timestamp + timedelta(minutes=15) > selected_now
+            for series in normalized_history.values()
+        ):
+            raise TradingValidationError("mt5_history: source_contains_open_bar")
 
         self.history_root.mkdir(parents=True, exist_ok=True)
         export_id = "mt5-demo-m15-" + selected_now.strftime("%Y%m%dT%H%M%S%fZ")
@@ -131,6 +150,8 @@ class Mt5DemoHistoricalExporter:
                     USD_PLN_CONVERSION_PAIR.symbol in symbols
                 ),
                 "bar_count_per_pair": bar_count,
+                "source_bar_count_per_pair": source_bar_count,
+                "timestamp_alignment": alignment,
                 "pair_symbols": list(symbols),
                 "datasets": datasets,
                 "closed_bars_only": True,
@@ -152,6 +173,58 @@ class Mt5DemoHistoricalExporter:
         result["export_path"] = str(target)
         result["manifest_path"] = str(target / "manifest.json")
         return result
+
+    @staticmethod
+    def _latest_common_history(
+        history: dict[str, tuple[ForexBar, ...]],
+        *,
+        symbols: tuple[str, ...],
+        bar_count: int,
+    ) -> tuple[dict[str, tuple[ForexBar, ...]], dict[str, Any]]:
+        indexed: dict[str, dict[datetime, ForexBar]] = {}
+        for symbol in symbols:
+            series = history[symbol]
+            if any(not isinstance(bar, ForexBar) for bar in series):
+                raise TradingValidationError("mt5_history: invalid_history_bar")
+            by_timestamp = {bar.timestamp: bar for bar in series}
+            if len(by_timestamp) != len(series):
+                raise TradingValidationError("mt5_history: duplicate_history_bars")
+            if any(
+                right.timestamp <= left.timestamp
+                for left, right in zip(series, series[1:])
+            ):
+                raise TradingValidationError("mt5_history: history_bars_not_ordered")
+            indexed[symbol] = by_timestamp
+        common = set(indexed[symbols[0]])
+        for symbol in symbols[1:]:
+            common.intersection_update(indexed[symbol])
+        ordered = tuple(sorted(common))
+        if len(ordered) < bar_count:
+            raise TradingValidationError(
+                "mt5_history: insufficient_aligned_history"
+            )
+        selected_timestamps = ordered[-bar_count:]
+        aligned = {
+            symbol: tuple(
+                indexed[symbol][timestamp]
+                for timestamp in selected_timestamps
+            )
+            for symbol in symbols
+        }
+        return aligned, {
+            "method": "LATEST_COMMON_M15_TIMESTAMPS",
+            "timestamps_aligned_across_pairs": True,
+            "common_timestamp_count_before_trim": len(ordered),
+            "selected_timestamp_count": len(selected_timestamps),
+            "source_bars_discarded_per_pair": {
+                symbol: len(history[symbol]) - bar_count
+                for symbol in symbols
+            },
+            "non_common_timestamp_count_per_pair": {
+                symbol: len(set(indexed[symbol]) - common)
+                for symbol in symbols
+            },
+        }
 
     def verify_latest(self) -> dict[str, Any]:
         """Re-read the newest export and compare every current CSV fingerprint."""
@@ -276,7 +349,7 @@ class Mt5DemoHistoricalExporter:
                 or dataset_bar_count != bars_per_pair
                 or dataset.bars[0].timestamp.isoformat() != raw.get("start_at")
                 or dataset.bars[-1].timestamp.isoformat() != raw.get("end_at")
-                or dataset.bars[-1].timestamp >= exported_at
+                or dataset.bars[-1].timestamp + timedelta(minutes=15) > exported_at
                 or dataset.fingerprint_sha256 != fingerprint
             ):
                 raise TradingValidationError("mt5_history: fingerprint_mismatch")

@@ -66,6 +66,9 @@ from app.trading.forex_strategy_cohorts import (
     build_forex_strategy_cohort_review,
 )
 from app.trading.forex_strategy_replay import ForexStrategyCounterfactualReplay
+from app.trading.forex_strategy_walk_forward import (
+    ForexStrategyCounterfactualWalkForwardComparison,
+)
 from app.trading.forex_trade_diagnostics import (
     build_forex_trade_diagnostics,
 )
@@ -148,6 +151,7 @@ __all__ = [
     "is_superseded_sample_contract",
     "build_forex_strategy_cohort_review",
     "ForexStrategyCounterfactualReplay",
+    "ForexStrategyCounterfactualWalkForwardComparison",
     "build_forex_trade_diagnostics",
     "sample_contracts_match",
     "verify_forex_paper_sample_contract",

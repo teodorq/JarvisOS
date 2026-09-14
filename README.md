@@ -288,6 +288,14 @@ The same report contains an isolated `development_candidate_v2` replay. It
 marks the already-known history as reused development data and always requires
 new post-freeze evidence, so repeatedly running the report cannot turn an
 overfit result into validation.
+Report schema 2 also stores `counterfactual_walk_forward`: V1 and frozen V2 run
+once on the same verified source, identical non-overlapping out-of-sample
+windows and identical PLN execution policy, but with separate portfolio state.
+Its per-window deltas, source/policy/code SHA-256 manifest and report content hash
+make the comparison reproducible and expose accidental or unchecked changes.
+The comparison is
+descriptive only: it selects no winner, changes no PAPER strategy and cannot
+enable LIVE trading.
 Its read-only forward scorecard separates unqualified post-freeze cycles from
 invalid candidate contracts and compares base entry signals with the entries
 retained or filtered by V2. Counts never validate performance, promote the

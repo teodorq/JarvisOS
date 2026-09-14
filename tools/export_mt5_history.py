@@ -37,7 +37,10 @@ def main() -> int:
         "--pair",
         action="append",
         default=[],
-        help="Para główna, np. EUR_USD. Bez tej opcji eksportuje wszystkie 7.",
+        help=(
+            "Para główna, np. EUR_USD. Bez tej opcji eksportuje 7 par "
+            "oraz serię przeliczeniową USD_PLN."
+        ),
     )
     arguments = parser.parse_args()
     try:

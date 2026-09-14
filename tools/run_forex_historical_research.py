@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 from datetime import datetime, timezone
 from decimal import Decimal
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -23,10 +24,11 @@ from app.trading.forex_historical import (  # noqa: E402
     ForexWalkForwardPolicy,
 )
 from app.trading.forex_models import MAJOR_FOREX_PAIRS  # noqa: E402
-from app.trading.forex_candidate_v2 import ForexRegimeFilteredScanner  # noqa: E402
 from app.trading.forex_portfolio_historical import (  # noqa: E402
-    ForexPortfolioHistoricalWalkForwardValidator,
     ForexPortfolioWalkForwardPolicy,
+)
+from app.trading.forex_strategy_walk_forward import (  # noqa: E402
+    ForexStrategyCounterfactualWalkForwardComparison,
 )
 from app.trading.models import TradingValidationError  # noqa: E402
 
@@ -53,6 +55,59 @@ def _write_report(report: dict[str, object]) -> Path:
             pass
         raise
     return target
+
+
+def _canonical_sha256(value: object) -> str:
+    payload = json.dumps(
+        value,
+        ensure_ascii=True,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _source_manifest(verified: dict[str, object]) -> dict[str, object]:
+    datasets = sorted(
+        (
+            {
+                "pair": str(raw["pair"]),
+                "bar_count": int(raw["bar_count"]),
+                "fingerprint_sha256": str(raw["fingerprint_sha256"]),
+                "matches_manifest": raw.get("matches_manifest") is True,
+                "unexpected_gap_count": int(raw.get("unexpected_gap_count", 0)),
+            }
+            for raw in verified["datasets"]
+        ),
+        key=lambda item: item["pair"],
+    )
+    return {
+        "schema_version": 1,
+        "export_id": str(verified["export_id"]),
+        "bar_count_per_pair": int(verified["bar_count_per_pair"]),
+        "datasets": datasets,
+        "all_fingerprints_match": verified.get("all_fingerprints_match") is True,
+        "timestamps_aligned_across_pairs": (
+            verified.get("timestamps_aligned_across_pairs") is True
+        ),
+        "closed_bars_only": verified.get("closed_bars_only") is True,
+        "research_quality_ready": verified.get("research_quality_ready") is True,
+        "expected_interval_seconds": int(
+            verified.get("expected_interval_seconds", 0)
+        ),
+        "historical_pln_conversion_ready": (
+            verified.get("historical_pln_conversion_ready") is True
+        ),
+    }
+
+
+def _report_content_sha256(report: dict[str, object]) -> str:
+    signed = {
+        key: value
+        for key, value in report.items()
+        if key not in {"created_at", "content_sha256"}
+    }
+    return _canonical_sha256(signed)
 
 
 def main() -> int:
@@ -82,6 +137,7 @@ def main() -> int:
         )
         loader = HistoricalCsvLoader()
         major_symbols = frozenset(pair.symbol for pair in MAJOR_FOREX_PAIRS)
+        source_manifest = _source_manifest(verified)
         histories = {}
         pair_results = []
         for raw in verified["datasets"]:
@@ -129,34 +185,44 @@ def main() -> int:
             for item in pair_results
             if Decimal(str(item["average_out_of_sample_return_pct"])) <= 0
         ]
-        portfolio = ForexPortfolioHistoricalWalkForwardValidator(
+        comparison_engine = ForexStrategyCounterfactualWalkForwardComparison(
             walk_forward_policy=ForexPortfolioWalkForwardPolicy(
                 training_bar_count=arguments.training_bars,
                 testing_bar_count=arguments.testing_bars,
                 step_bar_count=arguments.step_bars,
             ),
-        ).run(histories)
-        candidate_scanner = ForexRegimeFilteredScanner()
-        candidate_portfolio = ForexPortfolioHistoricalWalkForwardValidator(
-            walk_forward_policy=ForexPortfolioWalkForwardPolicy(
-                training_bar_count=arguments.training_bars,
-                testing_bar_count=arguments.testing_bars,
-                step_bar_count=arguments.step_bars,
-            ),
-            scanner=candidate_scanner,
-        ).run(histories)
+        )
+        counterfactual = comparison_engine.run(histories)
+        portfolio = counterfactual["baseline_v1"]
+        raw_candidate_portfolio = counterfactual["candidate_v2"]
+        candidate_scanner = comparison_engine.candidate_scanner
         candidate_historical_checks_passed = bool(
-            candidate_portfolio["strategy_performance_validated"]
+            raw_candidate_portfolio["strategy_performance_validated"]
         )
-        candidate_portfolio["historical_development_checks_passed"] = (
-            candidate_historical_checks_passed
-        )
-        candidate_portfolio["reused_source_data"] = True
-        candidate_portfolio["forward_validation_required"] = True
-        candidate_portfolio["strategy_performance_validated"] = False
-        candidate_portfolio["automatic_paper_promotion"] = False
-        candidate_portfolio["paper_orders_sent"] = False
-        candidate_portfolio["live_orders_sent"] = False
+        candidate_portfolio = {
+            **raw_candidate_portfolio,
+            "historical_development_checks_passed": (
+                candidate_historical_checks_passed
+            ),
+            "reused_source_data": True,
+            "forward_validation_required": True,
+            "strategy_performance_validated": False,
+            "automatic_paper_promotion": False,
+            "paper_orders_sent": False,
+            "live_orders_sent": False,
+        }
+        block_by_check = {
+            "average_return_positive": "PORTFOLIO_AVERAGE_RETURN_NOT_POSITIVE",
+            "compounded_return_positive": "PORTFOLIO_COMPOUNDED_RETURN_NOT_POSITIVE",
+            "profitable_window_ratio_met": "PORTFOLIO_PROFITABLE_WINDOW_RATIO_NOT_MET",
+            "maximum_drawdown_within_limit": "PORTFOLIO_DRAWDOWN_LIMIT_EXCEEDED",
+            "minimum_trade_count_met": "PORTFOLIO_MINIMUM_TRADE_COUNT_NOT_MET",
+        }
+        candidate_historical_blocks = [
+            block_by_check[key]
+            for key, passed in raw_candidate_portfolio["performance_checks"].items()
+            if passed is not True
+        ]
         development_candidate_v2 = {
             "status": "DEVELOPMENT_REPLAY_COMPLETED",
             "candidate_id": candidate_scanner.candidate_policy.candidate_id,
@@ -170,22 +236,19 @@ def main() -> int:
             "historical_development_checks_passed": (
                 candidate_historical_checks_passed
             ),
+            "historical_development_blocks": candidate_historical_blocks,
             "forward_validation_required": True,
             "strategy_performance_validated": False,
             "strategy_candidate_ready": False,
-            "strategy_candidate_blocks": ["FORWARD_OBSERVATION_REQUIRED"],
+            "strategy_candidate_blocks": [
+                *candidate_historical_blocks,
+                "FORWARD_OBSERVATION_REQUIRED",
+            ],
             "portfolio": candidate_portfolio,
             "automatic_paper_promotion": False,
             "broker_connection_used": False,
             "paper_orders_sent": False,
             "live_orders_sent": False,
-        }
-        block_by_check = {
-            "average_return_positive": "PORTFOLIO_AVERAGE_RETURN_NOT_POSITIVE",
-            "compounded_return_positive": "PORTFOLIO_COMPOUNDED_RETURN_NOT_POSITIVE",
-            "profitable_window_ratio_met": "PORTFOLIO_PROFITABLE_WINDOW_RATIO_NOT_MET",
-            "maximum_drawdown_within_limit": "PORTFOLIO_DRAWDOWN_LIMIT_EXCEEDED",
-            "minimum_trade_count_met": "PORTFOLIO_MINIMUM_TRADE_COUNT_NOT_MET",
         }
         candidate_blocks = [
             block_by_check[key]
@@ -193,11 +256,25 @@ def main() -> int:
             if passed is not True
         ]
         candidate_ready = not candidate_blocks
+        counterfactual_report = {
+            key: value
+            for key, value in counterfactual.items()
+            if key not in {"baseline_v1", "candidate_v2"}
+        }
+        counterfactual_report["source_export_id"] = verified["export_id"]
+        counterfactual_report["source_manifest_sha256"] = _canonical_sha256(
+            source_manifest
+        )
+        counterfactual_report["closed_m15_bars_only"] = source_manifest[
+            "closed_bars_only"
+        ]
         report: dict[str, object] = {
+            "schema_version": 2,
             "status": "FOREX_MULTI_PAIR_RESEARCH_COMPLETED",
             "mode": "LOCAL_HISTORICAL_RESEARCH_ONLY",
             "created_at": datetime.now(timezone.utc).isoformat(),
             "source_export_id": verified["export_id"],
+            "source_manifest": source_manifest,
             "source_fingerprints_verified": True,
             "source_quality_ready": True,
             "pair_count": len(pair_results),
@@ -209,6 +286,7 @@ def main() -> int:
             "strategy_candidate_blocks": candidate_blocks,
             "portfolio": portfolio,
             "development_candidate_v2": development_candidate_v2,
+            "counterfactual_walk_forward": counterfactual_report,
             "portfolio_pln_aggregation_performed": True,
             "historical_pln_conversion_series_verified": True,
             "result_currency_note": (
@@ -229,11 +307,17 @@ def main() -> int:
             "paper_orders_sent": False,
             "live_orders_sent": False,
         }
+        report["content_sha256"] = _report_content_sha256(report)
         report_path = _write_report(report)
         summary = {
+            "schema_version": report["schema_version"],
             "status": report["status"],
             "mode": report["mode"],
             "source_export_id": report["source_export_id"],
+            "source_manifest_sha256": counterfactual_report[
+                "source_manifest_sha256"
+            ],
+            "content_sha256": report["content_sha256"],
             "source_fingerprints_verified": True,
             "source_quality_ready": True,
             "pair_count": len(pair_results),
@@ -265,6 +349,11 @@ def main() -> int:
                     for key, value in candidate_portfolio.items()
                     if key != "windows"
                 },
+            },
+            "counterfactual_walk_forward": {
+                key: value
+                for key, value in counterfactual_report.items()
+                if key != "windows"
             },
             "parameter_optimization_performed": False,
             "stop_loss_formula_matches_paper_coordinator": True,
