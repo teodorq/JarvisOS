@@ -4,21 +4,30 @@ from __future__ import annotations
 
 from collections import Counter
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 from pathlib import Path
 import re
+import sys
 import threading
 from typing import TYPE_CHECKING, Any, Mapping
 
+from app.core.exclusive_file_lock import exclusive_file_lock
 from app.core.json_store import JsonStore
 from app.core.project_paths import resolve_project_root
 from app.trading.forex_coordinator import ForexPaperCoordinator
 from app.trading.forex_candidate_v2 import ForexRegimeFilteredScanner
 from app.trading.forex_executor import ForexPaperExecutionEngine
-from app.trading.forex_models import MAJOR_FOREX_PAIRS, ForexQuote
+from app.trading.forex_models import (
+    MAJOR_FOREX_PAIRS,
+    ForexBar,
+    ForexPosition,
+    ForexQuote,
+    ForexSafetyContext,
+)
 from app.trading.forex_risk import ForexPaperPolicy, ForexRateBook
+from app.trading.forex_sample_contract import build_forex_paper_sample_contract
 from app.trading.forex_scanner import ForexMarketScanner
 from app.trading.models import TradingValidationError, aware_utc
 
@@ -27,6 +36,14 @@ if TYPE_CHECKING:
 
 
 _OBSERVATION_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,79}$")
+_SHA256 = re.compile(r"^[0-9a-f]{64}$")
+_OBSERVATION_SCHEMA_VERSION = 2
+_CAPTURE_ORIGINS = frozenset({
+    "MANUAL",
+    "SCHEDULED_FORWARD",
+    "STARTUP_RECOVERY",
+    "REPLAY",
+})
 _LOCKS_GUARD = threading.Lock()
 _LOCKS: dict[str, threading.RLock] = {}
 
@@ -43,10 +60,290 @@ def _safe_reason(error: Exception) -> str:
     return cleaned[:160] or "DATA_SOURCE_FAILURE"
 
 
+def _capture_origin(value: object) -> str:
+    selected = str(value or "").strip().upper()
+    if selected not in _CAPTURE_ORIGINS:
+        raise TradingValidationError("forex_observation: invalid_capture_origin")
+    return selected
+
+
+def _capture_attestation(value: object, *, origin: str) -> dict[str, Any]:
+    if origin == "SCHEDULED_FORWARD":
+        selected = dict(value) if isinstance(value, Mapping) else {}
+        if (
+            selected.get("kind") != "LOCAL_WATCHDOG_ANCESTRY_NONCE_V1"
+            or selected.get("verified") is not True
+            or selected.get("trust_level") != "BEST_EFFORT_LOCAL_PROCESS"
+            or selected.get("verified_scope")
+            != "WATCHDOG_ANCESTRY_AND_NONCE_FORMAT"
+            or not _SHA256.fullmatch(str(selected.get("nonce_sha256", "")))
+            or type(selected.get("watchdog_process_id")) is not int
+            or int(selected["watchdog_process_id"]) <= 0
+        ):
+            raise TradingValidationError(
+                "forex_observation: scheduled_attestation_invalid"
+            )
+        return {
+            "kind": "LOCAL_WATCHDOG_ANCESTRY_NONCE_V1",
+            "verified": True,
+            "trust_level": "BEST_EFFORT_LOCAL_PROCESS",
+            "verified_scope": "WATCHDOG_ANCESTRY_AND_NONCE_FORMAT",
+            "nonce_sha256": str(selected["nonce_sha256"]),
+            "watchdog_process_id": int(selected["watchdog_process_id"]),
+        }
+    if origin == "MANUAL":
+        return {"kind": "MANUAL_DIRECT_V1", "verified": False}
+    return {
+        "kind": f"{origin}_DECLARATION_V1",
+        "verified": False,
+    }
+
+
+def forex_candidate_implementation_sha256() -> str:
+    """Fingerprint the exact frozen-candidate implementation source."""
+    classes = (ForexRegimeFilteredScanner, ForexMarketScanner, ForexBar)
+    module_names = sorted({item.__module__ for item in classes})
+    digest = hashlib.sha256()
+    for module_name in module_names:
+        module = sys.modules.get(module_name)
+        raw_path = getattr(module, "__file__", None)
+        if not raw_path:
+            raise TradingValidationError(
+                "forex_observation: implementation_source_unavailable"
+            )
+        try:
+            source = Path(raw_path).read_bytes().replace(b"\r\n", b"\n")
+        except OSError as error:
+            raise TradingValidationError(
+                "forex_observation: implementation_source_unavailable"
+            ) from error
+        digest.update(module_name.encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(source)
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
+def _canonical_source_histories(
+    value: object,
+) -> dict[str, tuple[ForexBar, ...]]:
+    if not isinstance(value, Mapping):
+        raise TradingValidationError("forex_observation: source_bars_required")
+    symbols = tuple(sorted(pair.symbol for pair in MAJOR_FOREX_PAIRS))
+    if {str(key) for key in value} != set(symbols):
+        raise TradingValidationError(
+            "forex_observation: source_pair_coverage_invalid"
+        )
+    histories: dict[str, tuple[ForexBar, ...]] = {}
+    for symbol in symbols:
+        try:
+            history = tuple(value[symbol])
+        except (KeyError, TypeError) as error:
+            raise TradingValidationError(
+                "forex_observation: source_history_invalid"
+            ) from error
+        if not history:
+            raise TradingValidationError(
+                "forex_observation: source_history_empty"
+            )
+        if any(
+            not isinstance(bar, ForexBar) or bar.pair.symbol != symbol
+            for bar in history
+        ):
+            raise TradingValidationError(
+                "forex_observation: source_history_invalid"
+            )
+        histories[symbol] = history
+    return histories
+
+
+def _canonical_sha256(value: object) -> str:
+    encoded = json.dumps(
+        value,
+        ensure_ascii=True,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _source_evidence(
+    histories: Mapping[str, tuple[ForexBar, ...]],
+    *,
+    quotes: Mapping[str, ForexQuote],
+    conversion_quotes: tuple[ForexQuote, ...],
+    contexts: Mapping[str, ForexSafetyContext],
+    positions: Mapping[str, ForexPosition],
+    account: Mapping[str, object],
+    diagnostics: Mapping[str, object],
+    captured_at: datetime,
+) -> dict[str, Any]:
+    symbols = set(histories)
+    if set(quotes) != symbols or any(
+        not isinstance(quote, ForexQuote)
+        or quote.pair.symbol != symbol
+        for symbol, quote in quotes.items()
+    ):
+        raise TradingValidationError(
+            "forex_observation: source_quote_coverage_invalid"
+        )
+    if set(contexts) != symbols or any(
+        not isinstance(context, ForexSafetyContext)
+        for context in contexts.values()
+    ):
+        raise TradingValidationError(
+            "forex_observation: source_context_coverage_invalid"
+        )
+    if not set(positions).issubset(symbols) or any(
+        not isinstance(position, ForexPosition)
+        or position.pair.symbol != symbol
+        for symbol, position in positions.items()
+    ):
+        raise TradingValidationError(
+            "forex_observation: source_position_state_invalid"
+        )
+
+    digest = hashlib.sha256()
+    bar_counts: dict[str, int] = {}
+    latest_bar_open_at: dict[str, str] = {}
+    bars_strictly_ordered = True
+    latest_bars_closed = True
+    for symbol in sorted(histories):
+        history = histories[symbol]
+        bar_counts[symbol] = len(history)
+        previous_at: datetime | None = None
+        for bar in history:
+            if previous_at is not None and bar.timestamp <= previous_at:
+                bars_strictly_ordered = False
+            previous_at = bar.timestamp
+            row = {
+                "pair": symbol,
+                "timestamp": bar.timestamp.isoformat(),
+                "open": str(bar.open),
+                "high": str(bar.high),
+                "low": str(bar.low),
+                "close": str(bar.close),
+                "tick_volume": str(bar.tick_volume),
+            }
+            digest.update(json.dumps(
+                row,
+                ensure_ascii=True,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8"))
+            digest.update(b"\n")
+        latest = history[-1].timestamp
+        latest_bar_open_at[symbol] = latest.isoformat()
+        latest_bars_closed = latest_bars_closed and (
+            latest + timedelta(minutes=15) <= captured_at
+        )
+    tagged_quotes = [
+        *(("TRADABLE", quote) for quote in quotes.values()),
+        *(("CONVERSION", quote) for quote in conversion_quotes),
+    ]
+    quote_rows = [
+        {
+            "pair": quote.pair.symbol,
+            "bid": str(quote.bid),
+            "ask": str(quote.ask),
+            "timestamp": quote.timestamp.isoformat(),
+            "role": role,
+        }
+        for role, quote in sorted(
+            tagged_quotes,
+            key=lambda item: (item[1].pair.symbol, item[0]),
+        )
+    ]
+    if len({(item["pair"], item["role"]) for item in quote_rows}) != len(
+        quote_rows
+    ):
+        raise TradingValidationError(
+            "forex_observation: duplicate_source_quote"
+        )
+    context_rows = [
+        {
+            "pair": symbol,
+            "observed_at": contexts[symbol].observed_at.isoformat(),
+            "market_open": contexts[symbol].market_open,
+            "calendar_ready": contexts[symbol].calendar_ready,
+            "high_impact_event_blocked": (
+                contexts[symbol].high_impact_event_blocked
+            ),
+            "conversion_to_pln_ready": (
+                contexts[symbol].conversion_to_pln_ready
+            ),
+            "independent_source_count": (
+                contexts[symbol].independent_source_count
+            ),
+        }
+        for symbol in sorted(contexts)
+    ]
+    independent_source_counts = {
+        symbol: contexts[symbol].independent_source_count
+        for symbol in sorted(contexts)
+    }
+    position_rows = [
+        {
+            "pair": symbol,
+            "side": positions[symbol].side,
+            "units": str(positions[symbol].units),
+            "entry_price": str(positions[symbol].entry_price),
+            "current_price": str(positions[symbol].current_price),
+            "stop_loss": str(positions[symbol].stop_loss),
+            "take_profit": (
+                ""
+                if positions[symbol].take_profit is None
+                else str(positions[symbol].take_profit)
+            ),
+            "opened_at": positions[symbol].opened_at.isoformat(),
+        }
+        for symbol in sorted(positions)
+    ]
+    account_input = {
+        "equity_pln": str(account.get("equity_pln", "")),
+        "daily_pnl_pln": str(account.get("daily_pnl_pln", "")),
+    }
+    input_sha256 = digest.hexdigest()
+    quote_snapshot_sha256 = _canonical_sha256(quote_rows)
+    context_snapshot_sha256 = _canonical_sha256(context_rows)
+    position_snapshot_sha256 = _canonical_sha256(position_rows)
+    account_snapshot_sha256 = _canonical_sha256(account_input)
+    diagnostics_snapshot_sha256 = _canonical_sha256(dict(diagnostics))
+    decision_input_sha256 = _canonical_sha256({
+        "captured_at": captured_at.isoformat(),
+        "bars_sha256": input_sha256,
+        "quote_snapshot_sha256": quote_snapshot_sha256,
+        "context_snapshot_sha256": context_snapshot_sha256,
+        "position_snapshot_sha256": position_snapshot_sha256,
+        "account_snapshot_sha256": account_snapshot_sha256,
+        "diagnostics_snapshot_sha256": diagnostics_snapshot_sha256,
+    })
+    return {
+        "schema_version": 1,
+        "timeframe": "M15_CLOSED_BARS",
+        "pair_count": len(histories),
+        "bar_counts": bar_counts,
+        "latest_bar_open_at": latest_bar_open_at,
+        "latest_bars_closed": latest_bars_closed,
+        "bars_strictly_ordered": bars_strictly_ordered,
+        "independent_source_counts": independent_source_counts,
+        "input_sha256": input_sha256,
+        "quote_snapshot_sha256": quote_snapshot_sha256,
+        "context_snapshot_sha256": context_snapshot_sha256,
+        "position_snapshot_sha256": position_snapshot_sha256,
+        "account_snapshot_sha256": account_snapshot_sha256,
+        "diagnostics_snapshot_sha256": diagnostics_snapshot_sha256,
+        "decision_input_sha256": decision_input_sha256,
+        "recovery_replay": False,
+        "idempotent_replay": False,
+    }
+
+
 class ForexObservationJournal:
     """Store bounded observation evidence separately from the paper ledger."""
 
     MAX_OBSERVATIONS = 10_000
+    MAX_SOURCE_BYTES = 100_000_000
     MINIMUM_MARKET_OPEN_OBSERVATIONS = 20
     MINIMUM_MARKET_DAYS = 3
 
@@ -55,6 +352,7 @@ class ForexObservationJournal:
         self.path = root / "data" / "trading" / "forex_observations.json"
         self.store = JsonStore(self.path, self._default)
         self._lock = _shared_lock(self.path)
+        self.lock_path = self.path.with_name(".forex_observations.lock")
 
     @staticmethod
     def _default() -> dict[str, Any]:
@@ -65,18 +363,25 @@ class ForexObservationJournal:
         }
 
     def record(self, observation: Mapping[str, Any]) -> dict[str, Any]:
-        selected = deepcopy(dict(observation))
-        observation_id = str(selected.get("observation_id", ""))
-        if not _OBSERVATION_ID.fullmatch(observation_id):
+        raw_observation_id = observation.get("observation_id")
+        if (
+            not isinstance(raw_observation_id, str)
+            or not _OBSERVATION_ID.fullmatch(raw_observation_id)
+        ):
             raise TradingValidationError("forex_observation: invalid_id")
+        observation_id = raw_observation_id
+        selected = deepcopy(dict(observation))
         if selected.get("mode") != "FOREX_OBSERVATION_ONLY":
             raise TradingValidationError("forex_observation: invalid_mode")
         if bool(selected.get("paper_orders_sent")) or bool(
             selected.get("live_orders_sent")
         ):
             raise TradingValidationError("forex_observation: order_flag_forbidden")
-        with self._lock:
-            state = self._normalized(self.store.load())
+        with self._lock, exclusive_file_lock(
+            self.lock_path,
+            timeout_message="Forex observation journal lock timeout",
+        ):
+            state = self._normalized(self._load_strict())
             if not self.verify(state):
                 raise TradingValidationError("forex_observation: audit_chain_invalid")
             for previous in state["observations"]:
@@ -104,7 +409,7 @@ class ForexObservationJournal:
 
     def snapshot(self) -> dict[str, Any]:
         with self._lock:
-            return deepcopy(self._normalized(self.store.load()))
+            return deepcopy(self._normalized(self._load_strict()))
 
     def summary(self) -> dict[str, Any]:
         review = self.review()
@@ -153,6 +458,14 @@ class ForexObservationJournal:
         observed_times: list[datetime] = []
         expected_pairs = {pair.symbol for pair in MAJOR_FOREX_PAIRS}
         expected_candidate = ForexRegimeFilteredScanner(MAJOR_FOREX_PAIRS)
+        expected_candidate_implementation = (
+            forex_candidate_implementation_sha256()
+        )
+        expected_sample_contract = build_forex_paper_sample_contract(
+            scanner_policy=expected_candidate.policy,
+            paper_policy=ForexPaperPolicy(),
+            universe=expected_candidate.universe,
+        )
         candidate_forward_seen_count = 0
         candidate_forward_expected_count = 0
         candidate_forward_count = 0
@@ -197,12 +510,12 @@ class ForexObservationJournal:
                     market_days.update((observed_at.date().isoformat(),))
 
                 raw_candidate = item.get("development_candidate_v2")
-                candidate_expected = (
-                    is_qualified
-                    and expected_candidate.candidate_policy.forward_eligible(
+                is_post_freeze = (
+                    expected_candidate.candidate_policy.forward_eligible(
                         observed_at
                     )
                 )
+                candidate_expected = is_qualified and is_post_freeze
                 if candidate_expected:
                     candidate_forward_expected_count += 1
                 candidate_forward = (
@@ -295,6 +608,13 @@ class ForexObservationJournal:
                         )
                     }
                     contract_issues: list[str] = []
+                    if not is_post_freeze:
+                        contract_issues.append(
+                            "FORWARD_ELIGIBILITY_MISMATCH"
+                        )
+                    has_v2_provenance = (
+                        item.get("observation_schema_version") == 2
+                    )
                     for invalid, code in (
                         (
                             candidate.get("candidate_id")
@@ -305,6 +625,26 @@ class ForexObservationJournal:
                             candidate.get("policy_fingerprint_sha256")
                             != expected_candidate.candidate_policy.fingerprint_sha256,
                             "POLICY_FINGERPRINT_MISMATCH",
+                        ),
+                        (
+                            has_v2_provenance
+                            and candidate.get("implementation_sha256")
+                            != expected_candidate_implementation,
+                            "IMPLEMENTATION_FINGERPRINT_MISMATCH",
+                        ),
+                        (
+                            has_v2_provenance
+                            and candidate.get("paper_sample_contract_id")
+                            != expected_sample_contract["contract_id"],
+                            "PAPER_SAMPLE_CONTRACT_ID_MISMATCH",
+                        ),
+                        (
+                            has_v2_provenance
+                            and candidate.get(
+                                "paper_sample_contract_fingerprint_sha256"
+                            )
+                            != expected_sample_contract["fingerprint_sha256"],
+                            "PAPER_SAMPLE_CONTRACT_FINGERPRINT_MISMATCH",
                         ),
                         (
                             not isinstance(
@@ -629,16 +969,32 @@ class ForexObservationJournal:
 
     @classmethod
     def verify(cls, state: Mapping[str, Any]) -> bool:
-        if state.get("mode") != "FOREX_OBSERVATION_ONLY":
+        if (
+            type(state.get("schema_version")) is not int
+            or state.get("schema_version") != 1
+            or state.get("mode") != "FOREX_OBSERVATION_ONLY"
+        ):
             return False
         previous_hash = ""
         for sequence, raw in enumerate(list(state.get("observations", []) or []), 1):
             item = dict(raw or {})
-            if int(item.get("sequence", 0) or 0) != sequence:
+            if (
+                type(item.get("sequence")) is not int
+                or item["sequence"] != sequence
+            ):
                 return False
             if str(item.get("previous_hash", "")) != previous_hash:
                 return False
-            expected = cls._hash(item)
+            try:
+                expected = cls._hash(item)
+            except (
+                TypeError,
+                ValueError,
+                OverflowError,
+                RecursionError,
+                MemoryError,
+            ):
+                return False
             if str(item.get("observation_hash", "")) != expected:
                 return False
             previous_hash = expected
@@ -675,12 +1031,55 @@ class ForexObservationJournal:
     def _normalized(self, value: object) -> dict[str, Any]:
         state = self._default()
         if isinstance(value, dict):
+            state["schema_version"] = value.get("schema_version")
             state["mode"] = str(value.get("mode", ""))
             state["observations"] = [
                 dict(item) for item in list(value.get("observations", []) or [])
                 if isinstance(item, dict)
             ]
         return state
+
+    def _load_strict(self) -> object:
+        """Never turn a damaged evidence journal into a valid empty journal."""
+        if not self.path.exists():
+            return self._default()
+        try:
+            size = self.path.stat().st_size
+            if size <= 0 or size > self.MAX_SOURCE_BYTES:
+                raise TradingValidationError(
+                    "forex_observation: journal_size_invalid"
+                )
+            value = json.loads(self.path.read_text(encoding="utf-8"))
+            if not isinstance(value, dict):
+                raise TradingValidationError(
+                    "forex_observation: journal_schema_invalid"
+                )
+            observations = value.get("observations")
+            if (
+                type(value.get("schema_version")) is not int
+                or value.get("schema_version") != 1
+                or value.get("mode") != "FOREX_OBSERVATION_ONLY"
+                or set(value) != {"schema_version", "mode", "observations"}
+                or not isinstance(observations, list)
+                or len(observations) > self.MAX_OBSERVATIONS
+                or any(not isinstance(item, dict) for item in observations)
+            ):
+                raise TradingValidationError(
+                    "forex_observation: journal_schema_invalid"
+                )
+            return value
+        except TradingValidationError:
+            raise
+        except (
+            OSError,
+            UnicodeError,
+            json.JSONDecodeError,
+            RecursionError,
+            MemoryError,
+        ) as error:
+            raise TradingValidationError(
+                "forex_observation: journal_source_invalid"
+            ) from error
 
 
 class ForexObservationService:
@@ -711,14 +1110,30 @@ class ForexObservationService:
         observation_id: object,
         now: datetime | None = None,
         bundle: Any | None = None,
+        capture_origin: object = "MANUAL",
+        capture_attestation: object = None,
     ) -> dict[str, Any]:
         selected_id = str(observation_id or "").strip()
         if not _OBSERVATION_ID.fullmatch(selected_id):
             raise TradingValidationError("forex_observation: invalid_id")
         selected_now = aware_utc(now or datetime.now(timezone.utc), "now")
+        selected_origin = _capture_origin(capture_origin)
+        selected_attestation = _capture_attestation(
+            capture_attestation,
+            origin=selected_origin,
+        )
         positions_before = self.executor.positions()
         try:
             bundle = bundle or self.gateway.collect(now=selected_now)
+            source_histories = _canonical_source_histories(bundle.bars)
+            sample_contract = build_forex_paper_sample_contract(
+                scanner_policy=self.scanner.policy,
+                paper_policy=self.policy,
+                universe=self.scanner.universe,
+            )
+            implementation_sha256 = (
+                forex_candidate_implementation_sha256()
+            )
             all_quotes: dict[str, ForexQuote] = dict(bundle.quotes)
             for quote in bundle.conversion_quotes:
                 if quote.pair.symbol in all_quotes:
@@ -731,10 +1146,26 @@ class ForexObservationService:
                 now=selected_now,
                 max_age_seconds=self.policy.max_conversion_age_seconds,
             )
-            positions = self.executor.positions()
+            positions = positions_before
+            diagnostics = self._diagnostics(bundle.diagnostics)
+            account = self.executor.status(
+                quotes=bundle.quotes,
+                rates=rates,
+                now=selected_now,
+            )
+            source_evidence = _source_evidence(
+                source_histories,
+                quotes=bundle.quotes,
+                conversion_quotes=tuple(bundle.conversion_quotes),
+                contexts=bundle.contexts,
+                positions=positions,
+                account=account,
+                diagnostics=diagnostics,
+                captured_at=selected_now,
+            )
             assessments = self.scanner.scan(
                 quotes=bundle.quotes,
-                bars=bundle.bars,
+                bars=source_histories,
                 contexts=bundle.contexts,
                 positions={
                     symbol: position.side
@@ -742,7 +1173,6 @@ class ForexObservationService:
                 },
                 now=selected_now,
             )
-            account = self.executor.status(quotes=bundle.quotes, rates=rates)
             plan = self.coordinator.plan(
                 assessments=assessments,
                 quotes=bundle.quotes,
@@ -754,7 +1184,7 @@ class ForexObservationService:
             )
             development_assessments = self.development_scanner.scan(
                 quotes=bundle.quotes,
-                bars=bundle.bars,
+                bars=source_histories,
                 contexts=bundle.contexts,
                 positions={
                     symbol: position.side
@@ -774,7 +1204,6 @@ class ForexObservationService:
             development_instructions = list(
                 development_plan.get("instructions", []) or []
             )
-            diagnostics = self._diagnostics(bundle.diagnostics)
             market_open = bool(bundle.contexts) and all(
                 context.market_open for context in bundle.contexts.values()
             )
@@ -793,11 +1222,24 @@ class ForexObservationService:
             record = {
                 "status": "OBSERVATION_RECORDED",
                 "mode": "FOREX_OBSERVATION_ONLY",
+                "observation_schema_version": _OBSERVATION_SCHEMA_VERSION,
                 "observation_id": selected_id,
                 "observed_at": selected_now.isoformat(),
+                "capture_origin": selected_origin,
+                "capture_attestation": selected_attestation,
+                "captured_at": selected_now.isoformat(),
+                "source_cycle_id": selected_id,
+                "source_evidence": source_evidence,
                 "market_open": market_open,
                 "fully_cross_checked": (
-                    diagnostics["cross_checked_pair_count"] == len(MAJOR_FOREX_PAIRS)
+                    len(diagnostics["cross_checked_pairs"])
+                    == len(MAJOR_FOREX_PAIRS)
+                    and set(diagnostics["cross_checked_pairs"])
+                    == {pair.symbol for pair in MAJOR_FOREX_PAIRS}
+                    and all(
+                        context.independent_source_count >= 2
+                        for context in bundle.contexts.values()
+                    )
                 ),
                 "opening_blocks": opening_blocks,
                 "opening_blocks_by_pair": opening_blocks_by_pair,
@@ -811,6 +1253,11 @@ class ForexObservationService:
                     ),
                     "policy_fingerprint_sha256": (
                         self.development_scanner.candidate_policy.fingerprint_sha256
+                    ),
+                    "implementation_sha256": implementation_sha256,
+                    "paper_sample_contract_id": sample_contract["contract_id"],
+                    "paper_sample_contract_fingerprint_sha256": (
+                        sample_contract["fingerprint_sha256"]
                     ),
                     "forward_eligible": (
                         self.development_scanner.candidate_policy.forward_eligible(
@@ -870,6 +1317,8 @@ class ForexObservationService:
                 selected_id,
                 selected_now,
                 _safe_reason(error),
+                capture_origin=selected_origin,
+                capture_attestation=selected_attestation,
                 before=len(positions_before),
                 after=len(positions_after),
                 unchanged=positions_before == positions_after,
@@ -891,6 +1340,7 @@ class ForexObservationService:
                 value.get("primary_closed_bar_count", 0) or 0
             ),
             "cross_checked_pair_count": len(cross_checked),
+            "cross_checked_pairs": list(cross_checked),
             "calendar_ready": bool(value.get("calendar_ready")),
             "high_impact_event_count": int(
                 value.get("high_impact_event_count", 0) or 0
@@ -905,6 +1355,8 @@ class ForexObservationService:
         now: datetime,
         reason: str,
         *,
+        capture_origin: str,
+        capture_attestation: Mapping[str, Any],
         before: int,
         after: int,
         unchanged: bool,
@@ -912,8 +1364,13 @@ class ForexObservationService:
         return {
             "status": "DATA_BLOCKED",
             "mode": "FOREX_OBSERVATION_ONLY",
+            "observation_schema_version": _OBSERVATION_SCHEMA_VERSION,
             "observation_id": observation_id,
             "observed_at": now.isoformat(),
+            "capture_origin": capture_origin,
+            "capture_attestation": dict(capture_attestation),
+            "captured_at": now.isoformat(),
+            "source_cycle_id": observation_id,
             "market_open": False,
             "fully_cross_checked": False,
             "opening_blocks": [reason],
@@ -935,4 +1392,8 @@ class ForexObservationService:
         }
 
 
-__all__ = ["ForexObservationJournal", "ForexObservationService"]
+__all__ = [
+    "ForexObservationJournal",
+    "ForexObservationService",
+    "forex_candidate_implementation_sha256",
+]

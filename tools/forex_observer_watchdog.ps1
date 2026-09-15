@@ -314,15 +314,48 @@ function Invoke-ForexPaperCycle {
     Remove-Item -LiteralPath $outputPath -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $errorPath -Force -ErrorAction SilentlyContinue
     $runnerArgument = '"' + $runnerPath + '"'
-    $process = Start-Process `
-        -FilePath $pythonPath `
-        -ArgumentList $runnerArgument `
-        -WorkingDirectory $projectPath `
-        -WindowStyle Hidden `
-        -RedirectStandardOutput $outputPath `
-        -RedirectStandardError $errorPath `
-        -Wait `
-        -PassThru
+    $scheduledNonce = [Guid]::NewGuid().ToString("N")
+    $previousNonce = [Environment]::GetEnvironmentVariable(
+        "JARVIS_OS_FOREX_SCHEDULED_NONCE",
+        "Process"
+    )
+    $previousParent = [Environment]::GetEnvironmentVariable(
+        "JARVIS_OS_FOREX_WATCHDOG_PID",
+        "Process"
+    )
+    try {
+        [Environment]::SetEnvironmentVariable(
+            "JARVIS_OS_FOREX_SCHEDULED_NONCE",
+            $scheduledNonce,
+            "Process"
+        )
+        [Environment]::SetEnvironmentVariable(
+            "JARVIS_OS_FOREX_WATCHDOG_PID",
+            [string]$PID,
+            "Process"
+        )
+        $process = Start-Process `
+            -FilePath $pythonPath `
+            -ArgumentList $runnerArgument `
+            -WorkingDirectory $projectPath `
+            -WindowStyle Hidden `
+            -RedirectStandardOutput $outputPath `
+            -RedirectStandardError $errorPath `
+            -Wait `
+            -PassThru
+    }
+    finally {
+        [Environment]::SetEnvironmentVariable(
+            "JARVIS_OS_FOREX_SCHEDULED_NONCE",
+            $previousNonce,
+            "Process"
+        )
+        [Environment]::SetEnvironmentVariable(
+            "JARVIS_OS_FOREX_WATCHDOG_PID",
+            $previousParent,
+            "Process"
+        )
+    }
     if (-not (Test-Path -LiteralPath $outputPath -PathType Leaf)) {
         Write-ObserverLog "PAPER cycle produced no result; exit $($process.ExitCode)."
         return

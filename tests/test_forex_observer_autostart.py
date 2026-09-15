@@ -1,4 +1,8 @@
+import os
 from pathlib import Path
+from unittest.mock import patch
+
+from tools import run_forex_paper_cycle as paper_runner
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -7,6 +11,9 @@ INSTALLER = (
 ).read_text(encoding="utf-8")
 WATCHDOG = (
     ROOT / "tools" / "forex_observer_watchdog.ps1"
+).read_text(encoding="utf-8")
+PAPER_RUNNER = (
+    ROOT / "tools" / "run_forex_paper_cycle.py"
 ).read_text(encoding="utf-8")
 
 
@@ -84,6 +91,9 @@ def test_watchdog_has_bounded_interval_and_single_instance() -> None:
 
 def test_watchdog_calls_only_the_local_paper_entry_point() -> None:
     assert '"tools\\run_forex_paper_cycle.py"' in WATCHDOG
+    assert "JARVIS_OS_FOREX_SCHEDULED_NONCE" in WATCHDOG
+    assert "JARVIS_OS_FOREX_WATCHDOG_PID" in WATCHDOG
+    assert '[Guid]::NewGuid().ToString("N")' in WATCHDOG
     assert '"tools\\run_forex_paper_protection.py"' in WATCHDOG
     assert "forex_paper_last.json" in WATCHDOG
     assert "ForexPaperExecutionEngine" not in WATCHDOG
@@ -109,6 +119,50 @@ def test_watchdog_calls_only_the_local_paper_entry_point() -> None:
         "Restore-PreviousProtectionState\n"
         '    Write-ObserverLog "Forex runtime started'
     ) in WATCHDOG
+
+
+def test_manual_runner_defaults_to_manual_without_watchdog_context() -> None:
+    assert '"--capture-origin"' not in PAPER_RUNNER
+    assert "_watchdog_ancestor_matches(expected_watchdog)" in PAPER_RUNNER
+    assert "psutil.Process().parents()[:8]" in PAPER_RUNNER
+    assert 'executable in {"powershell.exe", "pwsh.exe"}' in PAPER_RUNNER
+    assert "_SCHEDULED_NONCE.fullmatch(nonce)" in PAPER_RUNNER
+    assert '"LOCAL_WATCHDOG_ANCESTRY_NONCE_V1"' in PAPER_RUNNER
+    assert 'return "MANUAL"' in PAPER_RUNNER
+
+
+def test_runner_accepts_only_a_matching_watchdog_ancestor_context() -> None:
+    with patch.dict(os.environ, {}, clear=True):
+        origin, attestation = paper_runner._capture_context()
+    assert origin == "MANUAL"
+    assert attestation == {"kind": "MANUAL_DIRECT_V1", "verified": False}
+
+    with patch.dict(os.environ, {
+        "JARVIS_OS_FOREX_SCHEDULED_NONCE": "a" * 32,
+        "JARVIS_OS_FOREX_WATCHDOG_PID": str(os.getppid() + 1),
+    }, clear=True):
+        origin, _ = paper_runner._capture_context()
+    assert origin == "MANUAL"
+
+    with patch.object(
+        paper_runner,
+        "_watchdog_ancestor_matches",
+        return_value=True,
+    ):
+        with patch.dict(os.environ, {
+            "JARVIS_OS_FOREX_SCHEDULED_NONCE": "b" * 32,
+            "JARVIS_OS_FOREX_WATCHDOG_PID": "1234",
+        }, clear=True):
+            origin, attestation = paper_runner._capture_context()
+            assert "JARVIS_OS_FOREX_SCHEDULED_NONCE" not in os.environ
+            assert "JARVIS_OS_FOREX_WATCHDOG_PID" not in os.environ
+    assert origin == "SCHEDULED_FORWARD"
+    assert attestation["verified"] is True
+    assert attestation["trust_level"] == "BEST_EFFORT_LOCAL_PROCESS"
+    assert attestation["verified_scope"] == (
+        "WATCHDOG_ANCESTRY_AND_NONCE_FORMAT"
+    )
+    assert attestation["watchdog_process_id"] == 1234
 
 
 def test_watchdog_starts_only_the_configured_mt5_binary() -> None:

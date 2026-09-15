@@ -3,6 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+import multiprocessing
 import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -20,9 +21,11 @@ from app.trading.forex_models import (
 from app.trading.forex_observation import (
     ForexObservationJournal,
     ForexObservationService,
+    forex_candidate_implementation_sha256,
 )
 from app.trading.control_center import TradingControlCenter
 from app.trading.models import TradingValidationError
+from app.trading.forex_sample_contract import build_forex_paper_sample_contract
 
 
 UTC = timezone.utc
@@ -35,6 +38,21 @@ BASE = {
     "USD_CAD": Decimal("1.3500"),
     "NZD_USD": Decimal("0.6100"),
 }
+
+
+def _parallel_journal_writer(
+    project_root: str,
+    observation_id: str,
+    start_event: object,
+) -> None:
+    start_event.wait()
+    ForexObservationJournal(project_root).record({
+        "status": "OBSERVATION_RECORDED",
+        "mode": "FOREX_OBSERVATION_ONLY",
+        "observation_id": observation_id,
+        "paper_orders_sent": False,
+        "live_orders_sent": False,
+    })
 
 
 def bundle(
@@ -53,7 +71,7 @@ def bundle(
         bars[pair.symbol] = tuple(
             ForexBar.create(
                 pair=pair,
-                timestamp=now - timedelta(seconds=(30 - index) * 900),
+                timestamp=now - timedelta(seconds=(31 - index) * 900),
                 open=price,
                 high=price + pair.pip_size,
                 low=price - pair.pip_size,
@@ -145,6 +163,43 @@ class ForexObservationTests(unittest.TestCase):
         )
 
         self.assertEqual(result["status"], "OBSERVATION_RECORDED")
+        self.assertEqual(result["observation_schema_version"], 2)
+        self.assertEqual(result["capture_origin"], "MANUAL")
+        self.assertEqual(
+            result["capture_attestation"],
+            {"kind": "MANUAL_DIRECT_V1", "verified": False},
+        )
+        self.assertEqual(result["captured_at"], result["observed_at"])
+        self.assertEqual(
+            result["source_cycle_id"],
+            "forex-observation-0001",
+        )
+        evidence = result["source_evidence"]
+        self.assertEqual(evidence["schema_version"], 1)
+        self.assertEqual(evidence["timeframe"], "M15_CLOSED_BARS")
+        self.assertEqual(evidence["pair_count"], 7)
+        self.assertEqual(
+            evidence["bar_counts"],
+            {pair.symbol: 31 for pair in MAJOR_FOREX_PAIRS},
+        )
+        self.assertEqual(
+            set(evidence["latest_bar_open_at"]),
+            {pair.symbol for pair in MAJOR_FOREX_PAIRS},
+        )
+        self.assertTrue(evidence["latest_bars_closed"])
+        self.assertTrue(evidence["bars_strictly_ordered"])
+        self.assertRegex(evidence["input_sha256"], r"^[0-9a-f]{64}$")
+        for field in (
+            "quote_snapshot_sha256",
+            "context_snapshot_sha256",
+            "position_snapshot_sha256",
+            "account_snapshot_sha256",
+            "diagnostics_snapshot_sha256",
+            "decision_input_sha256",
+        ):
+            self.assertRegex(evidence[field], r"^[0-9a-f]{64}$")
+        self.assertFalse(evidence["recovery_replay"])
+        self.assertFalse(evidence["idempotent_replay"])
         self.assertEqual(result["proposed_plan"]["status"], "ENTRIES_READY")
         self.assertEqual(result["would_open_count"], 1)
         self.assertEqual(result["execution"]["status"], "NOT_EXECUTED")
@@ -152,6 +207,19 @@ class ForexObservationTests(unittest.TestCase):
         self.assertEqual(candidate["status"], "FORWARD_OBSERVATION_RECORDED")
         self.assertFalse(candidate["forward_eligible"])
         self.assertEqual(candidate["execution"]["status"], "NOT_EXECUTED")
+        self.assertEqual(
+            candidate["implementation_sha256"],
+            forex_candidate_implementation_sha256(),
+        )
+        sample_contract = build_forex_paper_sample_contract()
+        self.assertEqual(
+            candidate["paper_sample_contract_id"],
+            sample_contract["contract_id"],
+        )
+        self.assertEqual(
+            candidate["paper_sample_contract_fingerprint_sha256"],
+            sample_contract["fingerprint_sha256"],
+        )
         self.assertFalse(candidate["paper_orders_sent"])
         self.assertFalse(candidate["live_orders_sent"])
         self.assertTrue(result["positions_unchanged"])
@@ -164,6 +232,96 @@ class ForexObservationTests(unittest.TestCase):
         self.assertTrue(
             (self.root / "data/trading/forex_observations.json").exists()
         )
+
+    def test_decision_fingerprint_binds_quotes_beyond_closed_bars(self) -> None:
+        original = bundle(self.now)
+        changed_quotes = dict(original.quotes)
+        previous = changed_quotes["EUR_USD"]
+        changed_quotes["EUR_USD"] = ForexQuote.create(
+            pair=previous.pair,
+            bid=previous.bid + previous.pair.pip_size,
+            ask=previous.ask + previous.pair.pip_size,
+            timestamp=previous.timestamp,
+        )
+        changed = ForexDataBundle(
+            quotes=changed_quotes,
+            bars=original.bars,
+            contexts=original.contexts,
+            conversion_quotes=original.conversion_quotes,
+            diagnostics=original.diagnostics,
+        )
+
+        first = self.service().observe_once(
+            observation_id="forex-source-fingerprint-first",
+            now=self.now,
+            bundle=original,
+        )
+        second = self.service().observe_once(
+            observation_id="forex-source-fingerprint-second",
+            now=self.now,
+            bundle=changed,
+        )
+
+        first_evidence = first["source_evidence"]
+        second_evidence = second["source_evidence"]
+        self.assertEqual(
+            first_evidence["input_sha256"],
+            second_evidence["input_sha256"],
+        )
+        self.assertNotEqual(
+            first_evidence["quote_snapshot_sha256"],
+            second_evidence["quote_snapshot_sha256"],
+        )
+        self.assertNotEqual(
+            first_evidence["decision_input_sha256"],
+            second_evidence["decision_input_sha256"],
+        )
+
+    def test_parallel_processes_do_not_lose_journal_records(self) -> None:
+        context = multiprocessing.get_context("spawn")
+        start_event = context.Event()
+        processes = [
+            context.Process(
+                target=_parallel_journal_writer,
+                args=(
+                    str(self.root),
+                    f"forex-parallel-process-{index:04d}",
+                    start_event,
+                ),
+            )
+            for index in range(8)
+        ]
+        for process in processes:
+            process.start()
+        start_event.set()
+        for process in processes:
+            process.join(timeout=20)
+
+        self.assertEqual([process.exitcode for process in processes], [0] * 8)
+        state = ForexObservationJournal(self.root).snapshot()
+        self.assertTrue(ForexObservationJournal.verify(state))
+        self.assertEqual(len(state["observations"]), 8)
+        self.assertEqual(
+            {item["observation_id"] for item in state["observations"]},
+            {f"forex-parallel-process-{index:04d}" for index in range(8)},
+        )
+
+    def test_empty_lock_file_after_crash_is_repaired(self) -> None:
+        journal = ForexObservationJournal(self.root)
+        journal.lock_path.parent.mkdir(parents=True, exist_ok=True)
+        journal.lock_path.write_bytes(b"")
+
+        saved = journal.record({
+            "status": "OBSERVATION_RECORDED",
+            "mode": "FOREX_OBSERVATION_ONLY",
+            "observation_id": "forex-after-empty-lock-file",
+            "paper_orders_sent": False,
+            "live_orders_sent": False,
+        })
+
+        self.assertEqual(saved["sequence"], 1)
+        self.assertGreaterEqual(journal.lock_path.stat().st_size, 1)
+        self.assertTrue(journal.verify(journal.snapshot()))
 
     def test_duplicate_id_is_idempotent(self) -> None:
         service = self.service()
@@ -193,6 +351,32 @@ class ForexObservationTests(unittest.TestCase):
             {"EUR_USD": ["HIGH_IMPACT_EVENT_WINDOW"]},
         )
 
+    def test_duplicate_crosscheck_names_do_not_cover_seven_pairs(self) -> None:
+        original = bundle(self.now)
+        duplicated = ForexDataBundle(
+            quotes=original.quotes,
+            bars=original.bars,
+            contexts=original.contexts,
+            conversion_quotes=original.conversion_quotes,
+            diagnostics={
+                **original.diagnostics,
+                "cross_checked_pairs": ("EUR_USD",) * 7,
+            },
+        )
+
+        result = self.service().observe_once(
+            observation_id="forex-duplicate-crosscheck-pairs",
+            now=self.now,
+            bundle=duplicated,
+        )
+
+        self.assertFalse(result["fully_cross_checked"])
+        self.assertEqual(result["data"]["cross_checked_pair_count"], 7)
+        self.assertEqual(
+            result["data"]["cross_checked_pairs"],
+            ["EUR_USD"] * 7,
+        )
+
     def test_data_failure_is_recorded_fail_closed(self) -> None:
         service = self.service(failing=True)
         result = service.observe_once(
@@ -201,6 +385,18 @@ class ForexObservationTests(unittest.TestCase):
         )
 
         self.assertEqual(result["status"], "DATA_BLOCKED")
+        self.assertEqual(result["observation_schema_version"], 2)
+        self.assertEqual(result["capture_origin"], "MANUAL")
+        self.assertEqual(
+            result["capture_attestation"],
+            {"kind": "MANUAL_DIRECT_V1", "verified": False},
+        )
+        self.assertEqual(result["captured_at"], result["observed_at"])
+        self.assertEqual(
+            result["source_cycle_id"],
+            "forex-observation-blocked",
+        )
+        self.assertNotIn("source_evidence", result)
         self.assertIn("SOURCE_UNAVAILABLE", result["opening_blocks"][0])
         self.assertEqual(result["opening_blocks_by_pair"], {})
         self.assertTrue(result["positions_unchanged"])
@@ -221,6 +417,23 @@ class ForexObservationTests(unittest.TestCase):
         self.assertEqual(summary["status"], "BLOCKED")
         self.assertFalse(summary["audit_chain_valid"])
         self.assertFalse(summary["paper_promotion_ready"])
+
+    def test_corrupt_journal_is_not_replaced_with_empty_history(self) -> None:
+        service = self.service()
+        service.observe_once(
+            observation_id="forex-observation-valid-before-corruption",
+            now=self.now,
+        )
+        journal_path = self.root / "data/trading/forex_observations.json"
+        journal_path.write_text("{broken", encoding="utf-8")
+
+        with self.assertRaises(TradingValidationError):
+            service.observe_once(
+                observation_id="forex-observation-after-corruption",
+                now=self.now + timedelta(minutes=15),
+            )
+
+        self.assertEqual(journal_path.read_text(encoding="utf-8"), "{broken")
 
     def test_observation_threshold_is_advisory_and_research_gate_stays_closed(self) -> None:
         journal = ForexObservationJournal(self.root)
@@ -336,6 +549,36 @@ class ForexObservationTests(unittest.TestCase):
             "Raport nie może zmienić stanu PAPER/LIVE ani sam awansować V2",
             rendered,
         )
+
+    def test_review_rejects_true_forward_flag_at_or_before_freeze(self) -> None:
+        service = self.service()
+        frozen = service.development_scanner.candidate_policy.frozen_after
+        for index, observed in enumerate((
+            frozen - timedelta(minutes=15),
+            frozen,
+        )):
+            original = service.observe_once(
+                observation_id=f"forex-freeze-source-{index:04d}",
+                now=observed,
+            )
+            invalid = deepcopy(original)
+            invalid_id = f"forex-freeze-invalid-{index:04d}"
+            invalid["observation_id"] = invalid_id
+            invalid["source_cycle_id"] = invalid_id
+            invalid["development_candidate_v2"]["forward_eligible"] = True
+            service.journal.record(invalid)
+
+        candidate = service.journal.review()["development_candidate_v2"]
+
+        self.assertEqual(candidate["expected_forward_observation_count"], 0)
+        self.assertEqual(candidate["seen_forward_observation_count"], 2)
+        self.assertEqual(candidate["valid_forward_observation_count"], 0)
+        self.assertEqual(candidate["invalid_forward_observation_count"], 2)
+        self.assertEqual(
+            candidate["contract_issues"],
+            {"FORWARD_ELIGIBILITY_MISMATCH": 2},
+        )
+        self.assertFalse(candidate["evidence_valid"])
 
     def test_review_excludes_unqualified_candidate_without_invalidating_it(
         self,

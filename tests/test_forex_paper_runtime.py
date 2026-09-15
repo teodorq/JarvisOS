@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+import hashlib
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
@@ -32,6 +33,17 @@ BASE = {
 }
 
 
+def _scheduled_attestation(seed: str) -> dict[str, object]:
+    return {
+        "kind": "LOCAL_WATCHDOG_ANCESTRY_NONCE_V1",
+        "verified": True,
+        "trust_level": "BEST_EFFORT_LOCAL_PROCESS",
+        "verified_scope": "WATCHDOG_ANCESTRY_AND_NONCE_FORMAT",
+        "nonce_sha256": hashlib.sha256(seed.encode("utf-8")).hexdigest(),
+        "watchdog_process_id": 1234,
+    }
+
+
 def _bundle(
     now: datetime,
     *,
@@ -42,7 +54,7 @@ def _bundle(
     bars = {}
     contexts = {}
     for pair in MAJOR_FOREX_PAIRS:
-        prices = [BASE[pair.symbol]] * 31
+        prices = [BASE[pair.symbol]] * 211
         if pair.symbol == "EUR_USD" and eur_direction == "UP":
             prices[-1] += pair.pip_size * Decimal("20")
         elif pair.symbol == "EUR_USD" and eur_direction == "DOWN":
@@ -50,7 +62,7 @@ def _bundle(
         bars[pair.symbol] = tuple(
             ForexBar.create(
                 pair=pair,
-                timestamp=now - timedelta(minutes=15 * (30 - index)),
+                timestamp=now - timedelta(minutes=15 * (211 - index)),
                 open=price,
                 high=price + pair.pip_size,
                 low=price - pair.pip_size,
@@ -88,7 +100,7 @@ def _bundle(
         diagnostics={
             "primary_provider": "MT5_DEMO",
             "primary_pair_count": 7,
-            "primary_closed_bar_count": 31,
+            "primary_closed_bar_count": 211,
             "cross_checked_pairs": tuple(quotes),
             "calendar_ready": True,
             "high_impact_event_count": 0,
@@ -140,6 +152,11 @@ class FakeGateway:
                 "cross_checked_pairs": tuple(selected.quotes)[1:],
             },
         )
+
+
+class FailingForwardEvidence:
+    def refresh(self, *, generated_at: datetime) -> dict:
+        raise OSError("simulated report write failure")
 
 
 def _ready_journal(root: Path) -> ForexObservationJournal:
@@ -214,16 +231,89 @@ class ForexPaperRuntimeTests(unittest.TestCase):
             journal=_ready_journal(self.root),
         )
 
-        result = runtime.run_once(cycle_id="enabled-cycle", now=NOW)
+        result = runtime.run_once(
+            cycle_id="enabled-cycle",
+            now=NOW,
+            capture_origin="SCHEDULED_FORWARD",
+            capture_attestation=_scheduled_attestation("enabled-cycle"),
+        )
 
         self.assertEqual(result["status"], "PAPER_CYCLE_COMPLETED")
         self.assertEqual(gateway.calls, 1)
         self.assertEqual(result["paper"]["execution"]["status"], "APPLIED")
         self.assertEqual(result["paper"]["account"]["position_count"], 1)
+        self.assertEqual(
+            result["forward_evidence"]["status"],
+            "COLLECTING_FORWARD_EVIDENCE",
+        )
+        observation = result["observation"]
+        self.assertEqual(observation["observation_schema_version"], 2)
+        self.assertEqual(observation["capture_origin"], "SCHEDULED_FORWARD")
+        self.assertEqual(observation["captured_at"], observation["observed_at"])
+        self.assertEqual(
+            observation["source_cycle_id"],
+            "paper-observation-enabled-cycle",
+        )
+        self.assertTrue(observation["source_evidence"]["latest_bars_closed"])
+        stored = ForexObservationJournal(self.root).snapshot()["observations"]
+        self.assertEqual(stored[-1]["capture_origin"], "SCHEDULED_FORWARD")
         self.assertTrue(result["unvalidated_strategy_demo_override"])
         self.assertFalse(result["broker_orders_sent"])
         self.assertFalse(result["live_orders_sent"])
         self.assertFalse(result["real_money_access"])
+
+    def test_post_freeze_scheduled_cycle_persists_strict_forward_report(
+        self,
+    ) -> None:
+        observed = datetime(2026, 8, 24, 10, 0, tzinfo=UTC)
+        result = ForexDemoPaperRuntime(
+            self.root,
+            settings=self.settings(),
+            gateway=FakeGateway(),  # type: ignore[arg-type]
+            journal=_ready_journal(self.root),
+        ).run_once(
+            cycle_id="strict-forward-cycle",
+            now=observed,
+            capture_origin="SCHEDULED_FORWARD",
+            capture_attestation=_scheduled_attestation(
+                "strict-forward-cycle"
+            ),
+        )
+
+        report = result["forward_evidence"]
+        self.assertEqual(result["status"], "PAPER_CYCLE_COMPLETED")
+        self.assertEqual(report["status"], "COLLECTING_FORWARD_EVIDENCE")
+        self.assertEqual(report["accepted_cycle_count"], 1)
+        self.assertEqual(report["invalid_cycle_count"], 0)
+        self.assertFalse(report["strategy_performance_validated"])
+        self.assertTrue(
+            (self.root / "data/trading/research/forward_v2_latest.json").is_file()
+        )
+
+    def test_report_write_failure_does_not_block_local_paper_cycle(self) -> None:
+        result = ForexDemoPaperRuntime(
+            self.root,
+            settings=self.settings(),
+            gateway=FakeGateway(),  # type: ignore[arg-type]
+            journal=_ready_journal(self.root),
+            forward_evidence=FailingForwardEvidence(),  # type: ignore[arg-type]
+        ).run_once(
+            cycle_id="report-write-failure",
+            now=NOW,
+            capture_origin="SCHEDULED_FORWARD",
+            capture_attestation=_scheduled_attestation(
+                "report-write-failure"
+            ),
+        )
+
+        self.assertEqual(result["status"], "PAPER_CYCLE_COMPLETED")
+        self.assertEqual(result["paper"]["execution"]["status"], "APPLIED")
+        self.assertEqual(
+            result["forward_evidence"]["status"],
+            "REPORT_WRITE_FAILED",
+        )
+        self.assertFalse(result["broker_orders_sent"])
+        self.assertFalse(result["live_orders_sent"])
 
     def test_current_incomplete_cross_check_blocks_before_paper_execution(self) -> None:
         gateway = FakeGateway(fully_cross_checked=False)

@@ -300,6 +300,36 @@ Its read-only forward scorecard separates unqualified post-freeze cycles from
 invalid candidate contracts and compares base entry signals with the entries
 retained or filtered by V2. Counts never validate performance, promote the
 candidate, or enable PAPER/LIVE execution.
+New observation schema 2 additionally binds every cycle to its origin, exact
+closed-M15 fingerprint, combined decision-input fingerprint (quotes, safety
+contexts, positions, PAPER account inputs and diagnostics), frozen V2
+implementation fingerprint and current PAPER sample contract. Only post-freeze
+cycles that pass the local watchdog ancestry/nonce check are labelled
+`SCHEDULED_FORWARD` and can enter the new evidence sample. This provenance check
+prevents an ordinary manual launch from counting, but is deliberately documented
+as best-effort local provenance rather than a cryptographic boundary against code
+already running as the same Windows user. Manual runs, recovery/replay, blocked
+data, an open market bar, an incomplete second-source check and duplicate input
+snapshots/nonces are explicitly excluded. Legacy observations remain available
+in the tamper-evident journal but are never retroactively upgraded to the stricter
+contract.
+
+Every automatic PAPER cycle atomically refreshes the ignored report at
+`data/trading/research/forward_v2_latest.json`. It records the exact journal
+cutoff/head hash, accepted observation hashes, exclusion reasons and its own
+content SHA-256. Cross-process locks prevent two local cycles from losing a
+journal entry, and a stale report cannot replace a newer cutoff. At the bounded
+journal-retention limit the strict report stops instead of silently treating a
+truncated window as complete evidence. The signal-observation sample needs at
+least 20 unique cycles
+over 3 market days; even then it does not validate profit or change V1/V2. It can
+also be refreshed or reviewed without writing:
+
+```powershell
+.\.venv\Scripts\python.exe .\tools\run_forex_forward_evidence.py
+.\.venv\Scripts\python.exe .\tools\run_forex_forward_evidence.py --review
+```
+
 If one M15 candle touches both stop and target, the backtest records the stop
 first. Gaps through a stop use the worse opening execution price, while target
 gaps are capped at the target. These deliberately conservative assumptions

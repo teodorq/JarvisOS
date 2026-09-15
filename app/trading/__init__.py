@@ -13,6 +13,10 @@ from app.trading.forex_candidate_v2 import (
 )
 from app.trading.forex_autopilot import ForexPaperAutopilot
 from app.trading.forex_executor import ForexPaperExecutionEngine
+from app.trading.forex_forward_evidence import (
+    ForexV2ForwardEvidenceReport,
+    build_forex_v2_forward_evidence_report,
+)
 from app.trading.forex_historical import (
     BidirectionalForexHistoricalBacktester,
     FixedForexCrossoverSignalGenerator,
@@ -111,6 +115,7 @@ __all__ = [
     "ForexPaperDashboard",
     "ForexPaperAutopilot",
     "ForexPaperExecutionEngine",
+    "ForexV2ForwardEvidenceReport",
     "ForexPaperInstruction",
     "ForexPaperLedger",
     "ForexPaperPolicy",
@@ -147,6 +152,7 @@ __all__ = [
     "USD_PLN_CONVERSION_PAIR",
     "major_pair",
     "build_forex_paper_performance_review",
+    "build_forex_v2_forward_evidence_report",
     "build_forex_paper_sample_contract",
     "is_superseded_sample_contract",
     "build_forex_strategy_cohort_review",

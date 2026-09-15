@@ -17,6 +17,7 @@ from app.trading.forex_coordinator import ForexPaperCoordinator
 from app.trading.forex_activity import ForexPaperActivityFeed
 from app.trading.forex_dashboard import ForexPaperDashboard
 from app.trading.forex_executor import ForexPaperExecutionEngine
+from app.trading.forex_forward_evidence import ForexV2ForwardEvidenceReport
 from app.trading.forex_models import MAJOR_FOREX_PAIRS
 from app.trading.forex_observation import ForexObservationJournal
 from app.trading.forex_research_status import ForexHistoricalResearchGate
@@ -56,6 +57,9 @@ class TradingControlCenter:
         )
         self.forex_observations = ForexObservationJournal(self.project_root)
         self.forex_research = ForexHistoricalResearchGate(self.project_root)
+        self.forex_forward_evidence = ForexV2ForwardEvidenceReport(
+            self.project_root
+        )
         self.forex_strategy_cohorts = ForexStrategyCohortReview(
             self.project_root
         )
@@ -65,6 +69,7 @@ class TradingControlCenter:
         data_readiness = self.forex_data.readiness()
         observations = self.forex_observations.summary()
         research = self.forex_research.status()
+        forward_evidence = self.forex_forward_evidence.review()
         forex_account = self.forex_executor.status()
         strategy_cohorts = self.forex_strategy_cohorts.review()
         runtime_cycle = self._last_runtime_cycle()
@@ -109,6 +114,10 @@ class TradingControlCenter:
                 "forex_cross_source_gate": True,
                 "forex_event_risk_gate": True,
                 "forex_tamper_evident_observation": observations["audit_chain_valid"],
+                "forex_v2_forward_evidence_report": bool(
+                    forward_evidence.get("source_state_valid") is True
+                    and not forward_evidence.get("invalid_cycle_count", 0)
+                ),
                 "kill_switch": True,
                 "forex_data_configuration_complete": data_readiness["complete"],
                 "external_market_data": False,
@@ -135,6 +144,7 @@ class TradingControlCenter:
                 "data_configuration": data_readiness,
                 "observation": observations,
                 "historical_research": research,
+                "v2_forward_evidence": forward_evidence,
                 "paper_account": forex_account,
                 "strategy_cohort_review": strategy_cohorts,
                 "last_runtime_cycle": runtime_cycle,
@@ -330,6 +340,7 @@ class TradingControlCenter:
 
     def format_observation_review(self) -> str:
         review = self.forex_observations.review()
+        strict_forward = self.forex_forward_evidence.review()
         remaining = int(review["remaining_qualified_observations"])
         remaining_days = int(review["remaining_market_days"])
         blocks = review["distributions"]["opening_blocks"]
@@ -353,6 +364,14 @@ class TradingControlCenter:
         candidate_contract = (
             "prawidłowy" if candidate["evidence_valid"] else "NIEPRAWIDŁOWY"
         )
+        strict_exclusions = ", ".join(
+            f"{code}: {count}"
+            for code, count in strict_forward.get("exclusions", {}).items()
+        ) or "brak"
+        strict_issues = ", ".join(
+            f"{code}: {count}"
+            for code, count in strict_forward.get("invalid_issues", {}).items()
+        ) or "brak"
         safety = review["safety"]
         if review["status"] == "READY_FOR_OWNER_REVIEW":
             decision = (
@@ -377,13 +396,21 @@ class TradingControlCenter:
             f"{review['qualified_market_day_count']}/{review['minimum_market_days']}.\n"
             f"• Przyczyny blokad: {block_text}.\n"
             f"• Proponowane decyzje (niewykonane): {action_text}.\n"
-            f"• Kandydat V2 forward: ważne "
+            f"• Kandydat V2 forward — historyczny scorecard: ważne "
             f"{candidate['valid_forward_observation_count']}/"
             f"{candidate['expected_forward_observation_count']}; odebrane "
             f"{candidate['seen_forward_observation_count']}; wykluczone "
             f"{candidate['excluded_forward_observation_count']} "
             f"({candidate_exclusions}); kontrakt {candidate_contract} "
             f"({candidate_issues}).\n"
+            f"• Ścisła próbka V2 od nowego kontraktu: "
+            f"{strict_forward.get('accepted_cycle_count', 0)}/"
+            f"{strict_forward.get('minimum_accepted_cycle_count', 20)} cykli; "
+            f"dni {strict_forward.get('accepted_market_day_count', 0)}/"
+            f"{strict_forward.get('minimum_market_day_count', 3)}; "
+            f"status {strict_forward.get('status', 'BRAK')}.\n"
+            f"• Ścisłe wykluczenia: {strict_exclusions}; błędy: "
+            f"{strict_issues}.\n"
             f"• Filtr V2: sygnały bazowe "
             f"{comparison['base_entry_signal_count']}; zachowane "
             f"{comparison['retained_entry_signal_count']}; odfiltrowane "
@@ -395,7 +422,8 @@ class TradingControlCenter:
             f"zlecenia PAPER: {'wykryte' if safety['paper_orders_detected'] else '0'}; "
             f"zlecenia LIVE: {'wykryte' if safety['live_orders_detected'] else '0'}; "
             f"sieć zleceń: {'wykryta' if safety['order_network_access_detected'] else 'wyłączona'}.\n"
-            "• Raport nie może zmienić stanu PAPER/LIVE ani sam awansować V2."
+            "• Raport nie może zmienić stanu PAPER/LIVE ani sam awansować V2; "
+            "próbka sygnałowa nie potwierdza jeszcze wyniku finansowego."
         )
 
     def format_status(self) -> str:
