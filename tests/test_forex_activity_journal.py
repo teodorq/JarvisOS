@@ -13,6 +13,11 @@ from app.trading.forex_candidate_v2 import ForexRegimeCandidatePolicy
 from app.trading.forex_forward_evidence import (
     expected_candidate_implementation_sha256,
 )
+from app.trading.forex_forward_review import (
+    ForexV2OwnerReviewPacket,
+    build_forex_v2_owner_review_packet,
+    verify_forex_v2_owner_review_packet,
+)
 
 
 def _settings() -> ForexDataSettings:
@@ -128,6 +133,13 @@ def _complete_forward_report() -> dict:
     return report
 
 
+def _attach_complete_review(payload: dict, root: Path) -> dict:
+    report = _complete_forward_report()
+    payload["forward_evidence"] = report
+    payload["forward_review"] = ForexV2OwnerReviewPacket(root).refresh(report)
+    return payload
+
+
 def test_closed_gui_events_are_delivered_oldest_first_after_start() -> None:
     with TemporaryDirectory() as temporary:
         root = Path(temporary)
@@ -164,12 +176,10 @@ def test_completed_forward_sample_is_notified_once_with_trade_event() -> None:
     with TemporaryDirectory() as temporary:
         root = Path(temporary)
         journal = ForexPaperActivityJournal(root)
-        first = _payload(60, action="OPEN_LONG")
-        first["forward_evidence"] = _complete_forward_report()
+        first = _attach_complete_review(_payload(60, action="OPEN_LONG"), root)
 
         recorded = journal.record(first)
-        repeated = _payload(61)
-        repeated["forward_evidence"] = _complete_forward_report()
+        repeated = _attach_complete_review(_payload(61), root)
         duplicate_milestone = journal.record(repeated)
         events = journal.events(limit=10)
 
@@ -213,6 +223,103 @@ def test_tampered_forward_completion_never_creates_review_milestone() -> None:
 
         assert result == {"status": "RECORDED", "events_recorded": 0}
         assert journal.events(limit=10) == []
+
+
+def test_owner_review_packet_freezes_first_complete_source() -> None:
+    with TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        store = ForexV2OwnerReviewPacket(root)
+        first_report = _complete_forward_report()
+
+        preview = store.review(first_report)
+        first = store.refresh(first_report)
+        saved = store.path.read_bytes()
+        newer_report = _complete_forward_report()
+        extra = dict(newer_report["accepted_observations"][-1])
+        extra["sequence"] = 21
+        extra["observation_id"] = "forward-notification-0020"
+        extra["source_cycle_id"] = "forward-source-cycle-0020"
+        extra["observed_at"] = "2026-08-25T10:14:00+00:00"
+        extra_hash = hashlib.sha256(b"accepted-20").hexdigest()
+        for field in (
+            "observation_hash",
+            "bars_sha256",
+            "decision_input_sha256",
+            "capture_nonce_sha256",
+        ):
+            extra[field] = extra_hash
+        newer_report["accepted_observations"].append(extra)
+        newer_report["source_cutoff_sequence"] = 21
+        newer_report["source_head_hash"] = extra_hash
+        newer_report["accepted_cycle_count"] = 21
+        newer_report["accepted_by_market_day"]["2026-08-25"] = 7
+        canonical = json.dumps(
+            {
+                key: value
+                for key, value in newer_report.items()
+                if key not in {"generated_at", "content_sha256"}
+            },
+            ensure_ascii=True,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        newer_report["content_sha256"] = hashlib.sha256(canonical).hexdigest()
+
+        frozen = store.refresh(newer_report)
+        reviewed = store.review(newer_report)
+
+        assert preview["status"] == "READY_FOR_OWNER_REVIEW_NOT_PERSISTED"
+        assert preview["packet_persisted"] is False
+        assert preview["review_snapshot_frozen"] is False
+        assert first["status"] == "READY_FOR_OWNER_REVIEW"
+        assert first["packet_persisted"] is True
+        assert verify_forex_v2_owner_review_packet(first) is True
+        assert frozen["source_cutoff_sequence"] == 20
+        assert reviewed == frozen
+        assert store.path.read_bytes() == saved
+        assert first["paper_activation_ready"] is False
+        assert first["live_activation_ready"] is False
+        assert first["real_money_access"] is False
+
+
+def test_corrupted_owner_review_packet_is_preserved_and_blocks_replacement() -> None:
+    with TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        store = ForexV2OwnerReviewPacket(root)
+        store.path.parent.mkdir(parents=True, exist_ok=True)
+        store.path.write_text("{broken", encoding="utf-8")
+        saved = store.path.read_bytes()
+
+        blocked = store.refresh(_complete_forward_report())
+
+        assert blocked["status"] == "BLOCKED_INVALID_FORWARD_EVIDENCE"
+        assert "PERSISTENCE_FAILED" in blocked["source_error"].upper()
+        assert store.path.read_bytes() == saved
+        assert blocked["paper_activation_ready"] is False
+        assert blocked["live_activation_ready"] is False
+
+
+def test_owner_review_rejects_changed_sample_contract() -> None:
+    report = _complete_forward_report()
+    report["minimum_accepted_cycle_count"] = 1
+    canonical = json.dumps(
+        {
+            key: value
+            for key, value in report.items()
+            if key not in {"generated_at", "content_sha256"}
+        },
+        ensure_ascii=True,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    report["content_sha256"] = hashlib.sha256(canonical).hexdigest()
+
+    packet = build_forex_v2_owner_review_packet(report)
+
+    assert packet["status"] == "BLOCKED_INVALID_FORWARD_EVIDENCE"
+    assert packet["source_error"] == "forward_review: sample_contract_invalid"
+    assert packet["paper_activation_ready"] is False
+    assert packet["live_activation_ready"] is False
 
 
 def test_block_and_recovery_are_recorded_only_on_transitions() -> None:

@@ -329,6 +329,12 @@ When that threshold is reached, the existing durable PAPER activity history
 adds one owner notification for the frozen candidate. The notification survives
 a closed JARVIS window and explicitly remains review-only: it does not claim
 profitability, change the PAPER strategy, send an order or enable LIVE trading.
+At the same first verified threshold, JARVIS atomically writes the ignored
+`data/trading/research/forward_v2_owner_review.json`. This immutable packet
+freezes the exact candidate, code fingerprint, journal cutoff/head and source
+report hash; later cycles cannot silently move the review target. It starts with
+`owner_decision: UNDECIDED`, contains signal counts rather than PnL, and grants
+no PAPER or LIVE activation authority.
 
 ```powershell
 .\.venv\Scripts\python.exe .\tools\run_forex_forward_evidence.py

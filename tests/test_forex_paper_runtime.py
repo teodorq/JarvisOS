@@ -286,8 +286,17 @@ class ForexPaperRuntimeTests(unittest.TestCase):
         self.assertEqual(report["accepted_cycle_count"], 1)
         self.assertEqual(report["invalid_cycle_count"], 0)
         self.assertFalse(report["strategy_performance_validated"])
+        self.assertEqual(
+            result["forward_review"]["status"],
+            "WAITING_FOR_FORWARD_SAMPLE",
+        )
+        self.assertFalse(result["forward_review"]["paper_activation_ready"])
+        self.assertFalse(result["forward_review"]["live_activation_ready"])
         self.assertTrue(
             (self.root / "data/trading/research/forward_v2_latest.json").is_file()
+        )
+        self.assertFalse(
+            (self.root / "data/trading/research/forward_v2_owner_review.json").exists()
         )
 
     def test_report_write_failure_does_not_block_local_paper_cycle(self) -> None:

@@ -18,6 +18,7 @@ from app.trading.forex_activity import ForexPaperActivityFeed
 from app.trading.forex_dashboard import ForexPaperDashboard
 from app.trading.forex_executor import ForexPaperExecutionEngine
 from app.trading.forex_forward_evidence import ForexV2ForwardEvidenceReport
+from app.trading.forex_forward_review import ForexV2OwnerReviewPacket
 from app.trading.forex_models import MAJOR_FOREX_PAIRS
 from app.trading.forex_observation import ForexObservationJournal
 from app.trading.forex_research_status import ForexHistoricalResearchGate
@@ -60,6 +61,7 @@ class TradingControlCenter:
         self.forex_forward_evidence = ForexV2ForwardEvidenceReport(
             self.project_root
         )
+        self.forex_forward_review = ForexV2OwnerReviewPacket(self.project_root)
         self.forex_strategy_cohorts = ForexStrategyCohortReview(
             self.project_root
         )
@@ -70,6 +72,7 @@ class TradingControlCenter:
         observations = self.forex_observations.summary()
         research = self.forex_research.status()
         forward_evidence = self.forex_forward_evidence.review()
+        forward_review = self.forex_forward_review.review(forward_evidence)
         forex_account = self.forex_executor.status()
         strategy_cohorts = self.forex_strategy_cohorts.review()
         runtime_cycle = self._last_runtime_cycle()
@@ -118,6 +121,11 @@ class TradingControlCenter:
                     forward_evidence.get("source_state_valid") is True
                     and not forward_evidence.get("invalid_cycle_count", 0)
                 ),
+                "forex_v2_owner_review_packet": bool(
+                    forward_review.get("status") == "READY_FOR_OWNER_REVIEW"
+                    and forward_review.get("packet_persisted") is True
+                    and forward_review.get("review_snapshot_frozen") is True
+                ),
                 "kill_switch": True,
                 "forex_data_configuration_complete": data_readiness["complete"],
                 "external_market_data": False,
@@ -145,6 +153,7 @@ class TradingControlCenter:
                 "observation": observations,
                 "historical_research": research,
                 "v2_forward_evidence": forward_evidence,
+                "v2_owner_review": forward_review,
                 "paper_account": forex_account,
                 "strategy_cohort_review": strategy_cohorts,
                 "last_runtime_cycle": runtime_cycle,
@@ -461,6 +470,7 @@ class TradingControlCenter:
         data = snapshot["forex"]["data_configuration"]
         observation = snapshot["forex"]["observation"]
         research = snapshot["forex"]["historical_research"]
+        forward_review = snapshot["forex"]["v2_owner_review"]
         strategy_cohorts = snapshot["forex"]["strategy_cohort_review"]
         cohort_values = dict(strategy_cohorts.get("cohorts", {}) or {})
         v1_cohort = dict(cohort_values.get("V1_ALL", {}) or {})
@@ -595,6 +605,30 @@ class TradingControlCenter:
         observation_audit = (
             "prawidłowy" if observation["audit_chain_valid"] else "USZKODZONY"
         )
+        if forward_review.get("status") == "READY_FOR_OWNER_REVIEW":
+            forward_review_text = (
+                "GOTOWY DO RĘCZNEGO PRZEGLĄDU — zamrożony, bez zgody na zmianę "
+                "PAPER/LIVE i bez potwierdzenia zysku"
+            )
+        elif (
+            forward_review.get("status")
+            == "READY_FOR_OWNER_REVIEW_NOT_PERSISTED"
+        ):
+            forward_review_text = (
+                "próg osiągnięty; oczekuje na bezpieczny zapis przez następny "
+                "cykl obserwatora"
+            )
+        elif forward_review.get("status") == "WAITING_FOR_FORWARD_SAMPLE":
+            forward_review_text = (
+                f"zbieranie próbki {forward_review.get('accepted_cycle_count', 0)}/"
+                f"{forward_review.get('minimum_accepted_cycle_count', 20)} cykli; "
+                f"dni {forward_review.get('accepted_market_day_count', 0)}/"
+                f"{forward_review.get('minimum_market_day_count', 3)}"
+            )
+        else:
+            forward_review_text = (
+                "ZABLOKOWANY — bieżące dowody nie przeszły ścisłej walidacji"
+            )
         if not observation["audit_chain_valid"]:
             gate = (
                 "ZABLOKOWANA — łańcuch audytu obserwacji jest uszkodzony; "
@@ -709,6 +743,7 @@ class TradingControlCenter:
             f"rynkowe {days}/{required_days}; wszystkie wpisy "
             f"{observation['observation_count']}; zablokowane "
             f"{observation['blocked_count']}; audyt {observation_audit}.\n"
+            f"• Pakiet przeglądu Forex V2: {forward_review_text}.\n"
             f"• Bramka PAPER: {gate}.\n"
             "• Dane Forex: lokalny adapter MT5 DEMO, opcjonalny OANDA Practice, "
             "Twelve Data, NBP i publiczny kalendarz Forex Factory oraz kontrola "

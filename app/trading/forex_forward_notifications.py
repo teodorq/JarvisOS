@@ -8,6 +8,9 @@ from typing import Mapping
 from app.trading.forex_forward_evidence import (
     verify_forex_v2_forward_evidence_report,
 )
+from app.trading.forex_forward_review import (
+    verify_forex_v2_owner_review_packet,
+)
 
 
 def forward_review_milestone(
@@ -22,12 +25,23 @@ def forward_review_milestone(
     ):
         return "", None
     report = payload.get("forward_evidence")
+    review = payload.get("forward_review")
     if not verify_forex_v2_forward_evidence_report(
         report,
         require_complete=True,
-    ):
+    ) or not verify_forex_v2_owner_review_packet(review):
         return "", None
     selected = dict(report) if isinstance(report, Mapping) else {}
+    selected_review = dict(review) if isinstance(review, Mapping) else {}
+    if (
+        selected_review.get("source_cutoff_sequence")
+        != selected.get("source_cutoff_sequence")
+        or selected_review.get("source_head_hash")
+        != selected.get("source_head_hash")
+        or selected_review.get("source_report_content_sha256")
+        != selected.get("content_sha256")
+    ):
+        return "", None
     identity = "|".join((
         str(selected.get("candidate_id", "")),
         str(selected.get("policy_fingerprint_sha256", "")),

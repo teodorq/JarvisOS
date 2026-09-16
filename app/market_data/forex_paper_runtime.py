@@ -10,6 +10,7 @@ from app.market_data.forex_environment import ForexDataSettings
 from app.market_data.forex_gateway import ForexReadOnlyDataGateway
 from app.trading.forex_autopilot import ForexPaperAutopilot
 from app.trading.forex_forward_evidence import ForexV2ForwardEvidenceReport
+from app.trading.forex_forward_review import ForexV2OwnerReviewPacket
 from app.trading.forex_observation import (
     ForexObservationJournal,
     ForexObservationService,
@@ -29,6 +30,7 @@ class ForexDemoPaperRuntime:
         journal: ForexObservationJournal | None = None,
         autopilot: ForexPaperAutopilot | None = None,
         forward_evidence: ForexV2ForwardEvidenceReport | None = None,
+        forward_review: ForexV2OwnerReviewPacket | None = None,
     ) -> None:
         self.project_root = project_root
         self.settings = settings
@@ -38,6 +40,7 @@ class ForexDemoPaperRuntime:
         self.forward_evidence = forward_evidence or ForexV2ForwardEvidenceReport(
             project_root
         )
+        self.forward_review = forward_review or ForexV2OwnerReviewPacket(project_root)
 
     def run_once(
         self,
@@ -67,6 +70,10 @@ class ForexDemoPaperRuntime:
                 capture_attestation=capture_attestation,
             )
             forward_evidence = self._refresh_forward_evidence(selected_now)
+            forward_review = self._refresh_forward_review(
+                forward_evidence,
+                selected_now,
+            )
             close_only = self._verified_close_only(observation)
             scoped_entries = self._verified_scoped_entries(observation)
             opening_blocked = bool(observation.get("opening_blocks"))
@@ -81,6 +88,7 @@ class ForexDemoPaperRuntime:
                     "CURRENT_OBSERVATION_BLOCKED",
                     observation=observation,
                     forward_evidence=forward_evidence,
+                    forward_review=forward_review,
                 )
             review = self.journal.review()
             if review.get("owner_review_ready") is not True:
@@ -89,6 +97,7 @@ class ForexDemoPaperRuntime:
                     "OBSERVATION_REVIEW_GATE_NOT_READY",
                     observation=observation,
                     forward_evidence=forward_evidence,
+                    forward_review=forward_review,
                 )
             paper = self.autopilot.run_cycle(
                 quotes=bundle.quotes,
@@ -114,6 +123,7 @@ class ForexDemoPaperRuntime:
             "unvalidated_strategy_demo_override": True,
             "observation": observation,
             "forward_evidence": forward_evidence,
+            "forward_review": forward_review,
             "paper": paper,
             "broker_orders_sent": False,
             "live_orders_sent": False,
@@ -139,6 +149,29 @@ class ForexDemoPaperRuntime:
             return self.forward_evidence.refresh(generated_at=now)
         except (OSError, RuntimeError, TradingValidationError):
             return self._report_write_failed()
+
+    def _refresh_forward_review(
+        self,
+        forward_evidence: Mapping[str, Any],
+        now: datetime,
+    ) -> dict[str, Any]:
+        try:
+            return self.forward_review.refresh(
+                forward_evidence,
+                generated_at=now,
+            )
+        except (OSError, RuntimeError, TradingValidationError):
+            return {
+                "status": "REVIEW_PACKET_WRITE_FAILED",
+                "mode": "FOREX_V2_OWNER_REVIEW_READ_ONLY",
+                "performance_validated": False,
+                "profitability_validated": False,
+                "paper_activation_ready": False,
+                "live_activation_ready": False,
+                "paper_orders_sent": False,
+                "live_orders_sent": False,
+                "real_money_access": False,
+            }
 
     @staticmethod
     def _verified_close_only(observation: dict[str, Any]) -> bool:
@@ -195,6 +228,7 @@ class ForexDemoPaperRuntime:
         *,
         observation: dict[str, Any] | None = None,
         forward_evidence: dict[str, Any] | None = None,
+        forward_review: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         return {
             "status": "PAPER_CYCLE_BLOCKED",
@@ -203,6 +237,7 @@ class ForexDemoPaperRuntime:
             "reason": reason,
             "observation": observation or {},
             "forward_evidence": forward_evidence or {},
+            "forward_review": forward_review or {},
             "broker_orders_sent": False,
             "live_orders_sent": False,
             "real_money_access": False,

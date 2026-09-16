@@ -385,6 +385,14 @@ class TradingControlAndRoutingTests(unittest.TestCase):
         self.assertTrue(status["components"]["historical_m15_quality_audit"])
         self.assertFalse(status["components"]["external_market_data"])
         self.assertFalse(status["components"]["external_paper_broker"])
+        self.assertFalse(status["components"]["forex_v2_owner_review_packet"])
+        self.assertEqual(
+            status["forex"]["v2_owner_review"]["status"],
+            "WAITING_FOR_FORWARD_SAMPLE",
+        )
+        self.assertFalse(
+            status["forex"]["v2_owner_review"]["paper_activation_ready"]
+        )
         self.assertFalse(status["safety"]["live_trading_enabled"])
         self.assertIn("PAPER ONLY", rendered)
         self.assertIn("twardo zablokowane", rendered)
@@ -392,6 +400,7 @@ class TradingControlAndRoutingTests(unittest.TestCase):
         self.assertIn("dni rynkowe 0/3", rendered)
         self.assertIn("Bramka PAPER: ZABLOKOWANA", rendered)
         self.assertIn("wykonanie pozostaje WYŁĄCZONE", rendered)
+        self.assertIn("Pakiet przeglądu Forex V2: zbieranie próbki 0/20", rendered)
 
     def test_owner_status_command_is_read_only_and_client_blocked(self) -> None:
         command = "Status paper tradingu"
