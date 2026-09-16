@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+import hashlib
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -8,6 +9,10 @@ from tempfile import TemporaryDirectory
 from app.market_data.forex_environment import ForexDataSettings
 from app.trading.forex_activity import ForexPaperActivityFeed
 from app.trading.forex_activity_journal import ForexPaperActivityJournal
+from app.trading.forex_candidate_v2 import ForexRegimeCandidatePolicy
+from app.trading.forex_forward_evidence import (
+    expected_candidate_implementation_sha256,
+)
 
 
 def _settings() -> ForexDataSettings:
@@ -47,6 +52,82 @@ def _payload(
     }
 
 
+def _complete_forward_report() -> dict:
+    policy = ForexRegimeCandidatePolicy()
+    day_values = ("21",) * 7 + ("24",) * 7 + ("25",) * 6
+    accepted = []
+    for index, day in enumerate(day_values):
+        token = hashlib.sha256(f"accepted-{index}".encode("ascii")).hexdigest()
+        accepted.append({
+            "sequence": index + 1,
+            "observation_id": f"forward-notification-{index:04d}",
+            "observation_hash": token,
+            "observed_at": f"2026-08-{day}T10:{index % 7 * 2:02d}:00+00:00",
+            "source_cycle_id": f"forward-source-cycle-{index:04d}",
+            "bars_sha256": token,
+            "decision_input_sha256": token,
+            "capture_nonce_sha256": token,
+        })
+    report = {
+        "schema_version": 1,
+        "status": "FORWARD_OBSERVATION_SAMPLE_COMPLETE",
+        "mode": "FOREX_V2_FORWARD_SIGNAL_EVIDENCE_ONLY",
+        "generated_at": "2026-08-26T12:00:00+00:00",
+        "source_state_valid": True,
+        "source_cutoff_sequence": 20,
+        "source_head_hash": hashlib.sha256(b"forward-head").hexdigest(),
+        "candidate_id": policy.candidate_id,
+        "frozen_after": policy.frozen_after.isoformat(),
+        "policy_fingerprint_sha256": policy.fingerprint_sha256,
+        "implementation_sha256": expected_candidate_implementation_sha256(),
+        "accepted_cycle_count": 20,
+        "accepted_market_day_count": 3,
+        "minimum_accepted_cycle_count": 20,
+        "minimum_market_day_count": 3,
+        "remaining_accepted_cycles": 0,
+        "remaining_market_days": 0,
+        "observation_sample_complete": True,
+        "excluded_cycle_count": 0,
+        "invalid_cycle_count": 0,
+        "accepted_observations": accepted,
+        "accepted_by_market_day": {
+            "2026-08-21": 7,
+            "2026-08-24": 7,
+            "2026-08-25": 6,
+        },
+        "exclusions": {},
+        "invalid_issues": {},
+        "signal_comparison": {
+            "base_entry_signal_count": 0,
+            "retained_entry_signal_count": 0,
+            "filtered_entry_signal_count": 0,
+        },
+        "evidence_valid": True,
+        "pnl_included": False,
+        "strategy_performance_validated": False,
+        "automatic_paper_strategy_change": False,
+        "automatic_paper_promotion": False,
+        "automatic_live_promotion": False,
+        "paper_changes_applied": False,
+        "live_changes_applied": False,
+        "paper_orders_sent": False,
+        "live_orders_sent": False,
+        "real_money_access": False,
+    }
+    canonical = json.dumps(
+        {
+            key: value
+            for key, value in report.items()
+            if key not in {"generated_at", "content_sha256"}
+        },
+        ensure_ascii=True,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    report["content_sha256"] = hashlib.sha256(canonical).hexdigest()
+    return report
+
+
 def test_closed_gui_events_are_delivered_oldest_first_after_start() -> None:
     with TemporaryDirectory() as temporary:
         root = Path(temporary)
@@ -77,6 +158,61 @@ def test_duplicate_cycle_never_creates_duplicate_history_event() -> None:
         assert first == {"status": "RECORDED", "events_recorded": 1}
         assert duplicate == {"status": "DUPLICATE_CYCLE", "events_recorded": 0}
         assert journal.status()["event_count"] == 1
+
+
+def test_completed_forward_sample_is_notified_once_with_trade_event() -> None:
+    with TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        journal = ForexPaperActivityJournal(root)
+        first = _payload(60, action="OPEN_LONG")
+        first["forward_evidence"] = _complete_forward_report()
+
+        recorded = journal.record(first)
+        repeated = _payload(61)
+        repeated["forward_evidence"] = _complete_forward_report()
+        duplicate_milestone = journal.record(repeated)
+        events = journal.events(limit=10)
+
+        assert recorded == {"status": "RECORDED", "events_recorded": 2}
+        assert duplicate_milestone == {
+            "status": "RECORDED",
+            "events_recorded": 0,
+        }
+        assert [event["kind"] for event in events] == [
+            "POSITION_OPENED",
+            "FOREX_V2_FORWARD_REVIEW_READY",
+        ]
+        assert "nie potwierdza zysku" in events[-1]["message"]
+        assert "nie włącza LIVE" in events[-1]["message"]
+        feed = ForexPaperActivityFeed(root, settings=_settings())
+        assert feed.poll()["activity_kind"] == "POSITION_OPENED"
+        assert feed.poll()["activity_kind"] == "FOREX_V2_FORWARD_REVIEW_READY"
+        assert feed.poll() is None
+
+
+def test_tampered_forward_completion_never_creates_review_milestone() -> None:
+    with TemporaryDirectory() as temporary:
+        journal = ForexPaperActivityJournal(Path(temporary))
+        payload = _payload(62)
+        report = _complete_forward_report()
+        report["accepted_cycle_count"] = 21
+        canonical = json.dumps(
+            {
+                key: value
+                for key, value in report.items()
+                if key not in {"generated_at", "content_sha256"}
+            },
+            ensure_ascii=True,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        report["content_sha256"] = hashlib.sha256(canonical).hexdigest()
+        payload["forward_evidence"] = report
+
+        result = journal.record(payload)
+
+        assert result == {"status": "RECORDED", "events_recorded": 0}
+        assert journal.events(limit=10) == []
 
 
 def test_block_and_recovery_are_recorded_only_on_transitions() -> None:

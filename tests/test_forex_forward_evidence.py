@@ -11,6 +11,7 @@ from app.trading.forex_forward_evidence import (
     ForexV2ForwardEvidenceReport,
     build_forex_v2_forward_evidence_report,
     expected_candidate_implementation_sha256,
+    verify_forex_v2_forward_evidence_report,
 )
 from app.trading.forex_models import MAJOR_FOREX_PAIRS
 from app.trading.forex_observation import ForexObservationJournal
@@ -220,6 +221,11 @@ def test_accepts_one_strict_post_freeze_cycle_and_reports_signals(
         "real_money_access",
     ):
         assert report[field] is False
+    assert verify_forex_v2_forward_evidence_report(report) is True
+    assert verify_forex_v2_forward_evidence_report(
+        report,
+        require_complete=True,
+    ) is False
 
 
 def test_forward_flag_is_derived_and_freeze_boundary_is_excluded(
@@ -927,3 +933,20 @@ def test_future_timestamp_blocks_and_complete_sample_needs_three_days(
     assert complete["accepted_market_day_count"] == 3
     assert complete["observation_sample_complete"] is True
     assert complete["strategy_performance_validated"] is False
+    assert verify_forex_v2_forward_evidence_report(complete) is True
+    assert verify_forex_v2_forward_evidence_report(
+        complete,
+        require_complete=True,
+    ) is True
+
+    forged = deepcopy(complete)
+    forged["real_money_access"] = True
+    forged["content_sha256"] = _object_fingerprint({
+        key: value
+        for key, value in forged.items()
+        if key not in {"generated_at", "content_sha256"}
+    })
+    assert verify_forex_v2_forward_evidence_report(
+        forged,
+        require_complete=True,
+    ) is False

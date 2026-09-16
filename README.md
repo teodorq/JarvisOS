@@ -325,6 +325,11 @@ least 20 unique cycles
 over 3 market days; even then it does not validate profit or change V1/V2. It can
 also be refreshed or reviewed without writing:
 
+When that threshold is reached, the existing durable PAPER activity history
+adds one owner notification for the frozen candidate. The notification survives
+a closed JARVIS window and explicitly remains review-only: it does not claim
+profitability, change the PAPER strategy, send an order or enable LIVE trading.
+
 ```powershell
 .\.venv\Scripts\python.exe .\tools\run_forex_forward_evidence.py
 .\.venv\Scripts\python.exe .\tools\run_forex_forward_evidence.py --review

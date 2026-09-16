@@ -740,6 +740,178 @@ def build_forex_v2_forward_evidence_report(
     return report
 
 
+def verify_forex_v2_forward_evidence_report(
+    value: object,
+    *,
+    require_complete: bool = False,
+) -> bool:
+    """Verify a persisted report before another subsystem trusts its milestone."""
+    if not isinstance(value, Mapping):
+        return False
+    try:
+        report = dict(value)
+        generated_at = _timestamp(report.get("generated_at"), "generated_at")
+        frozen_after = _timestamp(report.get("frozen_after"), "frozen_after")
+        expected_policy = ForexRegimeCandidatePolicy()
+        expected_implementation = expected_candidate_implementation_sha256()
+        content_sha256 = report.get("content_sha256")
+        cutoff = report.get("source_cutoff_sequence")
+        accepted_count = report.get("accepted_cycle_count")
+        day_count = report.get("accepted_market_day_count")
+        minimum_cycles = report.get("minimum_accepted_cycle_count")
+        minimum_days = report.get("minimum_market_day_count")
+        excluded_count = report.get("excluded_cycle_count")
+        invalid_count = report.get("invalid_cycle_count")
+        remaining_cycles = report.get("remaining_accepted_cycles")
+        remaining_days = report.get("remaining_market_days")
+        source_valid = report.get("source_state_valid")
+        sample_complete = report.get("observation_sample_complete")
+        evidence_valid = report.get("evidence_valid")
+        accepted = report.get("accepted_observations")
+        by_day = report.get("accepted_by_market_day")
+        if (
+            generated_at < frozen_after
+            or type(report.get("schema_version")) is not int
+            or report.get("schema_version") != 1
+            or report.get("mode")
+            != "FOREX_V2_FORWARD_SIGNAL_EVIDENCE_ONLY"
+            or report.get("candidate_id") != expected_policy.candidate_id
+            or frozen_after != expected_policy.frozen_after
+            or report.get("policy_fingerprint_sha256")
+            != expected_policy.fingerprint_sha256
+            or report.get("implementation_sha256") != expected_implementation
+            or not isinstance(content_sha256, str)
+            or not _SHA256.fullmatch(content_sha256)
+            or content_sha256 != _content_sha256(report)
+            or type(cutoff) is not int
+            or cutoff < 0
+            or type(accepted_count) is not int
+            or accepted_count < 0
+            or type(day_count) is not int
+            or day_count < 0
+            or type(minimum_cycles) is not int
+            or minimum_cycles < 1
+            or type(minimum_days) is not int
+            or minimum_days < 1
+            or type(excluded_count) is not int
+            or excluded_count < 0
+            or type(invalid_count) is not int
+            or invalid_count < 0
+            or type(remaining_cycles) is not int
+            or remaining_cycles != max(0, minimum_cycles - accepted_count)
+            or type(remaining_days) is not int
+            or remaining_days != max(0, minimum_days - day_count)
+            or type(source_valid) is not bool
+            or type(sample_complete) is not bool
+            or type(evidence_valid) is not bool
+            or not isinstance(accepted, list)
+            or len(accepted) != accepted_count
+            or not isinstance(by_day, Mapping)
+            or len(by_day) != day_count
+            or any(
+                not isinstance(day, str)
+                or type(count) is not int
+                or count < 1
+                for day, count in by_day.items()
+            )
+            or sum(by_day.values()) != accepted_count
+            or any(report.get(field) is not False for field in _safety_contract())
+        ):
+            return False
+        head_hash = report.get("source_head_hash")
+        if cutoff == 0:
+            if head_hash != "":
+                return False
+        elif not isinstance(head_hash, str) or not _SHA256.fullmatch(head_hash):
+            return False
+        accepted_times: list[datetime] = []
+        accepted_sequences: list[int] = []
+        accepted_days: Counter[str] = Counter()
+        for raw in accepted:
+            if not isinstance(raw, Mapping):
+                return False
+            item = dict(raw)
+            sequence = item.get("sequence")
+            observed_at = _timestamp(item.get("observed_at"), "observed_at")
+            if (
+                type(sequence) is not int
+                or not 1 <= sequence <= cutoff
+                or not isinstance(item.get("observation_id"), str)
+                or not _IDENTIFIER.fullmatch(item["observation_id"])
+                or not isinstance(item.get("source_cycle_id"), str)
+                or not _IDENTIFIER.fullmatch(item["source_cycle_id"])
+                or observed_at > generated_at
+                or observed_at <= frozen_after
+                or any(
+                    not isinstance(item.get(field), str)
+                    or not _SHA256.fullmatch(item[field])
+                    for field in (
+                        "observation_hash",
+                        "bars_sha256",
+                        "decision_input_sha256",
+                        "capture_nonce_sha256",
+                    )
+                )
+            ):
+                return False
+            accepted_sequences.append(sequence)
+            accepted_times.append(observed_at)
+            accepted_days.update((observed_at.date().isoformat(),))
+        if (
+            accepted_sequences != sorted(set(accepted_sequences))
+            or accepted_times != sorted(set(accepted_times))
+            or dict(sorted(accepted_days.items())) != dict(sorted(by_day.items()))
+        ):
+            return False
+        if source_valid is True:
+            if cutoff != accepted_count + excluded_count + invalid_count:
+                return False
+            calculated_complete = bool(
+                invalid_count == 0
+                and accepted_count >= minimum_cycles
+                and day_count >= minimum_days
+            )
+            expected_status = (
+                "BLOCKED_INVALID_FORWARD_EVIDENCE"
+                if invalid_count
+                else "FORWARD_OBSERVATION_SAMPLE_COMPLETE"
+                if calculated_complete
+                else "COLLECTING_FORWARD_EVIDENCE"
+            )
+            if (
+                report.get("status") != expected_status
+                or sample_complete is not calculated_complete
+                or evidence_valid is not bool(accepted_count and not invalid_count)
+            ):
+                return False
+        elif (
+            report.get("status") != "BLOCKED_SOURCE_INVALID"
+            or cutoff != 0
+            or sample_complete is not False
+            or evidence_valid is not False
+        ):
+            return False
+        return bool(
+            not require_complete
+            or (
+                source_valid is True
+                and sample_complete is True
+                and invalid_count == 0
+                and report.get("status")
+                == "FORWARD_OBSERVATION_SAMPLE_COMPLETE"
+            )
+        )
+    except (
+        TypeError,
+        ValueError,
+        OverflowError,
+        RecursionError,
+        MemoryError,
+        TradingValidationError,
+    ):
+        return False
+
+
 class ForexV2ForwardEvidenceReport:
     """Strictly load and atomically persist the latest forward-only report."""
 
@@ -1029,4 +1201,5 @@ __all__ = [
     "ForexV2ForwardEvidenceReport",
     "build_forex_v2_forward_evidence_report",
     "expected_candidate_implementation_sha256",
+    "verify_forex_v2_forward_evidence_report",
 ]

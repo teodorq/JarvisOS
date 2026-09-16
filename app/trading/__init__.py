@@ -16,6 +16,7 @@ from app.trading.forex_executor import ForexPaperExecutionEngine
 from app.trading.forex_forward_evidence import (
     ForexV2ForwardEvidenceReport,
     build_forex_v2_forward_evidence_report,
+    verify_forex_v2_forward_evidence_report,
 )
 from app.trading.forex_historical import (
     BidirectionalForexHistoricalBacktester,
@@ -153,6 +154,7 @@ __all__ = [
     "major_pair",
     "build_forex_paper_performance_review",
     "build_forex_v2_forward_evidence_report",
+    "verify_forex_v2_forward_evidence_report",
     "build_forex_paper_sample_contract",
     "is_superseded_sample_contract",
     "build_forex_strategy_cohort_review",
