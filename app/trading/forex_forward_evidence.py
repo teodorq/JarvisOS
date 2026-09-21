@@ -1051,7 +1051,7 @@ class ForexV2ForwardEvidenceReport:
             )
         if report.get("source_state_valid") is True:
             try:
-                self._load_saved_report()
+                previous = self._load_saved_report()
             except (OSError, TradingValidationError):
                 return _blocked_source_report(
                     selected_now,
@@ -1060,6 +1060,16 @@ class ForexV2ForwardEvidenceReport:
                         report.get("implementation_sha256", "")
                     ),
                 )
+            if previous is not None:
+                conflict = self._monotonic_conflict(previous, report, state)
+                if conflict is not None:
+                    return _blocked_source_report(
+                        selected_now,
+                        f"forex_forward_evidence: {conflict}",
+                        implementation_sha256=str(
+                            report.get("implementation_sha256", "")
+                        ),
+                    )
         return report
 
     def _load_strict(self) -> object:
@@ -1088,53 +1098,50 @@ class ForexV2ForwardEvidenceReport:
         ):
             previous = self._load_saved_report()
             if previous is not None:
-                previous_cutoff = int(previous["source_cutoff_sequence"])
-                selected_cutoff = int(selected["source_cutoff_sequence"])
-                if previous_cutoff > selected_cutoff:
+                conflict = self._monotonic_conflict(
+                    previous,
+                    selected,
+                    observation_state,
+                )
+                if conflict is not None:
                     return _blocked_source_report(
                         generated_at,
-                        "forex_forward_evidence: source_cutoff_regressed",
+                        f"forex_forward_evidence: {conflict}",
                         implementation_sha256=str(
                             selected.get("implementation_sha256", "")
                         ),
                     )
-                if previous_cutoff < selected_cutoff:
-                    ancestor_head = self._source_head_at_cutoff(
-                        observation_state,
-                        previous_cutoff,
-                    )
-                    if ancestor_head != previous.get("source_head_hash"):
-                        return _blocked_source_report(
-                            generated_at,
-                            "forex_forward_evidence: source_chain_ancestry_conflict",
-                            implementation_sha256=str(
-                                selected.get("implementation_sha256", "")
-                            ),
-                        )
-                if previous_cutoff == selected_cutoff:
-                    if previous.get("source_head_hash") == selected.get(
-                        "source_head_hash"
-                    ):
-                        if previous.get("content_sha256") == selected.get(
-                            "content_sha256"
-                        ):
-                            return deepcopy(previous)
-                        return _blocked_source_report(
-                            generated_at,
-                            "forex_forward_evidence: report_content_conflict",
-                            implementation_sha256=str(
-                                selected.get("implementation_sha256", "")
-                            ),
-                        )
-                    return _blocked_source_report(
-                        generated_at,
-                        "forex_forward_evidence: source_cutoff_conflict",
-                        implementation_sha256=str(
-                            selected.get("implementation_sha256", "")
-                        ),
-                    )
+                if (
+                    previous["source_cutoff_sequence"]
+                    == selected["source_cutoff_sequence"]
+                ):
+                    return deepcopy(previous)
             self._write_atomic(selected)
         return selected
+
+    def _monotonic_conflict(
+        self,
+        previous: Mapping[str, Any],
+        selected: Mapping[str, Any],
+        observation_state: object,
+    ) -> str | None:
+        previous_cutoff = int(previous["source_cutoff_sequence"])
+        selected_cutoff = int(selected["source_cutoff_sequence"])
+        if previous_cutoff > selected_cutoff:
+            return "source_cutoff_regressed"
+        if previous_cutoff < selected_cutoff:
+            ancestor_head = self._source_head_at_cutoff(
+                observation_state,
+                previous_cutoff,
+            )
+            if ancestor_head != previous["source_head_hash"]:
+                return "source_chain_ancestry_conflict"
+        if previous_cutoff == selected_cutoff:
+            if previous["source_head_hash"] != selected["source_head_hash"]:
+                return "source_cutoff_conflict"
+            if previous["content_sha256"] != selected["content_sha256"]:
+                return "report_content_conflict"
+        return None
 
     @staticmethod
     def _source_head_at_cutoff(

@@ -861,6 +861,81 @@ def test_higher_cutoff_from_an_independent_chain_is_not_persisted(
     assert reporter.path.read_bytes() == saved
 
 
+def test_read_only_review_blocks_regressed_or_rewritten_observation_history(
+    tmp_path: Path,
+) -> None:
+    journal = ForexObservationJournal(tmp_path)
+    journal.record(_record(
+        AFTER_FREEZE,
+        seed="review-original-first",
+        observation_id="forward-review-original-first",
+    ))
+    older_state = journal.snapshot()
+    journal.record(_record(
+        AFTER_FREEZE + timedelta(minutes=15),
+        seed="review-original-second",
+        observation_id="forward-review-original-second",
+    ))
+    original_state = journal.snapshot()
+    reporter = ForexV2ForwardEvidenceReport(tmp_path)
+    first = reporter.refresh(
+        original_state,
+        generated_at=AFTER_FREEZE + timedelta(hours=1),
+    )
+    saved = reporter.path.read_bytes()
+    assert first["source_cutoff_sequence"] == 2
+    assert reporter.review(
+        generated_at=AFTER_FREEZE + timedelta(hours=2)
+    )["status"] == "COLLECTING_FORWARD_EVIDENCE"
+
+    reporter.observation_path.write_text(json.dumps(older_state), encoding="utf-8")
+    regressed = reporter.review(generated_at=AFTER_FREEZE + timedelta(hours=2))
+    assert regressed["status"] == "BLOCKED_SOURCE_INVALID"
+    assert "SOURCE_CUTOFF_REGRESSED" in regressed["source_error"].upper()
+
+    independent = _state(
+        tmp_path / "independent",
+        _record(
+            AFTER_FREEZE,
+            seed="review-other-first",
+            observation_id="forward-review-other-first",
+        ),
+        _record(
+            AFTER_FREEZE + timedelta(minutes=15),
+            seed="review-other-second",
+            observation_id="forward-review-other-second",
+        ),
+    )
+    reporter.observation_path.write_text(json.dumps(independent), encoding="utf-8")
+    replaced = reporter.review(generated_at=AFTER_FREEZE + timedelta(hours=2))
+    assert replaced["status"] == "BLOCKED_SOURCE_INVALID"
+    assert "SOURCE_CUTOFF_CONFLICT" in replaced["source_error"].upper()
+
+    independent = _state(
+        tmp_path / "independent-descendant",
+        _record(
+            AFTER_FREEZE,
+            seed="review-descendant-first",
+            observation_id="forward-review-descendant-first",
+        ),
+        _record(
+            AFTER_FREEZE + timedelta(minutes=15),
+            seed="review-descendant-second",
+            observation_id="forward-review-descendant-second",
+        ),
+        _record(
+            AFTER_FREEZE + timedelta(minutes=30),
+            seed="review-descendant-third",
+            observation_id="forward-review-descendant-third",
+        ),
+    )
+    reporter.observation_path.write_text(json.dumps(independent), encoding="utf-8")
+    unrelated = reporter.review(generated_at=AFTER_FREEZE + timedelta(hours=2))
+    assert unrelated["status"] == "BLOCKED_SOURCE_INVALID"
+    assert "SOURCE_CHAIN_ANCESTRY_CONFLICT" in unrelated["source_error"].upper()
+    assert reporter.path.read_bytes() == saved
+
+
 def test_equal_source_cannot_hide_a_changed_report_contract(
     tmp_path: Path,
     monkeypatch,
