@@ -892,7 +892,76 @@ def test_equal_source_cannot_hide_a_changed_report_contract(
 
     assert first["status"] == "COLLECTING_FORWARD_EVIDENCE"
     assert conflict["status"] == "BLOCKED_SOURCE_INVALID"
-    assert "REPORT_CONTENT_CONFLICT" in conflict["source_error"].upper()
+    assert "SAVED_REPORT_INVALID" in conflict["source_error"].upper()
+    assert reporter.path.read_bytes() == saved
+
+
+def test_corrupt_saved_report_is_preserved_and_blocks_refresh(tmp_path: Path) -> None:
+    state = _state(
+        tmp_path,
+        _record(
+            AFTER_FREEZE,
+            seed="saved-corrupt",
+            observation_id="forward-saved-corrupt",
+        ),
+    )
+    reporter = ForexV2ForwardEvidenceReport(tmp_path)
+    reporter.refresh(state, generated_at=AFTER_FREEZE + timedelta(hours=1))
+    damaged = b"{invalid-json"
+    reporter.path.write_bytes(damaged)
+
+    reviewed = reporter.review(
+        generated_at=AFTER_FREEZE + timedelta(hours=2),
+    )
+    blocked = reporter.refresh(
+        state,
+        generated_at=AFTER_FREEZE + timedelta(hours=2),
+    )
+
+    assert reviewed["status"] == "BLOCKED_SOURCE_INVALID"
+    assert reviewed["source_error"] == (
+        "forex_forward_evidence: saved_report_invalid"
+    )
+    assert blocked["status"] == "BLOCKED_SOURCE_INVALID"
+    assert blocked["source_error"] == (
+        "forex_forward_evidence: saved_report_invalid"
+    )
+    assert reporter.path.read_bytes() == damaged
+
+
+def test_semantically_invalid_saved_report_is_not_replaced(tmp_path: Path) -> None:
+    state = _state(
+        tmp_path / "source",
+        _record(
+            AFTER_FREEZE,
+            seed="saved-invalid-contract",
+            observation_id="forward-saved-invalid-contract",
+        ),
+    )
+    reporter = ForexV2ForwardEvidenceReport(tmp_path / "report")
+    first = reporter.refresh(
+        state,
+        generated_at=AFTER_FREEZE + timedelta(hours=1),
+    )
+    invalid = dict(first)
+    invalid["status"] = "FORWARD_OBSERVATION_SAMPLE_COMPLETE"
+    invalid["content_sha256"] = _object_fingerprint({
+        key: value
+        for key, value in invalid.items()
+        if key not in {"generated_at", "content_sha256"}
+    })
+    saved = json.dumps(invalid).encode("utf-8")
+    reporter.path.write_bytes(saved)
+
+    blocked = reporter.refresh(
+        state,
+        generated_at=AFTER_FREEZE + timedelta(hours=2),
+    )
+
+    assert blocked["status"] == "BLOCKED_SOURCE_INVALID"
+    assert blocked["source_error"] == (
+        "forex_forward_evidence: saved_report_invalid"
+    )
     assert reporter.path.read_bytes() == saved
 
 

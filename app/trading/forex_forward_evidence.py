@@ -988,6 +988,14 @@ class ForexV2ForwardEvidenceReport:
                     observation_state=state,
                     generated_at=selected_now,
                 )
+            except TradingValidationError:
+                return _blocked_source_report(
+                    selected_now,
+                    "forex_forward_evidence: saved_report_invalid",
+                    implementation_sha256=str(
+                        report.get("implementation_sha256", "")
+                    ),
+                )
             except (OSError, RuntimeError):
                 return _blocked_source_report(
                     selected_now,
@@ -1028,7 +1036,7 @@ class ForexV2ForwardEvidenceReport:
                 implementation_sha256=implementation,
             )
         try:
-            return self.build(state, generated_at=selected_now)
+            report = self.build(state, generated_at=selected_now)
         except (
             TypeError,
             ValueError,
@@ -1041,6 +1049,18 @@ class ForexV2ForwardEvidenceReport:
                 selected_now,
                 f"forex_forward_evidence: source_build_invalid: {error}",
             )
+        if report.get("source_state_valid") is True:
+            try:
+                self._load_saved_report()
+            except (OSError, TradingValidationError):
+                return _blocked_source_report(
+                    selected_now,
+                    "forex_forward_evidence: saved_report_invalid",
+                    implementation_sha256=str(
+                        report.get("implementation_sha256", "")
+                    ),
+                )
+        return report
 
     def _load_strict(self) -> object:
         if not self.observation_path.is_file():
@@ -1137,12 +1157,22 @@ class ForexV2ForwardEvidenceReport:
         return head_hash
 
     def _load_saved_report(self) -> dict[str, Any] | None:
-        if not self.path.is_file():
+        if self.path.is_symlink():
+            raise TradingValidationError(
+                "forex_forward_evidence: saved_report_invalid"
+            )
+        if not self.path.exists():
             return None
         try:
+            if not self.path.is_file():
+                raise TradingValidationError(
+                    "forex_forward_evidence: saved_report_invalid"
+                )
             size = self.path.stat().st_size
             if size <= 0 or size > self.MAX_REPORT_BYTES:
-                return None
+                raise TradingValidationError(
+                    "forex_forward_evidence: saved_report_invalid"
+                )
             value = json.loads(self.path.read_text(encoding="utf-8"))
         except (
             OSError,
@@ -1150,29 +1180,22 @@ class ForexV2ForwardEvidenceReport:
             json.JSONDecodeError,
             RecursionError,
             MemoryError,
-        ):
-            return None
+        ) as error:
+            raise TradingValidationError(
+                "forex_forward_evidence: saved_report_invalid"
+            ) from error
         if not isinstance(value, Mapping):
-            return None
+            raise TradingValidationError(
+                "forex_forward_evidence: saved_report_invalid"
+            )
         selected = dict(value)
-        cutoff = selected.get("source_cutoff_sequence")
-        head_hash = str(selected.get("source_head_hash", ""))
-        content_sha256 = str(selected.get("content_sha256", ""))
         if (
-            type(selected.get("schema_version")) is not int
-            or selected.get("schema_version") != 1
-            or selected.get("mode")
-            != "FOREX_V2_FORWARD_SIGNAL_EVIDENCE_ONLY"
-            or selected.get("source_state_valid") is not True
-            or type(cutoff) is not int
-            or int(cutoff) < 0
-            or (int(cutoff) == 0 and head_hash != "")
-            or (int(cutoff) > 0 and not _SHA256.fullmatch(head_hash))
-            or not _SHA256.fullmatch(content_sha256)
-            or content_sha256 != _content_sha256(selected)
-            or any(selected.get(field) is not False for field in _safety_contract())
+            selected.get("source_state_valid") is not True
+            or not verify_forex_v2_forward_evidence_report(selected)
         ):
-            return None
+            raise TradingValidationError(
+                "forex_forward_evidence: saved_report_invalid"
+            )
         return selected
 
     def _write_atomic(self, report: Mapping[str, Any]) -> None:
