@@ -23,11 +23,16 @@ $readinessPath = Join-Path $projectPath "tools\check_mt5_market_ready.py"
 $dataPath = Join-Path $projectPath "data\trading"
 $logPath = Join-Path $dataPath "forex_paper_watchdog.log"
 $outputPath = Join-Path $dataPath "forex_paper_last.json"
+$temporaryOutputPath = Join-Path $dataPath "forex_paper_last.$PID.tmp"
 $errorPath = Join-Path $dataPath "forex_paper_last.error.log"
 $statusPath = Join-Path $dataPath "forex_observer_status.json"
 $protectionOutputPath = Join-Path $dataPath "forex_paper_protection_last.json"
+$temporaryProtectionOutputPath = Join-Path $dataPath (
+    "forex_paper_protection_last.$PID.tmp"
+)
 $protectionErrorPath = Join-Path $dataPath "forex_paper_protection_last.error.log"
 $script:lastProtectionStatus = "NOT_RUN"
+$script:lastCycleFailed = $false
 $script:lastProtectionCheckedAt = ""
 $script:lastProtectionReason = ""
 $script:consecutiveProtectionFailures = 0
@@ -65,6 +70,24 @@ function Write-ObserverLog {
     }
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     Add-Content -LiteralPath $logPath -Value "$timestamp $Message" -Encoding UTF8
+}
+
+function Publish-ValidatedResult {
+    param(
+        [string]$TemporaryPath,
+        [string]$DestinationPath
+    )
+
+    if (Test-Path -LiteralPath $DestinationPath -PathType Leaf) {
+        $backupPath = (
+            "$DestinationPath.$([Guid]::NewGuid().ToString('N')).bak"
+        )
+        [IO.File]::Replace($TemporaryPath, $DestinationPath, $backupPath)
+        Remove-Item -LiteralPath $backupPath -Force -ErrorAction SilentlyContinue
+    }
+    else {
+        [IO.File]::Move($TemporaryPath, $DestinationPath)
+    }
 }
 
 function Write-ObserverStatus {
@@ -311,7 +334,7 @@ function Start-Mt5IfNeeded {
 }
 
 function Invoke-ForexPaperCycle {
-    Remove-Item -LiteralPath $outputPath -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $temporaryOutputPath -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $errorPath -Force -ErrorAction SilentlyContinue
     $runnerArgument = '"' + $runnerPath + '"'
     $scheduledNonce = [Guid]::NewGuid().ToString("N")
@@ -339,7 +362,7 @@ function Invoke-ForexPaperCycle {
             -ArgumentList $runnerArgument `
             -WorkingDirectory $projectPath `
             -WindowStyle Hidden `
-            -RedirectStandardOutput $outputPath `
+            -RedirectStandardOutput $temporaryOutputPath `
             -RedirectStandardError $errorPath `
             -Wait `
             -PassThru
@@ -356,13 +379,17 @@ function Invoke-ForexPaperCycle {
             "Process"
         )
     }
-    if (-not (Test-Path -LiteralPath $outputPath -PathType Leaf)) {
+    if (-not (Test-Path -LiteralPath $temporaryOutputPath -PathType Leaf)) {
         Write-ObserverLog "PAPER cycle produced no result; exit $($process.ExitCode)."
-        return
+        return $false
     }
     try {
-        $result = Get-Content -LiteralPath $outputPath -Raw -Encoding UTF8 |
+        $result = Get-Content -LiteralPath $temporaryOutputPath -Raw -Encoding UTF8 |
             ConvertFrom-Json
+        if ($null -eq $result -or
+            $result.PSObject.Properties.Name -notcontains "status") {
+            throw "PAPER result is missing a status."
+        }
         $executionCount = 0
         $positionCount = ""
         $reason = ""
@@ -374,6 +401,7 @@ function Invoke-ForexPaperCycle {
             $positionCount = $result.paper.account.position_count
         }
         $historyStatus = $result.activity_history_status
+        Publish-ValidatedResult $temporaryOutputPath $outputPath
         Write-ObserverLog (
             "PAPER cycle $($result.status); reason=$reason; " +
             "executions=$executionCount; positions=$positionCount; " +
@@ -381,16 +409,24 @@ function Invoke-ForexPaperCycle {
             "live_orders_sent=$($result.live_orders_sent); " +
             "activity_history=$historyStatus."
         )
+        return $true
     }
     catch {
-        Write-ObserverLog "PAPER result could not be parsed; exit $($process.ExitCode)."
+        Write-ObserverLog (
+            "PAPER result could not be validated or saved; " +
+            "exit $($process.ExitCode)."
+        )
+        return $false
+    }
+    finally {
+        Remove-Item -LiteralPath $temporaryOutputPath -Force -ErrorAction SilentlyContinue
     }
 }
 
 function Invoke-ForexPaperProtection {
     param([object]$RecoverySinceUtc = $null)
 
-    Remove-Item -LiteralPath $protectionOutputPath -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $temporaryProtectionOutputPath -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $protectionErrorPath -Force -ErrorAction SilentlyContinue
     $runnerArgument = '"' + $protectionRunnerPath + '"'
     if ($null -ne $RecoverySinceUtc) {
@@ -405,11 +441,11 @@ function Invoke-ForexPaperProtection {
         -ArgumentList $runnerArgument `
         -WorkingDirectory $projectPath `
         -WindowStyle Hidden `
-        -RedirectStandardOutput $protectionOutputPath `
+        -RedirectStandardOutput $temporaryProtectionOutputPath `
         -RedirectStandardError $protectionErrorPath `
         -Wait `
         -PassThru
-    if (-not (Test-Path -LiteralPath $protectionOutputPath -PathType Leaf)) {
+    if (-not (Test-Path -LiteralPath $temporaryProtectionOutputPath -PathType Leaf)) {
         Write-ObserverLog (
             "PAPER protection produced no result; exit $($process.ExitCode)."
         )
@@ -417,9 +453,13 @@ function Invoke-ForexPaperProtection {
     }
     try {
         $result = Get-Content `
-            -LiteralPath $protectionOutputPath `
+            -LiteralPath $temporaryProtectionOutputPath `
             -Raw `
             -Encoding UTF8 | ConvertFrom-Json
+        if ($null -eq $result -or
+            $result.PSObject.Properties.Name -notcontains "status") {
+            throw "PAPER protection result is missing a status."
+        }
         $executionCount = 0
         $positionCount = ""
         $replayStatus = "NOT_REPORTED"
@@ -460,6 +500,9 @@ function Invoke-ForexPaperProtection {
                 )
             }
         }
+        Publish-ValidatedResult `
+            $temporaryProtectionOutputPath `
+            $protectionOutputPath
         Write-ObserverLog (
             "PAPER protection $($result.status); " +
             "executions=$executionCount; positions=$positionCount; " +
@@ -472,9 +515,16 @@ function Invoke-ForexPaperProtection {
     }
     catch {
         Write-ObserverLog (
-            "PAPER protection result could not be parsed; exit $($process.ExitCode)."
+            "PAPER protection result could not be validated or saved; " +
+            "exit $($process.ExitCode)."
         )
         return $null
+    }
+    finally {
+        Remove-Item `
+            -LiteralPath $temporaryProtectionOutputPath `
+            -Force `
+            -ErrorAction SilentlyContinue
     }
 }
 
@@ -553,6 +603,14 @@ function Write-ProtectionObserverStatus {
             $true `
             $true `
             "Ochrona SL/TP wymaga uwagi; pelny cykl pozostaje aktywny."
+        return
+    }
+    if ($script:lastCycleFailed) {
+        Write-ObserverStatus `
+            "CYCLE_FAILED_SAFE" `
+            $true `
+            $true `
+            "Ostatni pelny cykl nie zwrocil poprawnego wyniku."
         return
     }
     Write-ObserverStatus `
@@ -683,18 +741,29 @@ try {
                             $true `
                             $true `
                             "Trwa lokalny cykl PAPER."
-                        Invoke-ForexPaperCycle
-                        Write-ObserverStatus `
-                            "WAITING_NEXT_CYCLE" `
-                            $true `
-                            $true `
-                            "Cykl zakonczony; oczekiwanie na nastepny interwal."
+                        $cycleResultSaved = Invoke-ForexPaperCycle
+                        $script:lastCycleFailed = -not $cycleResultSaved
+                        if ($cycleResultSaved) {
+                            Write-ObserverStatus `
+                                "WAITING_NEXT_CYCLE" `
+                                $true `
+                                $true `
+                                "Cykl zakonczony; oczekiwanie na nastepny interwal."
+                        }
+                        else {
+                            Write-ObserverStatus `
+                                "CYCLE_FAILED_SAFE" `
+                                $true `
+                                $true `
+                                "Brak prawidlowego nowego wyniku; zachowano poprzedni."
+                        }
                     }
                 }
             }
         }
         catch {
             $script:positionCheckSatisfied = $false
+            $script:lastCycleFailed = $true
             Write-ObserverLog "Cycle failed safely; no broker order execution is available."
             Write-ObserverStatus `
                 "CYCLE_FAILED_SAFE" `

@@ -1,5 +1,7 @@
 import os
 from pathlib import Path
+import shutil
+import subprocess
 from unittest.mock import patch
 
 from tools import run_forex_paper_cycle as paper_runner
@@ -119,6 +121,82 @@ def test_watchdog_calls_only_the_local_paper_entry_point() -> None:
         "Restore-PreviousProtectionState\n"
         '    Write-ObserverLog "Forex runtime started'
     ) in WATCHDOG
+
+
+def test_watchdog_preserves_last_valid_result_until_replacement_is_verified() -> None:
+    assert "function Publish-ValidatedResult" in WATCHDOG
+    assert "[IO.File]::Replace($TemporaryPath, $DestinationPath, $backupPath)" in WATCHDOG
+    assert "[IO.File]::Move($TemporaryPath, $DestinationPath)" in WATCHDOG
+    assert "Remove-Item -LiteralPath $outputPath -Force" not in WATCHDOG
+    assert "Remove-Item -LiteralPath $protectionOutputPath -Force" not in WATCHDOG
+    assert "-RedirectStandardOutput $temporaryOutputPath" in WATCHDOG
+    assert "-RedirectStandardOutput $temporaryProtectionOutputPath" in WATCHDOG
+    cycle = WATCHDOG[
+        WATCHDOG.index("function Invoke-ForexPaperCycle"):
+        WATCHDOG.index("function Invoke-ForexPaperProtection")
+    ]
+    protection = WATCHDOG[
+        WATCHDOG.index("function Invoke-ForexPaperProtection"):
+        WATCHDOG.index("function Update-ProtectionHealth")
+    ]
+    assert cycle.index("ConvertFrom-Json") < cycle.index(
+        "Publish-ValidatedResult $temporaryOutputPath $outputPath"
+    )
+    assert protection.index("ConvertFrom-Json") < protection.index(
+        "Publish-ValidatedResult `\n"
+        "            $temporaryProtectionOutputPath `\n"
+        "            $protectionOutputPath"
+    )
+    assert '"CYCLE_FAILED_SAFE"' in WATCHDOG
+    assert "$cycleResultSaved = Invoke-ForexPaperCycle" in WATCHDOG
+    assert "$script:lastCycleFailed = -not $cycleResultSaved" in WATCHDOG
+    heartbeat = WATCHDOG[
+        WATCHDOG.index("function Write-ProtectionObserverStatus"):
+        WATCHDOG.index("function Test-ProtectionResultHealthy")
+    ]
+    assert heartbeat.index("if ($script:lastCycleFailed)") < heartbeat.index(
+        '"WAITING_NEXT_CYCLE"'
+    )
+
+
+def test_watchdog_publishes_a_validated_result_over_an_existing_file(
+    tmp_path: Path,
+) -> None:
+    powershell = shutil.which("powershell.exe") if os.name == "nt" else None
+    if powershell is None:
+        return
+    saved = tmp_path / "last.json"
+    temporary = tmp_path / "last.tmp"
+    saved.write_text("old", encoding="utf-8")
+    temporary.write_text("new", encoding="utf-8")
+    helper = WATCHDOG[
+        WATCHDOG.index("function Publish-ValidatedResult"):
+        WATCHDOG.index("function Write-ObserverStatus")
+    ]
+    escaped_temporary = str(temporary).replace("'", "''")
+    escaped_saved = str(saved).replace("'", "''")
+    script = (
+        "$ErrorActionPreference = 'Stop'\n"
+        + helper
+        + "\nPublish-ValidatedResult "
+        + f"-TemporaryPath '{escaped_temporary}' "
+        + f"-DestinationPath '{escaped_saved}'"
+    )
+
+    completed = subprocess.run(
+        [powershell, "-NoProfile", "-NonInteractive", "-Command", script],
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert saved.read_text(encoding="utf-8") == "new", (
+        completed.stdout,
+        completed.stderr,
+    )
+    assert not temporary.exists()
 
 
 def test_manual_runner_defaults_to_manual_without_watchdog_context() -> None:
