@@ -608,6 +608,72 @@ class TradingControlAndRoutingTests(unittest.TestCase):
         )
         self.assertIn("CURRENT_OBSERVATION_BLOCKED: 1", rendered)
 
+    def test_status_explains_high_impact_event_without_claiming_data_failure(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            result_path = root / "data" / "trading" / "forex_paper_last.json"
+            result_path.parent.mkdir(parents=True)
+            result_path.write_text(
+                json.dumps({
+                    "status": "PAPER_CYCLE_BLOCKED",
+                    "reason": "CURRENT_OBSERVATION_BLOCKED",
+                    "observation": {
+                        "status": "OBSERVATION_RECORDED",
+                        "fully_cross_checked": True,
+                        "opening_blocks": ["HIGH_IMPACT_EVENT_WINDOW"],
+                    },
+                    "broker_orders_sent": False,
+                    "live_orders_sent": False,
+                    "real_money_access": False,
+                }),
+                encoding="utf-8",
+            )
+            center = TradingControlCenter(root)
+            runtime = center.status()["forex"]["last_runtime_cycle"]
+            rendered = center.format_status()
+            result_path.write_text(
+                json.dumps({
+                    "status": "PAPER_CYCLE_BLOCKED",
+                    "reason": "CURRENT_OBSERVATION_BLOCKED",
+                    "observation": {
+                        "status": "OBSERVATION_RECORDED",
+                        "fully_cross_checked": False,
+                        "opening_blocks": [
+                            "HIGH_IMPACT_EVENT_WINDOW",
+                            "SECOND_SOURCE_UNAVAILABLE",
+                        ],
+                    },
+                    "broker_orders_sent": False,
+                    "live_orders_sent": False,
+                    "real_money_access": False,
+                }),
+                encoding="utf-8",
+            )
+            mixed = center.status()["forex"]["last_runtime_cycle"]
+
+        self.assertTrue(runtime["high_impact_event_window"])
+        self.assertFalse(mixed["high_impact_event_window"])
+        self.assertIn("okno ważnego wydarzenia", rendered)
+        self.assertIn("nowe wejścia PAPER są wstrzymane", rendered)
+
+    def test_status_explains_duplicate_forward_readings(self) -> None:
+        with TemporaryDirectory() as directory:
+            center = TradingControlCenter(directory)
+            snapshot = center.status()
+            snapshot["forex"]["v2_owner_review"].update({
+                "status": "WAITING_FOR_FORWARD_SAMPLE",
+                "accepted_cycle_count": 18,
+                "accepted_market_day_count": 3,
+            })
+            snapshot["forex"]["v2_forward_evidence"]["exclusions"] = {
+                "DUPLICATE_INPUT_REPLAY": 3,
+            }
+            with patch.object(center, "status", return_value=snapshot):
+                rendered = center.format_status()
+
+        self.assertIn("zbieranie próbki 18/20", rendered)
+        self.assertIn("3 powtórzone odczyty nie zostały doliczone", rendered)
+
     def test_observation_progress_phrases_are_owner_only_read_only_status(self) -> None:
         variants = (
             "Status obserwatora Forex",

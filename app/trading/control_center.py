@@ -182,6 +182,7 @@ class TradingControlCenter:
             "blocked_pair_count": 0,
             "execution_count": 0,
             "reason_codes": {},
+            "high_impact_event_window": False,
             "broker_orders_sent": False,
             "live_orders_sent": False,
             "real_money_access": False,
@@ -196,6 +197,14 @@ class TradingControlCenter:
             return {**empty, "status": "INVALID_RESULT"}
         paper = payload.get("paper")
         paper = dict(paper) if isinstance(paper, dict) else {}
+        observation = payload.get("observation")
+        observation = dict(observation) if isinstance(observation, dict) else {}
+        opening_blocks = observation.get("opening_blocks")
+        high_impact_event_window = bool(
+            observation.get("status") == "OBSERVATION_RECORDED"
+            and observation.get("fully_cross_checked") is True
+            and opening_blocks == ["HIGH_IMPACT_EVENT_WINDOW"]
+        )
         assessments = [
             dict(item)
             for item in list(paper.get("assessments", []) or [])[:20]
@@ -250,6 +259,7 @@ class TradingControlCenter:
             "reason_codes": dict(
                 sorted(reasons.items(), key=lambda item: (-item[1], item[0]))
             ),
+            "high_impact_event_window": high_impact_event_window,
             "broker_orders_sent": payload.get("broker_orders_sent") is True,
             "live_orders_sent": payload.get("live_orders_sent") is True,
             "real_money_access": payload.get("real_money_access") is True,
@@ -470,6 +480,7 @@ class TradingControlCenter:
         data = snapshot["forex"]["data_configuration"]
         observation = snapshot["forex"]["observation"]
         research = snapshot["forex"]["historical_research"]
+        forward_evidence = snapshot["forex"]["v2_forward_evidence"]
         forward_review = snapshot["forex"]["v2_owner_review"]
         strategy_cohorts = snapshot["forex"]["strategy_cohort_review"]
         cohort_values = dict(strategy_cohorts.get("cohorts", {}) or {})
@@ -548,11 +559,19 @@ class TradingControlCenter:
                 f"gotowe pary {runtime_cycle['ready_pair_count']}/7"
             )
         elif runtime_cycle["decision"] in {"DATA_BLOCKED", "PAIR_DATA_BLOCKED"}:
-            reason_text = ", ".join(
-                f"{code}: {count}"
-                for code, count in runtime_cycle["reason_codes"].items()
-            ) or "niepełne dane"
-            latest_cycle_text = f"cykl bez transakcji — blokady danych: {reason_text}"
+            if runtime_cycle["high_impact_event_window"]:
+                latest_cycle_text = (
+                    "cykl bez nowych transakcji — okno ważnego wydarzenia; "
+                    "nowe wejścia PAPER są wstrzymane"
+                )
+            else:
+                reason_text = ", ".join(
+                    f"{code}: {count}"
+                    for code, count in runtime_cycle["reason_codes"].items()
+                ) or "niepełne dane"
+                latest_cycle_text = (
+                    f"cykl bez transakcji — blokady danych: {reason_text}"
+                )
         else:
             latest_cycle_text = "cykl zakończony bez transakcji"
         if not observer_runtime["available"]:
@@ -621,10 +640,21 @@ class TradingControlCenter:
         elif forward_review.get("status") == "WAITING_FOR_FORWARD_SAMPLE":
             forward_review_text = (
                 f"zbieranie próbki {forward_review.get('accepted_cycle_count', 0)}/"
-                f"{forward_review.get('minimum_accepted_cycle_count', 20)} cykli; "
+                f"{forward_review.get('minimum_accepted_cycle_count', 20)} "
+                "nowych, zweryfikowanych obserwacji; "
                 f"dni {forward_review.get('accepted_market_day_count', 0)}/"
                 f"{forward_review.get('minimum_market_day_count', 3)}"
             )
+            exclusions = forward_evidence.get("exclusions")
+            duplicate_count = (
+                exclusions.get("DUPLICATE_INPUT_REPLAY", 0)
+                if isinstance(exclusions, dict)
+                else 0
+            )
+            if type(duplicate_count) is int and duplicate_count > 0:
+                forward_review_text += (
+                    f"; {duplicate_count} powtórzone odczyty nie zostały doliczone"
+                )
         else:
             forward_review_text = (
                 "ZABLOKOWANY — bieżące dowody nie przeszły ścisłej walidacji"
