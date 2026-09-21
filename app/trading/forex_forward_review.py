@@ -126,6 +126,7 @@ def _blocked_packet(now: datetime, reason: str) -> dict[str, Any]:
             "retained_entry_signal_count": 0,
             "filtered_entry_signal_count": 0,
         },
+        "accepted_observation_anchors": [],
         "review_snapshot_frozen": False,
     }
     packet["content_sha256"] = _content_sha256(packet)
@@ -176,6 +177,13 @@ def build_forex_v2_owner_review_packet(
         "remaining_accepted_cycles": int(report["remaining_accepted_cycles"]),
         "remaining_market_days": int(report["remaining_market_days"]),
         "signal_comparison": dict(report["signal_comparison"]),
+        "accepted_observation_anchors": [
+            {
+                "sequence": item["sequence"],
+                "observation_hash": item["observation_hash"],
+            }
+            for item in report["accepted_observations"]
+        ],
         "review_snapshot_frozen": False,
     }
     packet["content_sha256"] = _content_sha256(packet)
@@ -199,6 +207,7 @@ def verify_forex_v2_owner_review_packet(value: object) -> bool:
         days = packet.get("accepted_market_day_count")
         minimum_cycles = packet.get("minimum_accepted_cycle_count")
         minimum_days = packet.get("minimum_market_day_count")
+        anchors = packet.get("accepted_observation_anchors")
         if (
             type(packet.get("schema_version")) is not int
             or packet.get("schema_version") != 1
@@ -236,6 +245,19 @@ def verify_forex_v2_owner_review_packet(value: object) -> bool:
             or packet.get("remaining_accepted_cycles") != 0
             or packet.get("remaining_market_days") != 0
             or not _signal_comparison_valid(packet.get("signal_comparison"))
+            or not isinstance(anchors, list)
+            or len(anchors) != cycles
+            or any(
+                not isinstance(item, Mapping)
+                or set(item) != {"sequence", "observation_hash"}
+                or type(item.get("sequence")) is not int
+                or not 1 <= item["sequence"] <= cutoff
+                or not isinstance(item.get("observation_hash"), str)
+                or not _SHA256.fullmatch(item["observation_hash"])
+                for item in anchors
+            )
+            or [item["sequence"] for item in anchors]
+            != sorted({item["sequence"] for item in anchors})
             or packet.get("review_snapshot_frozen") is not True
             or any(packet.get(field) is not False for field in _safety_contract())
             or not isinstance(content_sha256, str)
@@ -254,6 +276,46 @@ def verify_forex_v2_owner_review_packet(value: object) -> bool:
         TradingValidationError,
     ):
         return False
+
+
+def verify_forex_v2_owner_review_lineage(
+    forward_report: object,
+    packet: object,
+) -> bool:
+    """Require the frozen accepted observations to survive in later evidence."""
+    if not verify_forex_v2_forward_evidence_report(
+        forward_report,
+        require_complete=True,
+    ) or not verify_forex_v2_owner_review_packet(packet):
+        return False
+    report = dict(forward_report)
+    review = dict(packet)
+    if any(
+        review[field] != report[field]
+        for field in (
+            "candidate_id",
+            "policy_fingerprint_sha256",
+            "implementation_sha256",
+        )
+    ):
+        return False
+    if report["source_cutoff_sequence"] < review["source_cutoff_sequence"]:
+        return False
+    if report["source_cutoff_sequence"] == review["source_cutoff_sequence"]:
+        return bool(
+            review["source_head_hash"] == report["source_head_hash"]
+            and review["source_report_content_sha256"] == report["content_sha256"]
+        )
+    anchors = review["accepted_observation_anchors"]
+    observations = report["accepted_observations"]
+    return bool(
+        len(observations) >= len(anchors)
+        and all(
+            current.get("sequence") == anchor["sequence"]
+            and current.get("observation_hash") == anchor["observation_hash"]
+            for anchor, current in zip(anchors, observations)
+        )
+    )
 
 
 class ForexV2OwnerReviewPacket:
@@ -293,13 +355,9 @@ class ForexV2OwnerReviewPacket:
             ):
                 if self.path.exists():
                     existing = self._load_existing()
-                    if all(
-                        existing.get(field) == packet.get(field)
-                        for field in (
-                            "candidate_id",
-                            "policy_fingerprint_sha256",
-                            "implementation_sha256",
-                        )
+                    if verify_forex_v2_owner_review_lineage(
+                        forward_report,
+                        existing,
                     ):
                         return existing
                     return _blocked_packet(
@@ -340,14 +398,7 @@ class ForexV2OwnerReviewPacket:
                 selected_now,
                 f"forward_review: saved_packet_invalid: {error}",
             )
-        if all(
-            existing.get(field) == current.get(field)
-            for field in (
-                "candidate_id",
-                "policy_fingerprint_sha256",
-                "implementation_sha256",
-            )
-        ):
+        if verify_forex_v2_owner_review_lineage(forward_report, existing):
             return existing
         return _blocked_packet(
             selected_now,
@@ -397,5 +448,6 @@ class ForexV2OwnerReviewPacket:
 __all__ = [
     "ForexV2OwnerReviewPacket",
     "build_forex_v2_owner_review_packet",
+    "verify_forex_v2_owner_review_lineage",
     "verify_forex_v2_owner_review_packet",
 ]

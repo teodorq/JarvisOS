@@ -335,6 +335,9 @@ freezes the exact candidate, code fingerprint, journal cutoff/head and source
 report hash; later cycles cannot silently move the review target. It starts with
 `owner_decision: UNDECIDED`, contains signal counts rather than PnL, and grants
 no PAPER or LIVE activation authority.
+If writing the activity notification fails at that exact threshold, a later
+verified report can still deliver it once: the frozen packet's accepted
+observation anchors must be an unchanged prefix of the newer evidence.
 
 ```powershell
 .\.venv\Scripts\python.exe .\tools\run_forex_forward_evidence.py

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+from copy import deepcopy
 import hashlib
 import json
 from pathlib import Path
@@ -133,6 +134,44 @@ def _complete_forward_report() -> dict:
     return report
 
 
+def _descendant_forward_report(first_report: dict) -> dict:
+    report = deepcopy(first_report)
+    extra = dict(report["accepted_observations"][-1])
+    extra["sequence"] = 21
+    extra["observation_id"] = "forward-notification-0020"
+    extra["source_cycle_id"] = "forward-source-cycle-0020"
+    extra["observed_at"] = "2026-08-25T10:14:00+00:00"
+    extra_hash = hashlib.sha256(b"accepted-20").hexdigest()
+    for field in (
+        "observation_hash",
+        "bars_sha256",
+        "decision_input_sha256",
+        "capture_nonce_sha256",
+    ):
+        extra[field] = extra_hash
+    report["accepted_observations"].append(extra)
+    report["source_cutoff_sequence"] = 21
+    report["source_head_hash"] = extra_hash
+    report["accepted_cycle_count"] = 21
+    report["accepted_by_market_day"]["2026-08-25"] = 7
+    _rehash_forward_report(report)
+    return report
+
+
+def _rehash_forward_report(report: dict) -> None:
+    canonical = json.dumps(
+        {
+            key: value
+            for key, value in report.items()
+            if key not in {"generated_at", "content_sha256"}
+        },
+        ensure_ascii=True,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    report["content_sha256"] = hashlib.sha256(canonical).hexdigest()
+
+
 def _attach_complete_review(payload: dict, root: Path) -> dict:
     report = _complete_forward_report()
     payload["forward_evidence"] = report
@@ -225,6 +264,54 @@ def test_tampered_forward_completion_never_creates_review_milestone() -> None:
         assert journal.events(limit=10) == []
 
 
+def test_later_valid_report_recovers_missed_review_notification_once() -> None:
+    with TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        store = ForexV2OwnerReviewPacket(root)
+        packet = store.refresh(_complete_forward_report())
+        journal = ForexPaperActivityJournal(root)
+        newer_report = _descendant_forward_report(_complete_forward_report())
+        payload = _payload(4)
+        payload["forward_evidence"] = newer_report
+        payload["forward_review"] = packet
+
+        recorded = journal.record(payload)
+        repeated = dict(payload, cycle_id="cycle-5")
+        duplicate_milestone = journal.record(repeated)
+        events = journal.events(limit=10)
+
+        assert recorded == {"status": "RECORDED", "events_recorded": 1}
+        assert duplicate_milestone == {"status": "RECORDED", "events_recorded": 0}
+        assert [event["kind"] for event in events] == [
+            "FOREX_V2_FORWARD_REVIEW_READY"
+        ]
+        assert "20 cykli i 3 dni" in events[0]["message"]
+
+
+def test_divergent_later_report_cannot_recover_review_notification() -> None:
+    with TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        packet = ForexV2OwnerReviewPacket(root).refresh(_complete_forward_report())
+        report = _descendant_forward_report(_complete_forward_report())
+        report["accepted_observations"][0]["observation_hash"] = hashlib.sha256(
+            b"different-first-observation"
+        ).hexdigest()
+        _rehash_forward_report(report)
+        payload = _payload(6)
+        payload["forward_evidence"] = report
+        payload["forward_review"] = packet
+
+        result = ForexPaperActivityJournal(root).record(payload)
+
+        assert result == {"status": "RECORDED", "events_recorded": 0}
+        assert ForexV2OwnerReviewPacket(root).refresh(report)["status"] == (
+            "BLOCKED_INVALID_FORWARD_EVIDENCE"
+        )
+        assert ForexV2OwnerReviewPacket(root).review(report)["status"] == (
+            "BLOCKED_INVALID_FORWARD_EVIDENCE"
+        )
+
+
 def test_owner_review_packet_freezes_first_complete_source() -> None:
     with TemporaryDirectory() as temporary:
         root = Path(temporary)
@@ -234,36 +321,7 @@ def test_owner_review_packet_freezes_first_complete_source() -> None:
         preview = store.review(first_report)
         first = store.refresh(first_report)
         saved = store.path.read_bytes()
-        newer_report = _complete_forward_report()
-        extra = dict(newer_report["accepted_observations"][-1])
-        extra["sequence"] = 21
-        extra["observation_id"] = "forward-notification-0020"
-        extra["source_cycle_id"] = "forward-source-cycle-0020"
-        extra["observed_at"] = "2026-08-25T10:14:00+00:00"
-        extra_hash = hashlib.sha256(b"accepted-20").hexdigest()
-        for field in (
-            "observation_hash",
-            "bars_sha256",
-            "decision_input_sha256",
-            "capture_nonce_sha256",
-        ):
-            extra[field] = extra_hash
-        newer_report["accepted_observations"].append(extra)
-        newer_report["source_cutoff_sequence"] = 21
-        newer_report["source_head_hash"] = extra_hash
-        newer_report["accepted_cycle_count"] = 21
-        newer_report["accepted_by_market_day"]["2026-08-25"] = 7
-        canonical = json.dumps(
-            {
-                key: value
-                for key, value in newer_report.items()
-                if key not in {"generated_at", "content_sha256"}
-            },
-            ensure_ascii=True,
-            sort_keys=True,
-            separators=(",", ":"),
-        ).encode("utf-8")
-        newer_report["content_sha256"] = hashlib.sha256(canonical).hexdigest()
+        newer_report = _descendant_forward_report(first_report)
 
         frozen = store.refresh(newer_report)
         reviewed = store.review(newer_report)

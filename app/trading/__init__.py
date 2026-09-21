@@ -21,6 +21,7 @@ from app.trading.forex_forward_evidence import (
 from app.trading.forex_forward_review import (
     ForexV2OwnerReviewPacket,
     build_forex_v2_owner_review_packet,
+    verify_forex_v2_owner_review_lineage,
     verify_forex_v2_owner_review_packet,
 )
 from app.trading.forex_historical import (
@@ -161,6 +162,7 @@ __all__ = [
     "build_forex_paper_performance_review",
     "build_forex_v2_forward_evidence_report",
     "build_forex_v2_owner_review_packet",
+    "verify_forex_v2_owner_review_lineage",
     "verify_forex_v2_forward_evidence_report",
     "verify_forex_v2_owner_review_packet",
     "build_forex_paper_sample_contract",
