@@ -382,6 +382,48 @@ def test_corrupted_owner_review_packet_is_preserved_and_blocks_replacement() -> 
         assert blocked["live_activation_ready"] is False
 
 
+def test_owner_review_timestamp_is_bound_to_immutable_hash() -> None:
+    with TemporaryDirectory() as temporary:
+        packet = ForexV2OwnerReviewPacket(Path(temporary)).refresh(
+            _complete_forward_report()
+        )
+        changed = dict(packet)
+        changed["generated_at"] = "2030-01-01T12:00:00+00:00"
+
+        assert packet["schema_version"] == 2
+        assert verify_forex_v2_owner_review_packet(packet) is True
+        assert verify_forex_v2_owner_review_packet(changed) is False
+
+
+def test_legacy_owner_review_packet_is_preserved_and_blocks_replacement() -> None:
+    with TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        store = ForexV2OwnerReviewPacket(root)
+        report = _complete_forward_report()
+        legacy = store.refresh(report)
+        legacy["schema_version"] = 1
+        canonical = json.dumps(
+            {
+                key: value
+                for key, value in legacy.items()
+                if key not in {"generated_at", "content_sha256"}
+            },
+            ensure_ascii=True,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        legacy["content_sha256"] = hashlib.sha256(canonical).hexdigest()
+        store.path.write_text(json.dumps(legacy), encoding="utf-8")
+        saved = store.path.read_bytes()
+
+        blocked = store.refresh(report)
+
+        assert blocked["status"] == "BLOCKED_INVALID_FORWARD_EVIDENCE"
+        assert store.path.read_bytes() == saved
+        assert blocked["paper_activation_ready"] is False
+        assert blocked["live_activation_ready"] is False
+
+
 def test_owner_review_rejects_changed_sample_contract() -> None:
     report = _complete_forward_report()
     report["minimum_accepted_cycle_count"] = 1

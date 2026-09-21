@@ -332,7 +332,10 @@ profitability, change the PAPER strategy, send an order or enable LIVE trading.
 At the same first verified threshold, JARVIS atomically writes the ignored
 `data/trading/research/forward_v2_owner_review.json`. This immutable packet
 freezes the exact candidate, code fingerprint, journal cutoff/head and source
-report hash; later cycles cannot silently move the review target. It starts with
+report hash; its version 2 content hash also binds the creation timestamp.
+Later cycles cannot silently move the review target. A legacy or corrupted
+packet is preserved and blocks replacement instead of being silently upgraded.
+It starts with
 `owner_decision: UNDECIDED`, contains signal counts rather than PnL, and grants
 no PAPER or LIVE activation authority.
 If writing the activity notification fails at that exact threshold, a later

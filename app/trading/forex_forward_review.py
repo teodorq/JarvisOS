@@ -51,7 +51,7 @@ def _content_sha256(packet: Mapping[str, Any]) -> str:
     return _canonical_sha256({
         key: value
         for key, value in packet.items()
-        if key not in {"generated_at", "content_sha256"}
+        if key != "content_sha256"
     })
 
 
@@ -86,7 +86,7 @@ def _signal_comparison_valid(value: object) -> bool:
 def _base_packet(now: datetime) -> dict[str, Any]:
     policy = ForexRegimeCandidatePolicy()
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "mode": "FOREX_V2_OWNER_REVIEW_READ_ONLY",
         "generated_at": now.isoformat(),
         "candidate_id": policy.candidate_id,
@@ -210,7 +210,7 @@ def verify_forex_v2_owner_review_packet(value: object) -> bool:
         anchors = packet.get("accepted_observation_anchors")
         if (
             type(packet.get("schema_version")) is not int
-            or packet.get("schema_version") != 1
+            or packet.get("schema_version") != 2
             or packet.get("status") != "READY_FOR_OWNER_REVIEW"
             or packet.get("mode") != "FOREX_V2_OWNER_REVIEW_READ_ONLY"
             or packet.get("candidate_id") != policy.candidate_id
