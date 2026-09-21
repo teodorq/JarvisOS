@@ -7,12 +7,14 @@ import json
 from pathlib import Path
 
 from app.trading.forex_candidate_v2 import ForexRegimeCandidatePolicy
+from app.trading.forex_activity_journal import ForexPaperActivityJournal
 from app.trading.forex_forward_evidence import (
     ForexV2ForwardEvidenceReport,
     build_forex_v2_forward_evidence_report,
     expected_candidate_implementation_sha256,
     verify_forex_v2_forward_evidence_report,
 )
+from app.trading.forex_forward_review import ForexV2OwnerReviewPacket
 from app.trading.forex_models import MAJOR_FOREX_PAIRS
 from app.trading.forex_observation import ForexObservationJournal
 from app.trading.forex_sample_contract import build_forex_paper_sample_contract
@@ -1094,3 +1096,69 @@ def test_future_timestamp_blocks_and_complete_sample_needs_three_days(
         forged,
         require_complete=True,
     ) is False
+
+
+def test_twentieth_forward_observation_freezes_one_safe_owner_milestone(
+    tmp_path: Path,
+) -> None:
+    observation_journal = ForexObservationJournal(tmp_path)
+    reporter = ForexV2ForwardEvidenceReport(tmp_path)
+    reviewer = ForexV2OwnerReviewPacket(tmp_path)
+    activity = ForexPaperActivityJournal(tmp_path)
+    generated_at = AFTER_FREEZE + timedelta(days=5)
+    market_day_offsets = (0, 3, 4)
+    for index in range(19):
+        observed_at = AFTER_FREEZE + timedelta(
+            days=market_day_offsets[index // 7],
+            minutes=(index % 7) * 15,
+        )
+        observation_journal.record(_record(
+            observed_at,
+            seed=f"pipeline-{index}",
+            observation_id=f"forward-pipeline-{index:04d}",
+        ))
+
+    incomplete = reporter.refresh(generated_at=generated_at)
+    waiting = reviewer.refresh(incomplete, generated_at=generated_at)
+    assert incomplete["accepted_cycle_count"] == 19
+    assert waiting["status"] == "WAITING_FOR_FORWARD_SAMPLE"
+    assert not reviewer.path.exists()
+
+    observation_journal.record(_record(
+        AFTER_FREEZE + timedelta(days=4, minutes=75),
+        seed="pipeline-19",
+        observation_id="forward-pipeline-0019",
+    ))
+    complete = reporter.refresh(generated_at=generated_at)
+    packet = reviewer.refresh(complete, generated_at=generated_at)
+    payload = {
+        "status": "PAPER_CYCLE_BLOCKED",
+        "cycle_id": "pipeline-complete",
+        "observed_at": generated_at.isoformat(),
+        "forward_evidence": complete,
+        "forward_review": packet,
+        "broker_orders_sent": False,
+        "live_orders_sent": False,
+        "real_money_access": False,
+    }
+    first_notification = activity.record(payload)
+    repeated = activity.record({**payload, "cycle_id": "pipeline-repeated"})
+    events = activity.events(limit=10)
+
+    assert complete["status"] == "FORWARD_OBSERVATION_SAMPLE_COMPLETE"
+    assert complete["accepted_cycle_count"] == 20
+    assert complete["accepted_market_day_count"] == 3
+    assert packet["status"] == "READY_FOR_OWNER_REVIEW"
+    assert packet["owner_review_required"] is True
+    assert packet["packet_persisted"] is True
+    assert packet["paper_activation_ready"] is False
+    assert packet["live_activation_ready"] is False
+    assert packet["real_money_access"] is False
+    assert reviewer.path.is_file()
+    assert first_notification == {"status": "RECORDED", "events_recorded": 1}
+    assert repeated == {"status": "RECORDED", "events_recorded": 0}
+    assert [event["kind"] for event in events] == [
+        "FOREX_V2_FORWARD_REVIEW_READY"
+    ]
+    assert "nie potwierdza zysku" in events[0]["message"]
+    assert "nie włącza LIVE" in events[0]["message"]
