@@ -338,6 +338,9 @@ no PAPER or LIVE activation authority.
 If writing the activity notification fails at that exact threshold, a later
 verified report can still deliver it once: the frozen packet's accepted
 observation anchors must be an unchanged prefix of the newer evidence.
+The owner status and notification show exact base/retained/filtered entry
+signal counts and explicitly flag a sample with no entry signals. Reaching the
+observation threshold never establishes trading performance or profitability.
 
 ```powershell
 .\.venv\Scripts\python.exe .\tools\run_forex_forward_evidence.py

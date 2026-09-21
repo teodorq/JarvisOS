@@ -401,6 +401,8 @@ class TradingControlAndRoutingTests(unittest.TestCase):
         self.assertIn("Bramka PAPER: ZABLOKOWANA", rendered)
         self.assertIn("wykonanie pozostaje WYŁĄCZONE", rendered)
         self.assertIn("Pakiet przeglądu Forex V2: zbieranie próbki 0/20", rendered)
+        self.assertIn("Forward V2 — sygnały wejścia: bazowe 0", rendered)
+        self.assertIn("brak sygnałów do porównania", rendered)
 
     def test_owner_status_command_is_read_only_and_client_blocked(self) -> None:
         command = "Status paper tradingu"

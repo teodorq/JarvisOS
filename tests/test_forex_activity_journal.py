@@ -233,10 +233,35 @@ def test_completed_forward_sample_is_notified_once_with_trade_event() -> None:
         ]
         assert "nie potwierdza zysku" in events[-1]["message"]
         assert "nie włącza LIVE" in events[-1]["message"]
+        assert "Brak sygnałów wejścia" in events[-1]["message"]
         feed = ForexPaperActivityFeed(root, settings=_settings())
         assert feed.poll()["activity_kind"] == "POSITION_OPENED"
         assert feed.poll()["activity_kind"] == "FOREX_V2_FORWARD_REVIEW_READY"
         assert feed.poll() is None
+
+
+def test_review_notification_reports_signal_counts_without_performance_claim() -> None:
+    with TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        report = _complete_forward_report()
+        report["signal_comparison"] = {
+            "base_entry_signal_count": 1,
+            "retained_entry_signal_count": 0,
+            "filtered_entry_signal_count": 1,
+        }
+        _rehash_forward_report(report)
+        packet = ForexV2OwnerReviewPacket(root).refresh(report)
+        payload = _payload(3)
+        payload["forward_evidence"] = report
+        payload["forward_review"] = packet
+
+        result = ForexPaperActivityJournal(root).record(payload)
+        message = ForexPaperActivityJournal(root).events(limit=10)[0]["message"]
+
+        assert result == {"status": "RECORDED", "events_recorded": 1}
+        assert "Bazowe sygnały wejścia: 1; V2 zachował 0, odfiltrował 1" in message
+        assert "nie oceniają skuteczności" in message
+        assert "nie potwierdza zysku" in message
 
 
 def test_tampered_forward_completion_never_creates_review_milestone() -> None:

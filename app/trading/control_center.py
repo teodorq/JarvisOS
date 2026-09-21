@@ -629,6 +629,17 @@ class TradingControlCenter:
             forward_review_text = (
                 "ZABLOKOWANY — bieżące dowody nie przeszły ścisłej walidacji"
             )
+        if forward_review.get("source_report_valid") is True:
+            forward_signals = forward_review["signal_comparison"]
+            forward_signal_text = (
+                f"bazowe {forward_signals['base_entry_signal_count']}; "
+                f"V2 zachował {forward_signals['retained_entry_signal_count']}, "
+                f"odfiltrował {forward_signals['filtered_entry_signal_count']}"
+            )
+            if forward_signals["base_entry_signal_count"] == 0:
+                forward_signal_text += "; brak sygnałów do porównania"
+        else:
+            forward_signal_text = "niedostępne — dowody zablokowane"
         if not observation["audit_chain_valid"]:
             gate = (
                 "ZABLOKOWANA — łańcuch audytu obserwacji jest uszkodzony; "
@@ -744,6 +755,8 @@ class TradingControlCenter:
             f"{observation['observation_count']}; zablokowane "
             f"{observation['blocked_count']}; audyt {observation_audit}.\n"
             f"• Pakiet przeglądu Forex V2: {forward_review_text}.\n"
+            f"• Forward V2 — sygnały wejścia: {forward_signal_text}; "
+            "to nie jest wynik finansowy.\n"
             f"• Bramka PAPER: {gate}.\n"
             "• Dane Forex: lokalny adapter MT5 DEMO, opcjonalny OANDA Practice, "
             "Twelve Data, NBP i publiczny kalendarz Forex Factory oraz kontrola "
