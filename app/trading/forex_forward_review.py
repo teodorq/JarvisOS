@@ -85,6 +85,10 @@ def _signal_comparison_valid(value: object) -> bool:
 
 def _base_packet(now: datetime) -> dict[str, Any]:
     policy = ForexRegimeCandidatePolicy()
+    try:
+        implementation_sha256 = expected_candidate_implementation_sha256()
+    except TradingValidationError:
+        implementation_sha256 = ""
     return {
         "schema_version": 2,
         "mode": "FOREX_V2_OWNER_REVIEW_READ_ONLY",
@@ -92,7 +96,7 @@ def _base_packet(now: datetime) -> dict[str, Any]:
         "candidate_id": policy.candidate_id,
         "frozen_after": policy.frozen_after.isoformat(),
         "policy_fingerprint_sha256": policy.fingerprint_sha256,
-        "implementation_sha256": expected_candidate_implementation_sha256(),
+        "implementation_sha256": implementation_sha256,
         "review_scope": "FORWARD_SIGNAL_BEHAVIOR_ONLY",
         "limitations": list(_LIMITATIONS),
         "owner_decision": "UNDECIDED",
@@ -186,6 +190,11 @@ def build_forex_v2_owner_review_packet(
         ],
         "review_snapshot_frozen": False,
     }
+    if packet["implementation_sha256"] != report["implementation_sha256"]:
+        return _blocked_packet(
+            selected_now,
+            "forward_review: implementation_source_changed",
+        )
     packet["content_sha256"] = _content_sha256(packet)
     return packet
 

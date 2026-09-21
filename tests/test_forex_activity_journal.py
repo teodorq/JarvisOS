@@ -6,6 +6,7 @@ import hashlib
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 from app.market_data.forex_environment import ForexDataSettings
 from app.trading.forex_activity import ForexPaperActivityFeed
@@ -19,6 +20,7 @@ from app.trading.forex_forward_review import (
     build_forex_v2_owner_review_packet,
     verify_forex_v2_owner_review_packet,
 )
+from app.trading.models import TradingValidationError
 
 
 def _settings() -> ForexDataSettings:
@@ -445,6 +447,26 @@ def test_owner_review_rejects_changed_sample_contract() -> None:
     assert packet["source_error"] == "forward_review: sample_contract_invalid"
     assert packet["paper_activation_ready"] is False
     assert packet["live_activation_ready"] is False
+
+
+def test_owner_review_fails_closed_when_candidate_source_is_unavailable() -> None:
+    with patch(
+        "app.trading.forex_forward_review.expected_candidate_implementation_sha256",
+        side_effect=TradingValidationError("implementation_source_unavailable"),
+    ):
+        missing_source = build_forex_v2_owner_review_packet(None)
+        changed_during_build = build_forex_v2_owner_review_packet(
+            _complete_forward_report()
+        )
+
+    assert missing_source["status"] == "BLOCKED_INVALID_FORWARD_EVIDENCE"
+    assert missing_source["implementation_sha256"] == ""
+    assert changed_during_build["status"] == "BLOCKED_INVALID_FORWARD_EVIDENCE"
+    assert changed_during_build["source_error"] == (
+        "forward_review: implementation_source_changed"
+    )
+    assert changed_during_build["paper_activation_ready"] is False
+    assert changed_during_build["live_activation_ready"] is False
 
 
 def test_block_and_recovery_are_recorded_only_on_transitions() -> None:
