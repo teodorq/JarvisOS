@@ -60,6 +60,64 @@ def _payload(
     }
 
 
+def _ready_performance_payload(cycle: int) -> dict:
+    payload = _payload(cycle)
+    fingerprint = hashlib.sha256(b"paper-contract").hexdigest()
+    payload["paper"] = {
+        "status": "CYCLE_COMPLETED",
+        "mode": "FOREX_PAPER_ONLY",
+        "execution": {"executions": []},
+        "live_orders_sent": False,
+        "network_access": False,
+        "account": {
+            "status": "READY",
+            "mode": "FOREX_PAPER_ONLY",
+            "sample_contract": {
+                "contract_id": "paper-contract-v1",
+                "fingerprint_sha256": fingerprint,
+                "paper_only": True,
+                "live_trading_enabled": False,
+            },
+            "performance": {
+                "status": "READY_FOR_MANUAL_REVIEW",
+                "mode": "FOREX_PAPER_PERFORMANCE_READ_ONLY",
+                "metric_scope": "CURRENT_SAMPLE_CONTRACT",
+                "minimum_closed_trades_for_review": 20,
+                "valid_closed_trade_count": 20,
+                "remaining_closed_trades_for_review": 0,
+                "sample_size_sufficient_for_review": True,
+                "net_realized_pnl_pln": "-12.34",
+                "maximum_closed_trade_drawdown_pln": "18.56",
+                "performance_validated": False,
+                "automatic_paper_strategy_change": False,
+                "live_promotion_ready": False,
+                "automatic_live_promotion": False,
+                "integrity": {
+                    "evidence_valid": True,
+                    "audit_chain_valid": True,
+                    "execution_audit_matches_ledger": True,
+                    "balance_reconciled": True,
+                    "invalid_closed_fill_count": 0,
+                },
+                "sample_contract_review": {
+                    "status": "TRACKING_CURRENT_CONTRACT",
+                    "mode": "FOREX_PAPER_SAMPLE_CONTRACT_READ_ONLY",
+                    "contract_tracking_enabled": True,
+                    "expected_contract_id": "paper-contract-v1",
+                    "expected_fingerprint_sha256": fingerprint,
+                    "current_contract_closed_trade_count": 20,
+                    "foreign_contract_closed_trade_count": 0,
+                    "sample_contract_consistent": True,
+                    "automatic_sample_merge": False,
+                    "automatic_strategy_change": False,
+                    "live_promotion_ready": False,
+                },
+            },
+        },
+    }
+    return payload
+
+
 def _complete_forward_report() -> dict:
     policy = ForexRegimeCandidatePolicy()
     day_values = ("21",) * 7 + ("24",) * 7 + ("25",) * 6
@@ -240,6 +298,39 @@ def test_completed_forward_sample_is_notified_once_with_trade_event() -> None:
         assert feed.poll()["activity_kind"] == "POSITION_OPENED"
         assert feed.poll()["activity_kind"] == "FOREX_V2_FORWARD_REVIEW_READY"
         assert feed.poll() is None
+
+
+def test_completed_paper_performance_sample_is_notified_once() -> None:
+    with TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        journal = ForexPaperActivityJournal(root)
+
+        first = journal.record(_ready_performance_payload(70))
+        repeated = journal.record(_ready_performance_payload(71))
+        events = journal.events(limit=10)
+
+        assert first == {"status": "RECORDED", "events_recorded": 1}
+        assert repeated == {"status": "RECORDED", "events_recorded": 0}
+        assert [event["kind"] for event in events] == [
+            "FOREX_PAPER_SAMPLE_REVIEW_READY"
+        ]
+        assert "20/20 zamkniętych transakcji" in events[0]["message"]
+        assert "nie potwierdzają skuteczności" in events[0]["message"]
+        assert "nie włączają LIVE" in events[0]["message"]
+
+
+def test_invalid_paper_performance_never_creates_review_milestone() -> None:
+    with TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        payload = _ready_performance_payload(72)
+        payload["paper"]["account"]["performance"]["integrity"][
+            "audit_chain_valid"
+        ] = False
+
+        result = ForexPaperActivityJournal(root).record(payload)
+
+        assert result == {"status": "RECORDED", "events_recorded": 0}
+        assert ForexPaperActivityJournal(root).events(limit=10) == []
 
 
 def test_review_notification_reports_signal_counts_without_performance_claim() -> None:

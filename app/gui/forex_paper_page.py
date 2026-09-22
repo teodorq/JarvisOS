@@ -288,6 +288,8 @@ class ForexPaperPage(QWidget):
             "SAFETY_ATTENTION": "KONTROLA BEZPIECZEŃSTWA",
             "POSITION_PROTECTION_ATTENTION": "OCHRONA SL/TP — UWAGA",
             "POSITION_PROTECTION_RECOVERED": "OCHRONA SL/TP — DZIAŁA",
+            "FOREX_V2_FORWARD_REVIEW_READY": "PRZEGLĄD FILTRA V2",
+            "FOREX_PAPER_SAMPLE_REVIEW_READY": "PRZEGLĄD PRÓBKI PAPER",
         }
         for row, event in enumerate(reversed(events)):
             values = (

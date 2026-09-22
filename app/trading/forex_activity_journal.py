@@ -16,7 +16,9 @@ from typing import Any, Iterator
 from app.core.json_store import JsonStore
 from app.core.project_paths import resolve_project_root
 from app.trading.forex_entry_blocks import activity_block_message
-from app.trading.forex_forward_notifications import forward_review_milestone
+from app.trading.forex_review_notifications import (
+    normalized_review_fingerprints, review_milestones,
+)
 
 
 _PAIR = re.compile(r"^[A-Z]{3}_[A-Z]{3}$")
@@ -47,6 +49,7 @@ class ForexPaperActivityJournal:
             "last_health": "",
             "last_protection_health": "",
             "forward_review_fingerprint": "",
+            "performance_review_fingerprint": "",
             "protection_consecutive_failure_count": 0,
             "recent_cycle_keys": [],
             "events": [],
@@ -88,12 +91,9 @@ class ForexPaperActivityJournal:
             if cycle_key in state["recent_cycle_keys"]:
                 return {"status": "DUPLICATE_CYCLE", "events_recorded": 0}
             health = self._health(value)
-            forward_fingerprint, milestone = forward_review_milestone(
-                value,
-                completed_fingerprint=state["forward_review_fingerprint"],
-            )
+            fingerprints, milestones = review_milestones(value, state)
             specs = self._event_specs(
-                value, previous_health=state["last_health"], milestone=milestone
+                value, previous_health=state["last_health"], milestones=milestones
             )
             recorded = 0
             for spec in specs:
@@ -105,8 +105,7 @@ class ForexPaperActivityJournal:
                 )
             state["last_cycle_key"] = cycle_key
             state["last_health"] = health
-            if forward_fingerprint:
-                state["forward_review_fingerprint"] = forward_fingerprint
+            state.update(fingerprints)
             state["recent_cycle_keys"] = (
                 state["recent_cycle_keys"] + [cycle_key]
             )[-self.MAX_RECENT_CYCLES:]
@@ -259,7 +258,7 @@ class ForexPaperActivityJournal:
         payload: dict[str, Any],
         *,
         previous_health: str,
-        milestone: dict[str, str] | None = None,
+        milestones: list[dict[str, str]] | None = None,
     ) -> list[dict[str, str]]:
         health = self._health(payload)
         occurred_at = " ".join(str(payload.get("observed_at", "")).split())[:64]
@@ -280,8 +279,7 @@ class ForexPaperActivityJournal:
         ]
         for spec in specs:
             spec["occurred_at"] = occurred_at or spec.get("occurred_at", "")
-        if milestone is not None:
-            specs.append(milestone)
+        specs.extend(milestones or [])
         if specs:
             return specs
         if health == "BLOCKED" and previous_health != "BLOCKED":
@@ -435,8 +433,7 @@ class ForexPaperActivityJournal:
         state["schema_version"] = 1
         state["mode"] = "FOREX_PAPER_ONLY"
         state["last_cycle_key"] = str(state.get("last_cycle_key", ""))[:192]
-        fingerprint = str(state.get("forward_review_fingerprint", ""))
-        state["forward_review_fingerprint"] = fingerprint if re.fullmatch(r"[0-9a-f]{64}", fingerprint) else ""
+        state.update(normalized_review_fingerprints(state))
         health = str(state.get("last_health", ""))
         state["last_health"] = (
             health if health in {"HEALTHY", "BLOCKED", "SAFETY_ATTENTION"} else ""
