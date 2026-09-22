@@ -668,6 +668,10 @@ class TradingControlCenter:
             )
             if forward_signals["base_entry_signal_count"] == 0:
                 forward_signal_text += "; brak sygnałów do porównania"
+            elif forward_signals["base_entry_signal_count"] == 1:
+                forward_signal_text += (
+                    "; tylko jeden przypadek — za mało do oceny działania filtra"
+                )
         else:
             forward_signal_text = "niedostępne — dowody zablokowane"
         if not observation["audit_chain_valid"]:

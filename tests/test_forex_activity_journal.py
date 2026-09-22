@@ -262,7 +262,7 @@ def test_review_notification_reports_signal_counts_without_performance_claim() -
 
         assert result == {"status": "RECORDED", "events_recorded": 1}
         assert "Bazowe sygnały wejścia: 1; V2 zachował 0, odfiltrował 1" in message
-        assert "nie oceniają skuteczności" in message
+        assert "Tylko jeden sygnał — za mało do oceny działania filtra" in message
         assert "nie potwierdza zysku" in message
 
 

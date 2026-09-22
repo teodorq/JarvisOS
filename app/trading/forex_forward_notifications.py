@@ -43,7 +43,11 @@ def forward_review_milestone(
     signal_warning = (
         " Brak sygnałów wejścia — wpływu filtra nie da się jeszcze ocenić."
         if base == 0
-        else " Te liczby nie oceniają skuteczności strategii."
+        else (
+            " Tylko jeden sygnał — za mało do oceny działania filtra."
+            if base == 1
+            else " Te liczby nie oceniają skuteczności strategii."
+        )
     )
     occurred_at = " ".join(str(payload.get("observed_at", "")).split())[:64]
     return fingerprint, {

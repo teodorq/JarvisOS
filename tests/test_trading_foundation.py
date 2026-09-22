@@ -404,6 +404,23 @@ class TradingControlAndRoutingTests(unittest.TestCase):
         self.assertIn("Forward V2 — sygnały wejścia: bazowe 0", rendered)
         self.assertIn("brak sygnałów do porównania", rendered)
 
+    def test_owner_status_calls_out_single_signal_limitation(self) -> None:
+        with TemporaryDirectory() as directory:
+            center = TradingControlCenter(directory)
+            snapshot = center.status()
+            review = snapshot["forex"]["v2_owner_review"]
+            review["source_report_valid"] = True
+            review["signal_comparison"] = {
+                "base_entry_signal_count": 1,
+                "retained_entry_signal_count": 0,
+                "filtered_entry_signal_count": 1,
+            }
+            with patch.object(center, "status", return_value=snapshot):
+                rendered = center.format_status()
+
+        self.assertIn("tylko jeden przypadek — za mało do oceny działania filtra", rendered)
+        self.assertIn("to nie jest wynik finansowy", rendered)
+
     def test_owner_status_command_is_read_only_and_client_blocked(self) -> None:
         command = "Status paper tradingu"
         self.assertEqual(
