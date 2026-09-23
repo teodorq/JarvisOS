@@ -28,6 +28,7 @@ from app.trading.forex_research_status import ForexHistoricalResearchGate
 from app.trading.forex_risk import ForexPaperPolicy
 from app.trading.forex_scanner import ForexMarketScanner
 from app.trading.forex_strategy_cohorts import ForexStrategyCohortReview
+from app.trading.forex_v2_research_dashboard import ForexV2ResearchDashboard
 from app.trading.paper_broker import PaperTradingEngine
 from app.trading.policy import PaperTradingPolicy
 from app.trading.risk import PreTradeRiskEngine
@@ -58,11 +59,6 @@ class TradingControlCenter:
         self.forex_performance_review = ForexPaperPerformanceReviewPacket(
             self.project_root
         )
-        self.forex_dashboard = ForexPaperDashboard(
-            self.project_root,
-            executor=self.forex_executor,
-            performance_review=self.forex_performance_review,
-        )
         self.forex_observations = ForexObservationJournal(self.project_root)
         self.forex_research = ForexHistoricalResearchGate(self.project_root)
         self.forex_forward_evidence = ForexV2ForwardEvidenceReport(
@@ -71,6 +67,17 @@ class TradingControlCenter:
         self.forex_forward_review = ForexV2OwnerReviewPacket(self.project_root)
         self.forex_strategy_cohorts = ForexStrategyCohortReview(
             self.project_root
+        )
+        self.forex_v2_dashboard = ForexV2ResearchDashboard(
+            self.project_root,
+            forward_evidence=self.forex_forward_evidence,
+            owner_review=self.forex_forward_review,
+        )
+        self.forex_dashboard = ForexPaperDashboard(
+            self.project_root,
+            executor=self.forex_executor,
+            performance_review=self.forex_performance_review,
+            v2_research=self.forex_v2_dashboard,
         )
 
     def status(self) -> dict[str, Any]:

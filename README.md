@@ -154,6 +154,10 @@ tamper-evident execution audit and reconcile with the PAPER balance. The second
 metric row shows sample progress, average trade result, profit factor and the
 maximum closed-equity drawdown. Twenty valid closed trades only make the sample
 available for manual review; they never validate the strategy or enable LIVE.
+The same page also shows a bounded V2 research summary only after its forward
+report and immutable review lineage verify. It exposes cycle, market-day and
+signal counts without audit hashes. A frozen signal sample is explicitly not a
+profit result, cannot change the PAPER strategy and cannot enable LIVE.
 The `WYNIKI PAR` tab keeps the same metrics separate for all seven configured
 pairs and shows each pair's progress toward 20 closed PAPER trades. A completed
 pair sample only opens a manual review; it never enables, disables or promotes a

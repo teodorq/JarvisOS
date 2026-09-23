@@ -18,6 +18,7 @@ from app.trading.forex_forward_review import ForexV2OwnerReviewPacket
 from app.trading.forex_models import MAJOR_FOREX_PAIRS
 from app.trading.forex_observation import ForexObservationJournal
 from app.trading.forex_sample_contract import build_forex_paper_sample_contract
+from app.trading.forex_v2_research_dashboard import ForexV2ResearchDashboard
 
 
 UTC = timezone.utc
@@ -1104,6 +1105,11 @@ def test_twentieth_forward_observation_freezes_one_safe_owner_milestone(
     observation_journal = ForexObservationJournal(tmp_path)
     reporter = ForexV2ForwardEvidenceReport(tmp_path)
     reviewer = ForexV2OwnerReviewPacket(tmp_path)
+    dashboard = ForexV2ResearchDashboard(
+        tmp_path,
+        forward_evidence=reporter,
+        owner_review=reviewer,
+    )
     activity = ForexPaperActivityJournal(tmp_path)
     generated_at = AFTER_FREEZE + timedelta(days=5)
     market_day_offsets = (0, 3, 4)
@@ -1123,6 +1129,11 @@ def test_twentieth_forward_observation_freezes_one_safe_owner_milestone(
     assert incomplete["accepted_cycle_count"] == 19
     assert waiting["status"] == "WAITING_FOR_FORWARD_SAMPLE"
     assert not reviewer.path.exists()
+    waiting_view = dashboard.snapshot()
+    assert waiting_view["status"] == "WAITING_FOR_FORWARD_SAMPLE"
+    assert waiting_view["accepted_cycle_count"] == 19
+    assert waiting_view["accepted_market_day_count"] == 3
+    assert waiting_view["live_activation_ready"] is False
 
     observation_journal.record(_record(
         AFTER_FREEZE + timedelta(days=4, minutes=75),
@@ -1155,6 +1166,16 @@ def test_twentieth_forward_observation_freezes_one_safe_owner_milestone(
     assert packet["live_activation_ready"] is False
     assert packet["real_money_access"] is False
     assert reviewer.path.is_file()
+    ready_view = dashboard.snapshot()
+    assert ready_view["status"] == "READY_FOR_OWNER_REVIEW"
+    assert ready_view["accepted_cycle_count"] == 20
+    assert ready_view["accepted_market_day_count"] == 3
+    assert ready_view["base_entry_signal_count"] == (
+        packet["signal_comparison"]["base_entry_signal_count"]
+    )
+    assert ready_view["review_snapshot_frozen"] is True
+    assert ready_view["performance_validated"] is False
+    assert "content_sha256" not in ready_view
     assert first_notification == {"status": "RECORDED", "events_recorded": 1}
     assert repeated == {"status": "RECORDED", "events_recorded": 0}
     assert [event["kind"] for event in events] == [
@@ -1162,3 +1183,9 @@ def test_twentieth_forward_observation_freezes_one_safe_owner_milestone(
     ]
     assert "nie potwierdza zysku" in events[0]["message"]
     assert "nie włącza LIVE" in events[0]["message"]
+
+    reviewer.path.write_text("{}", encoding="utf-8")
+    blocked_view = dashboard.snapshot()
+    assert blocked_view["status"] == "BLOCKED_INVALID_FORWARD_EVIDENCE"
+    assert blocked_view["source_valid"] is False
+    assert blocked_view["live_activation_ready"] is False

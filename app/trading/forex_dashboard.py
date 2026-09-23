@@ -16,6 +16,7 @@ from app.trading.forex_entry_blocks import (
 from app.trading.forex_performance_review import (
     ForexPaperPerformanceReviewPacket,
 )
+from app.trading.forex_v2_research_dashboard import ForexV2ResearchDashboard
 
 
 _MAJOR_PAIRS = (
@@ -33,6 +34,7 @@ class ForexPaperDashboard:
         *,
         executor: Any,
         performance_review: Any | None = None,
+        v2_research: Any | None = None,
     ) -> None:
         root = resolve_project_root(project_root)
         self.result_path = root / "data" / "trading" / "forex_paper_last.json"
@@ -44,6 +46,11 @@ class ForexPaperDashboard:
             performance_review
             if performance_review is not None
             else ForexPaperPerformanceReviewPacket(root)
+        )
+        self.v2_research = (
+            v2_research
+            if v2_research is not None
+            else ForexV2ResearchDashboard(root)
         )
 
     def snapshot(self) -> dict[str, Any]:
@@ -183,6 +190,10 @@ class ForexPaperDashboard:
         positions = self._positions(account.get("open_positions"))
         performance = self._performance(account.get("performance"))
         performance_review = self._performance_review(account)
+        try:
+            v2_research = self.v2_research.snapshot()
+        except Exception:
+            v2_research = ForexV2ResearchDashboard.blocked_snapshot()
         loss_streak_safety = self._loss_streak_safety(
             account.get("loss_streak_safety")
         )
@@ -222,6 +233,7 @@ class ForexPaperDashboard:
             "closed_trade_count": self._count(account.get("closed_trade_count")),
             "performance": performance,
             "performance_review": performance_review,
+            "v2_research": v2_research,
             "processed_cycle_count": self._count(
                 account.get("processed_cycle_count")
             ),
@@ -878,6 +890,7 @@ class ForexPaperDashboard:
             "performance_review": (
                 ForexPaperDashboard._blocked_performance_review()
             ),
+            "v2_research": ForexV2ResearchDashboard.blocked_snapshot(),
             "broker_orders_sent": False,
             "live_orders_sent": False,
             "real_money_access": False,

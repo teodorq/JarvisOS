@@ -11,6 +11,7 @@ from app.gui.forex_paper_page import ForexPaperPage
 from app.gui.forex_performance_review_view import forex_performance_review_view
 from app.gui.forex_paper_safety_view import forex_paper_safety_view
 from app.gui.forex_paper_safety_view import forex_paper_safety_view
+from app.gui.forex_v2_research_view import forex_v2_research_text
 
 
 class _Dashboard:
@@ -51,6 +52,19 @@ class _Dashboard:
                 "packet_persisted": False,
                 "review_snapshot_frozen": False,
                 "live_activation_ready": False,
+            },
+            "v2_research": {
+                "status": "READY_FOR_OWNER_REVIEW",
+                "source_valid": True,
+                "accepted_cycle_count": 20,
+                "minimum_accepted_cycle_count": 20,
+                "accepted_market_day_count": 4,
+                "minimum_market_day_count": 3,
+                "base_entry_signal_count": 1,
+                "retained_entry_signal_count": 0,
+                "filtered_entry_signal_count": 1,
+                "packet_persisted": True,
+                "review_snapshot_frozen": True,
             },
             "pair_review": {
                 "ready_pair_count": 0,
@@ -137,6 +151,8 @@ def test_forex_page_shows_position_and_has_no_execution_controls() -> None:
         assert page.protection.full_text == "OCHRONA: DZIAŁA"
         assert page.sample_review.full_text == "PRÓBKA: 1/20"
         assert "niezmienny materiał" in page.performance_review_detail.text()
+        assert "sygnały bazowe 1" in page.v2_research_detail.text()
+        assert "nie wynik" in page.v2_research_detail.text()
         assert "brak działania" in page.protection_detail.text()
         assert "NOWE WEJŚCIA: PRZERWA" in page.safety.text()
         labels = [button.text() for button in page.findChildren(QPushButton)]
@@ -182,6 +198,26 @@ def test_performance_review_view_marks_frozen_packet_as_manual_only() -> None:
     assert label == "PRÓBKA: ZAMROŻONA"
     assert tone == "healthy"
     assert "ręcznego przeglądu" in detail
+
+
+def test_v2_research_text_does_not_call_signal_sample_a_result() -> None:
+    text = forex_v2_research_text({
+        "status": "READY_FOR_OWNER_REVIEW",
+        "source_valid": True,
+        "accepted_cycle_count": 20,
+        "minimum_accepted_cycle_count": 20,
+        "accepted_market_day_count": 4,
+        "minimum_market_day_count": 3,
+        "base_entry_signal_count": 1,
+        "retained_entry_signal_count": 0,
+        "filtered_entry_signal_count": 1,
+        "packet_persisted": True,
+        "review_snapshot_frozen": True,
+    })
+
+    assert "zamrożone" in text
+    assert "sygnały bazowe 1" in text
+    assert "nie wynik ani potwierdzenie skuteczności" in text
 
 
 def test_safety_banner_shows_weekly_loss_pause() -> None:

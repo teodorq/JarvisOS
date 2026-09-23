@@ -25,6 +25,14 @@ class _PerformanceReview:
         return dict(self.value)
 
 
+class _V2Research:
+    def __init__(self, value: dict) -> None:
+        self.value = value
+
+    def snapshot(self) -> dict:
+        return dict(self.value)
+
+
 def _account() -> dict:
     return {
         "mode": "FOREX_PAPER_ONLY",
@@ -647,3 +655,38 @@ def test_dashboard_exposes_only_safe_performance_review_progress() -> None:
             "real_money_access": False,
         }
         assert "source_audit_head_hash" not in snapshot["performance_review"]
+
+
+def test_dashboard_includes_sanitized_v2_research_summary() -> None:
+    with TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        _write_result(root, _account())
+        research = {
+            "status": "READY_FOR_OWNER_REVIEW",
+            "source_valid": True,
+            "accepted_cycle_count": 20,
+            "minimum_accepted_cycle_count": 20,
+            "accepted_market_day_count": 4,
+            "minimum_market_day_count": 3,
+            "base_entry_signal_count": 1,
+            "retained_entry_signal_count": 0,
+            "filtered_entry_signal_count": 1,
+            "packet_persisted": True,
+            "review_snapshot_frozen": True,
+            "signal_sample_only": True,
+            "performance_validated": False,
+            "automatic_strategy_change": False,
+            "paper_activation_ready": False,
+            "live_activation_ready": False,
+            "real_money_access": False,
+        }
+
+        snapshot = ForexPaperDashboard(
+            root,
+            executor=_Executor({}),
+            v2_research=_V2Research(research),
+        ).snapshot()
+
+        assert snapshot["v2_research"] == research
+        assert snapshot["v2_research"]["performance_validated"] is False
+        assert snapshot["v2_research"]["live_activation_ready"] is False

@@ -27,6 +27,7 @@ from app.gui.forex_pair_results_table import ForexPairResultsTable
 from app.gui.forex_performance_review_view import forex_performance_review_view
 from app.gui.forex_paper_safety_view import forex_paper_safety_view
 from app.gui.forex_protection_view import forex_protection_view
+from app.gui.forex_v2_research_view import forex_v2_research_text
 
 
 class ForexPaperPage(QWidget):
@@ -201,6 +202,10 @@ class ForexPaperPage(QWidget):
         self.performance_review_detail.setObjectName("Muted")
         self.performance_review_detail.setWordWrap(True)
         card.content_layout.addWidget(self.performance_review_detail)
+        self.v2_research_detail = QLabel("Badanie V2: sprawdzanie.")
+        self.v2_research_detail.setObjectName("Muted")
+        self.v2_research_detail.setWordWrap(True)
+        card.content_layout.addWidget(self.v2_research_detail)
         self.protection_detail = QLabel("Ochrona SL/TP: sprawdzanie.")
         self.protection_detail.setObjectName("Muted")
         self.protection_detail.setWordWrap(True)
@@ -220,6 +225,9 @@ class ForexPaperPage(QWidget):
         )
         self.sample_review.set_status(review_label, review_tone)
         self.performance_review_detail.setText(review_detail)
+        self.v2_research_detail.setText(
+            forex_v2_research_text(snapshot.get("v2_research"))
+        )
         protection_label, protection_tone, protection_detail = (
             forex_protection_view(snapshot.get("position_protection"))
         )
