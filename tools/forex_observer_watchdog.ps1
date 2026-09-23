@@ -14,6 +14,7 @@ $ErrorActionPreference = "Stop"
 
 $projectPath = [IO.Path]::GetFullPath($ProjectRoot)
 $terminalPath = [IO.Path]::GetFullPath($Mt5Path)
+$terminalProcessName = [IO.Path]::GetFileNameWithoutExtension($terminalPath)
 $pythonPath = Join-Path $projectPath ".venv\Scripts\python.exe"
 $runnerPath = Join-Path $projectPath "tools\run_forex_paper_cycle.py"
 $protectionRunnerPath = Join-Path $projectPath (
@@ -269,14 +270,28 @@ function Restore-PreviousProtectionState {
 }
 
 function Get-RunningMt5Process {
-    $record = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
-        Where-Object { $_.ExecutablePath -eq $terminalPath } |
-        Sort-Object CreationDate |
-        Select-Object -First 1
-    if ($null -eq $record) {
-        return $null
+    $records = @(
+        Get-Process `
+            -Name $terminalProcessName `
+            -ErrorAction SilentlyContinue |
+            Sort-Object StartTime
+    )
+    foreach ($record in $records) {
+        try {
+            $recordPath = [IO.Path]::GetFullPath([string]$record.Path)
+            if ([string]::Equals(
+                $recordPath,
+                $terminalPath,
+                [StringComparison]::OrdinalIgnoreCase
+            )) {
+                return $record
+            }
+        }
+        catch {
+            continue
+        }
     }
-    return Get-Process -Id $record.ProcessId -ErrorAction SilentlyContinue
+    return $null
 }
 
 function Test-ForexMarketWindow {
@@ -321,9 +336,23 @@ function Start-Mt5IfNeeded {
             -ArgumentList ('"' + $readinessPath + '"') `
             -WorkingDirectory $projectPath `
             -WindowStyle Hidden `
-            -Wait `
             -PassThru
-        if ($probe.ExitCode -eq 0) {
+        $probeTimeoutMilliseconds = [Math]::Min(
+            30000,
+            $StartupWaitSeconds * 1000
+        )
+        $probeFinished = $probe.WaitForExit($probeTimeoutMilliseconds)
+        if (-not $probeFinished) {
+            try {
+                $probe.Kill()
+                $probe.WaitForExit(5000) | Out-Null
+            }
+            catch {
+                # The probe may have exited between the timeout and cleanup.
+            }
+            Write-ObserverLog "MT5 readiness probe timed out safely."
+        }
+        elseif ($probe.ExitCode -eq 0) {
             Write-ObserverLog "MT5 market data ready."
             return $process
         }

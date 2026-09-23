@@ -246,9 +246,19 @@ def test_runner_accepts_only_a_matching_watchdog_ancestor_context() -> None:
 def test_watchdog_starts_only_the_configured_mt5_binary() -> None:
     assert "[IO.Path]::GetFullPath($Mt5Path)" in WATCHDOG
     assert "-FilePath $terminalPath" in WATCHDOG
-    assert "Get-CimInstance Win32_Process" in WATCHDOG
+    assert "Get-CimInstance Win32_Process" not in WATCHDOG
+    assert "Get-Process `\n            -Name $terminalProcessName" in WATCHDOG
+    assert "[StringComparison]::OrdinalIgnoreCase" in WATCHDOG
     assert "AUTONOMOUS_LOCAL_PAPER" in WATCHDOG
     assert "no broker order execution is available" in WATCHDOG
     assert '"tools\\check_mt5_market_ready.py"' in WATCHDOG
     assert "MT5 market data ready." in WATCHDOG
     assert "MT5 market data readiness timed out." in WATCHDOG
+
+
+def test_watchdog_bounds_and_cleans_up_each_mt5_readiness_probe() -> None:
+    assert "$probeTimeoutMilliseconds = [Math]::Min(" in WATCHDOG
+    assert "$probe.WaitForExit($probeTimeoutMilliseconds)" in WATCHDOG
+    assert "MT5 readiness probe timed out safely." in WATCHDOG
+    assert "$probe.Kill()" in WATCHDOG
+    assert "$probe.WaitForExit(5000)" in WATCHDOG
