@@ -21,6 +21,9 @@ from app.trading.forex_forward_evidence import ForexV2ForwardEvidenceReport
 from app.trading.forex_forward_review import ForexV2OwnerReviewPacket
 from app.trading.forex_models import MAJOR_FOREX_PAIRS
 from app.trading.forex_observation import ForexObservationJournal
+from app.trading.forex_performance_review import (
+    ForexPaperPerformanceReviewPacket,
+)
 from app.trading.forex_research_status import ForexHistoricalResearchGate
 from app.trading.forex_risk import ForexPaperPolicy
 from app.trading.forex_scanner import ForexMarketScanner
@@ -62,6 +65,9 @@ class TradingControlCenter:
             self.project_root
         )
         self.forex_forward_review = ForexV2OwnerReviewPacket(self.project_root)
+        self.forex_performance_review = ForexPaperPerformanceReviewPacket(
+            self.project_root
+        )
         self.forex_strategy_cohorts = ForexStrategyCohortReview(
             self.project_root
         )
@@ -74,6 +80,9 @@ class TradingControlCenter:
         forward_evidence = self.forex_forward_evidence.review()
         forward_review = self.forex_forward_review.review(forward_evidence)
         forex_account = self.forex_executor.status()
+        performance_review = self.forex_performance_review.review(
+            forex_account
+        )
         strategy_cohorts = self.forex_strategy_cohorts.review()
         runtime_cycle = self._last_runtime_cycle()
         observer_runtime = self._observer_runtime_status()
@@ -126,6 +135,12 @@ class TradingControlCenter:
                     and forward_review.get("packet_persisted") is True
                     and forward_review.get("review_snapshot_frozen") is True
                 ),
+                "forex_paper_performance_review_packet": bool(
+                    performance_review.get("status")
+                    == "READY_FOR_OWNER_REVIEW"
+                    and performance_review.get("packet_persisted") is True
+                    and performance_review.get("review_snapshot_frozen") is True
+                ),
                 "kill_switch": True,
                 "forex_data_configuration_complete": data_readiness["complete"],
                 "external_market_data": False,
@@ -155,6 +170,7 @@ class TradingControlCenter:
                 "v2_forward_evidence": forward_evidence,
                 "v2_owner_review": forward_review,
                 "paper_account": forex_account,
+                "paper_performance_review": performance_review,
                 "strategy_cohort_review": strategy_cohorts,
                 "last_runtime_cycle": runtime_cycle,
                 "observer_runtime": observer_runtime,
@@ -449,6 +465,9 @@ class TradingControlCenter:
         snapshot = self.status()
         forex_account = snapshot["forex"]["paper_account"]
         performance = dict(forex_account.get("performance", {}) or {})
+        performance_review_packet = snapshot["forex"][
+            "paper_performance_review"
+        ]
         performance_integrity = dict(
             performance.get("integrity", {}) or {}
         )
@@ -507,6 +526,22 @@ class TradingControlCenter:
                 "ukończenia bramki obserwacji"
             )
         )
+        if performance_review_packet.get("status") == "READY_FOR_OWNER_REVIEW":
+            performance_packet_text = (
+                "ZAMROŻONY I GOTOWY DO RĘCZNEGO PRZEGLĄDU; bez automatycznej "
+                "zmiany PAPER i bez LIVE"
+            )
+        elif performance_review_packet.get("status") == "WAITING_FOR_PAPER_SAMPLE":
+            performance_packet_text = (
+                f"oczekuje na próbkę "
+                f"{performance_review_packet.get('valid_closed_trade_count', 0)}/"
+                f"{performance_review_packet.get('minimum_closed_trades_for_review', 20)}; "
+                "pierwszy pełny wynik zostanie zapisany niezmiennie"
+            )
+        else:
+            performance_packet_text = (
+                "ZABLOKOWANY — dowody księgi lub kontraktu próbki są niespójne"
+            )
         position_details = "; ".join(
             f"{item['pair'].replace('_', '/')} {item['side']} po {item['entry_price']} "
             f"(SL {item['stop_loss']}, TP {item['take_profit']})"
@@ -749,6 +784,7 @@ class TradingControlCenter:
             f"najdłuższa seria strat "
             f"{performance.get('maximum_consecutive_losses', 0)}; "
             f"dowody {performance_evidence}.\n"
+            f"• Zamrożony pakiet wyniku PAPER: {performance_packet_text}.\n"
             f"• Cykl życia próbki: średni czas {average_holding_text}; "
             f"SL {exit_reasons.get('stop_loss', 0)}, "
             f"TP {exit_reasons.get('take_profit', 0)}, "

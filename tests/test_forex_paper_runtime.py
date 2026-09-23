@@ -243,6 +243,13 @@ class ForexPaperRuntimeTests(unittest.TestCase):
         self.assertEqual(result["paper"]["execution"]["status"], "APPLIED")
         self.assertEqual(result["paper"]["account"]["position_count"], 1)
         self.assertEqual(
+            result["performance_review"]["status"],
+            "WAITING_FOR_PAPER_SAMPLE",
+        )
+        self.assertTrue(result["performance_review"]["source_valid"])
+        self.assertFalse(result["performance_review"]["packet_persisted"])
+        self.assertFalse(result["performance_review"]["live_activation_ready"])
+        self.assertEqual(
             result["forward_evidence"]["status"],
             "COLLECTING_FORWARD_EVIDENCE",
         )

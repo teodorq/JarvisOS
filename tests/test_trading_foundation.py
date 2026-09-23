@@ -403,6 +403,10 @@ class TradingControlAndRoutingTests(unittest.TestCase):
         self.assertIn("Pakiet przeglądu Forex V2: zbieranie próbki 0/20", rendered)
         self.assertIn("Forward V2 — sygnały wejścia: bazowe 0", rendered)
         self.assertIn("brak sygnałów do porównania", rendered)
+        self.assertIn(
+            "Zamrożony pakiet wyniku PAPER: oczekuje na próbkę 0/20",
+            rendered,
+        )
 
     def test_owner_status_calls_out_single_signal_limitation(self) -> None:
         with TemporaryDirectory() as directory:

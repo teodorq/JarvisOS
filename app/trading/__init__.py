@@ -37,6 +37,12 @@ from app.trading.forex_paper_performance import (
     ForexPaperPerformancePolicy,
     build_forex_paper_performance_review,
 )
+from app.trading.forex_performance_review import (
+    ForexPaperPerformanceReviewPacket,
+    build_forex_paper_performance_review_packet,
+    verify_forex_paper_performance_review_lineage,
+    verify_forex_paper_performance_review_packet,
+)
 from app.trading.forex_portfolio_historical import (
     ForexPortfolioHistoricalBacktester,
     ForexPortfolioHistoricalPolicy,
@@ -139,6 +145,7 @@ __all__ = [
     "ForexRegimeCandidatePolicy",
     "ForexRegimeFilteredScanner",
     "ForexRiskDecision",
+    "ForexPaperPerformanceReviewPacket",
     "ForexSafetyContext",
     "ForexScannerPolicy",
     "FOREX_PAPER_SAMPLE_CONTRACT_ID",
@@ -160,11 +167,14 @@ __all__ = [
     "USD_PLN_CONVERSION_PAIR",
     "major_pair",
     "build_forex_paper_performance_review",
+    "build_forex_paper_performance_review_packet",
     "build_forex_v2_forward_evidence_report",
     "build_forex_v2_owner_review_packet",
     "verify_forex_v2_owner_review_lineage",
     "verify_forex_v2_forward_evidence_report",
     "verify_forex_v2_owner_review_packet",
+    "verify_forex_paper_performance_review_lineage",
+    "verify_forex_paper_performance_review_packet",
     "build_forex_paper_sample_contract",
     "is_superseded_sample_contract",
     "build_forex_strategy_cohort_review",

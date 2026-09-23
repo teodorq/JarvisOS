@@ -15,6 +15,9 @@ from app.trading.forex_observation import (
     ForexObservationJournal,
     ForexObservationService,
 )
+from app.trading.forex_performance_review import (
+    ForexPaperPerformanceReviewPacket,
+)
 from app.trading.models import TradingValidationError, aware_utc
 
 
@@ -31,6 +34,7 @@ class ForexDemoPaperRuntime:
         autopilot: ForexPaperAutopilot | None = None,
         forward_evidence: ForexV2ForwardEvidenceReport | None = None,
         forward_review: ForexV2OwnerReviewPacket | None = None,
+        performance_review: ForexPaperPerformanceReviewPacket | None = None,
     ) -> None:
         self.project_root = project_root
         self.settings = settings
@@ -41,6 +45,10 @@ class ForexDemoPaperRuntime:
             project_root
         )
         self.forward_review = forward_review or ForexV2OwnerReviewPacket(project_root)
+        self.performance_review = (
+            performance_review
+            or ForexPaperPerformanceReviewPacket(project_root)
+        )
 
     def run_once(
         self,
@@ -108,6 +116,10 @@ class ForexDemoPaperRuntime:
                 allow_new_entries=not close_only,
                 now=selected_now,
             )
+            performance_review = self._refresh_performance_review(
+                paper,
+                selected_now,
+            )
         except (OSError, RuntimeError, TradingValidationError) as error:
             return self._blocked(
                 selected_id,
@@ -125,6 +137,7 @@ class ForexDemoPaperRuntime:
             "forward_evidence": forward_evidence,
             "forward_review": forward_review,
             "paper": paper,
+            "performance_review": performance_review,
             "broker_orders_sent": False,
             "live_orders_sent": False,
             "real_money_access": False,
@@ -169,6 +182,29 @@ class ForexDemoPaperRuntime:
                 "paper_activation_ready": False,
                 "live_activation_ready": False,
                 "paper_orders_sent": False,
+                "live_orders_sent": False,
+                "real_money_access": False,
+            }
+
+    def _refresh_performance_review(
+        self,
+        paper: Mapping[str, Any],
+        now: datetime,
+    ) -> dict[str, Any]:
+        try:
+            return self.performance_review.refresh(
+                paper.get("account"),
+                generated_at=now,
+            )
+        except (OSError, RuntimeError, TradingValidationError):
+            return {
+                "status": "PERFORMANCE_REVIEW_PACKET_WRITE_FAILED",
+                "mode": "FOREX_PAPER_PERFORMANCE_OWNER_REVIEW_READ_ONLY",
+                "performance_validated": False,
+                "profitability_validated": False,
+                "paper_strategy_change_ready": False,
+                "live_activation_ready": False,
+                "broker_orders_sent": False,
                 "live_orders_sent": False,
                 "real_money_access": False,
             }

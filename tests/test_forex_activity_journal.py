@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 import hashlib
 import json
 from pathlib import Path
@@ -20,6 +22,12 @@ from app.trading.forex_forward_review import (
     build_forex_v2_owner_review_packet,
     verify_forex_v2_owner_review_packet,
 )
+from app.trading.forex_executor import ForexPaperExecutionEngine
+from app.trading.forex_ledger import ForexPaperLedger
+from app.trading.forex_performance_review import (
+    ForexPaperPerformanceReviewPacket,
+)
+from app.trading.forex_sample_contract import build_forex_paper_sample_contract
 from app.trading.models import TradingValidationError
 
 
@@ -60,61 +68,58 @@ def _payload(
     }
 
 
-def _ready_performance_payload(cycle: int) -> dict:
+def _ready_performance_payload(cycle: int, root: Path) -> dict:
     payload = _payload(cycle)
-    fingerprint = hashlib.sha256(b"paper-contract").hexdigest()
+    contract = build_forex_paper_sample_contract()
+    ledger = ForexPaperLedger(root)
+    if not ledger.snapshot()["fills"]:
+        for index in range(20):
+            filled_at = datetime(2026, 8, 21, 10, tzinfo=timezone.utc) + (
+                timedelta(minutes=15 * index)
+            )
+            pnl = Decimal("2.00") if index % 2 else Decimal("-1.00")
+            fill = {
+                "fill_id": f"activity-performance-close-{index:03d}",
+                "action": "CLOSE_LONG",
+                "pair": "EUR_USD",
+                "realized_pnl_pln": str(pnl),
+                "filled_at": filled_at.isoformat(),
+                "opened_at": (filled_at - timedelta(minutes=30)).isoformat(),
+                "sample_contract_id": contract["contract_id"],
+                "sample_contract_fingerprint_sha256": contract[
+                    "fingerprint_sha256"
+                ],
+            }
+
+            def operation(state: dict, selected_fill: dict = fill) -> None:
+                state["fills"] = list(state.get("fills", [])) + [selected_fill]
+                state["balance_pln"] = str(
+                    Decimal(str(state["balance_pln"]))
+                    + Decimal(str(selected_fill["realized_pnl_pln"]))
+                )
+                ledger.append_event(
+                    state,
+                    "FOREX_PAPER_CYCLE",
+                    {"executions": [selected_fill]},
+                    created_at=filled_at,
+                )
+
+            ledger.transaction(operation)
+    account = ForexPaperExecutionEngine(
+        root,
+        sample_contract=contract,
+    ).status(now=datetime(2026, 8, 22, tzinfo=timezone.utc))
     payload["paper"] = {
         "status": "CYCLE_COMPLETED",
         "mode": "FOREX_PAPER_ONLY",
         "execution": {"executions": []},
         "live_orders_sent": False,
         "network_access": False,
-        "account": {
-            "status": "READY",
-            "mode": "FOREX_PAPER_ONLY",
-            "sample_contract": {
-                "contract_id": "paper-contract-v1",
-                "fingerprint_sha256": fingerprint,
-                "paper_only": True,
-                "live_trading_enabled": False,
-            },
-            "performance": {
-                "status": "READY_FOR_MANUAL_REVIEW",
-                "mode": "FOREX_PAPER_PERFORMANCE_READ_ONLY",
-                "metric_scope": "CURRENT_SAMPLE_CONTRACT",
-                "minimum_closed_trades_for_review": 20,
-                "valid_closed_trade_count": 20,
-                "remaining_closed_trades_for_review": 0,
-                "sample_size_sufficient_for_review": True,
-                "net_realized_pnl_pln": "-12.34",
-                "maximum_closed_trade_drawdown_pln": "18.56",
-                "performance_validated": False,
-                "automatic_paper_strategy_change": False,
-                "live_promotion_ready": False,
-                "automatic_live_promotion": False,
-                "integrity": {
-                    "evidence_valid": True,
-                    "audit_chain_valid": True,
-                    "execution_audit_matches_ledger": True,
-                    "balance_reconciled": True,
-                    "invalid_closed_fill_count": 0,
-                },
-                "sample_contract_review": {
-                    "status": "TRACKING_CURRENT_CONTRACT",
-                    "mode": "FOREX_PAPER_SAMPLE_CONTRACT_READ_ONLY",
-                    "contract_tracking_enabled": True,
-                    "expected_contract_id": "paper-contract-v1",
-                    "expected_fingerprint_sha256": fingerprint,
-                    "current_contract_closed_trade_count": 20,
-                    "foreign_contract_closed_trade_count": 0,
-                    "sample_contract_consistent": True,
-                    "automatic_sample_merge": False,
-                    "automatic_strategy_change": False,
-                    "live_promotion_ready": False,
-                },
-            },
-        },
+        "account": account,
     }
+    payload["performance_review"] = ForexPaperPerformanceReviewPacket(
+        root
+    ).refresh(account, generated_at=datetime(2026, 8, 22, tzinfo=timezone.utc))
     return payload
 
 
@@ -304,9 +309,10 @@ def test_completed_paper_performance_sample_is_notified_once() -> None:
     with TemporaryDirectory() as temporary:
         root = Path(temporary)
         journal = ForexPaperActivityJournal(root)
+        journal.initialize()
 
-        first = journal.record(_ready_performance_payload(70))
-        repeated = journal.record(_ready_performance_payload(71))
+        first = journal.record(_ready_performance_payload(70, root))
+        repeated = journal.record(_ready_performance_payload(71, root))
         events = journal.events(limit=10)
 
         assert first == {"status": "RECORDED", "events_recorded": 1}
@@ -322,15 +328,17 @@ def test_completed_paper_performance_sample_is_notified_once() -> None:
 def test_invalid_paper_performance_never_creates_review_milestone() -> None:
     with TemporaryDirectory() as temporary:
         root = Path(temporary)
-        payload = _ready_performance_payload(72)
+        journal = ForexPaperActivityJournal(root)
+        journal.initialize()
+        payload = _ready_performance_payload(72, root)
         payload["paper"]["account"]["performance"]["integrity"][
             "audit_chain_valid"
         ] = False
 
-        result = ForexPaperActivityJournal(root).record(payload)
+        result = journal.record(payload)
 
         assert result == {"status": "RECORDED", "events_recorded": 0}
-        assert ForexPaperActivityJournal(root).events(limit=10) == []
+        assert journal.events(limit=10) == []
 
 
 def test_review_notification_reports_signal_counts_without_performance_claim() -> None:

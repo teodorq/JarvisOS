@@ -7,6 +7,10 @@ import hashlib
 import re
 from typing import Any, Mapping
 
+from app.trading.forex_performance_review import (
+    verify_forex_paper_performance_review_packet,
+)
+
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
@@ -50,18 +54,29 @@ def paper_performance_review_milestone(
     contract_review = (
         dict(contract_review) if isinstance(contract_review, Mapping) else {}
     )
-    required = performance.get("minimum_closed_trades_for_review")
-    count = performance.get("valid_closed_trade_count")
+    frozen = payload.get("performance_review")
+    frozen = dict(frozen) if isinstance(frozen, Mapping) else {}
+    frozen_snapshot = frozen.get("performance_snapshot")
+    frozen_snapshot = (
+        dict(frozen_snapshot) if isinstance(frozen_snapshot, Mapping) else {}
+    )
+    current_required = performance.get("minimum_closed_trades_for_review")
+    current_count = performance.get("valid_closed_trade_count")
+    required = frozen.get("minimum_closed_trades_for_review")
+    count = frozen.get("valid_closed_trade_count")
     contract_id = str(account_contract.get("contract_id", ""))
     contract_fingerprint = str(account_contract.get("fingerprint_sha256", ""))
-    net_pnl = _money(performance.get("net_realized_pnl_pln"))
-    drawdown = _money(performance.get("maximum_closed_trade_drawdown_pln"))
+    net_pnl = _money(frozen_snapshot.get("net_realized_pnl_pln"))
+    drawdown = _money(
+        frozen_snapshot.get("maximum_closed_trade_drawdown_pln")
+    )
     if (
         payload.get("status") != "PAPER_CYCLE_COMPLETED"
         or paper.get("status") != "CYCLE_COMPLETED"
         or paper.get("mode") != "FOREX_PAPER_ONLY"
         or paper.get("live_orders_sent") is not False
         or paper.get("network_access") is not False
+        or not verify_forex_paper_performance_review_packet(frozen)
         or account.get("status") != "READY"
         or account.get("mode") != "FOREX_PAPER_ONLY"
         or account_contract.get("paper_only") is not True
@@ -71,10 +86,10 @@ def paper_performance_review_milestone(
         or performance.get("status") != "READY_FOR_MANUAL_REVIEW"
         or performance.get("mode") != "FOREX_PAPER_PERFORMANCE_READ_ONLY"
         or performance.get("metric_scope") != "CURRENT_SAMPLE_CONTRACT"
-        or type(required) is not int
-        or not 1 <= required <= 10_000
-        or type(count) is not int
-        or count < required
+        or type(current_required) is not int
+        or current_required != required
+        or type(current_count) is not int
+        or current_count < count
         or performance.get("remaining_closed_trades_for_review") != 0
         or performance.get("sample_size_sufficient_for_review") is not True
         or performance.get("performance_validated") is not False
@@ -93,12 +108,16 @@ def paper_performance_review_milestone(
         or contract_review.get("expected_contract_id") != contract_id
         or contract_review.get("expected_fingerprint_sha256")
         != contract_fingerprint
-        or contract_review.get("current_contract_closed_trade_count") != count
+        or contract_review.get("current_contract_closed_trade_count")
+        != current_count
         or contract_review.get("foreign_contract_closed_trade_count") != 0
         or contract_review.get("sample_contract_consistent") is not True
         or contract_review.get("automatic_sample_merge") is not False
         or contract_review.get("automatic_strategy_change") is not False
         or contract_review.get("live_promotion_ready") is not False
+        or frozen.get("sample_contract_id") != contract_id
+        or frozen.get("sample_contract_fingerprint_sha256")
+        != contract_fingerprint
         or net_pnl is None
         or drawdown is None
     ):
