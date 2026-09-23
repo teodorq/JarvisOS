@@ -8,6 +8,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtWidgets import QApplication, QPushButton
 
 from app.gui.forex_paper_page import ForexPaperPage
+from app.gui.forex_performance_review_view import forex_performance_review_view
 from app.gui.forex_paper_safety_view import forex_paper_safety_view
 from app.gui.forex_paper_safety_view import forex_paper_safety_view
 
@@ -40,6 +41,16 @@ class _Dashboard:
                         "review_status": "COLLECTING_PAIR_SAMPLE",
                     },
                 },
+            },
+            "performance_review": {
+                "status": "WAITING_FOR_PAPER_SAMPLE",
+                "source_valid": True,
+                "valid_closed_trade_count": 1,
+                "minimum_closed_trades_for_review": 20,
+                "remaining_closed_trades_for_review": 19,
+                "packet_persisted": False,
+                "review_snapshot_frozen": False,
+                "live_activation_ready": False,
             },
             "pair_review": {
                 "ready_pair_count": 0,
@@ -124,6 +135,8 @@ def test_forex_page_shows_position_and_has_no_execution_controls() -> None:
         assert page.pending_history.text() == "Nieodczytane zdarzenia: 2"
         assert page.overall.full_text == "PAPER — PRZERWA"
         assert page.protection.full_text == "OCHRONA: DZIAŁA"
+        assert page.sample_review.full_text == "PRÓBKA: 1/20"
+        assert "niezmienny materiał" in page.performance_review_detail.text()
         assert "brak działania" in page.protection_detail.text()
         assert "NOWE WEJŚCIA: PRZERWA" in page.safety.text()
         labels = [button.text() for button in page.findChildren(QPushButton)]
@@ -156,6 +169,19 @@ def test_safety_banner_shows_weekly_loss_pause() -> None:
     assert label == "PAPER — PRZERWA"
     assert tone == "neutral"
     assert "LIMIT TYGODNIOWY" in banner
+
+
+def test_performance_review_view_marks_frozen_packet_as_manual_only() -> None:
+    label, tone, detail = forex_performance_review_view({
+        "status": "READY_FOR_OWNER_REVIEW",
+        "source_valid": True,
+        "packet_persisted": True,
+        "review_snapshot_frozen": True,
+    })
+
+    assert label == "PRÓBKA: ZAMROŻONA"
+    assert tone == "healthy"
+    assert "ręcznego przeglądu" in detail
 
 
 def test_safety_banner_shows_weekly_loss_pause() -> None:

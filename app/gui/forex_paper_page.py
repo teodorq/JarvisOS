@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 
 from app.gui.business_widgets import MetricCard, SectionCard, StatusPill
 from app.gui.forex_pair_results_table import ForexPairResultsTable
+from app.gui.forex_performance_review_view import forex_performance_review_view
 from app.gui.forex_paper_safety_view import forex_paper_safety_view
 from app.gui.forex_protection_view import forex_protection_view
 
@@ -72,10 +73,12 @@ class ForexPaperPage(QWidget):
         layout.addLayout(heading)
         layout.addStretch(1)
         self.overall = StatusPill("SPRAWDZANIE", "neutral")
+        self.sample_review = StatusPill("PRÓBKA: SPRAWDZANIE", "neutral")
         self.protection = StatusPill("OCHRONA: SPRAWDZANIE", "neutral")
         refresh = QPushButton("ODŚWIEŻ")
         refresh.setObjectName("SecondaryButton")
         refresh.clicked.connect(self.refresh)
+        layout.addWidget(self.sample_review)
         layout.addWidget(self.protection)
         layout.addWidget(self.overall)
         layout.addWidget(refresh)
@@ -194,6 +197,10 @@ class ForexPaperPage(QWidget):
         self.message.setObjectName("Muted")
         self.message.setWordWrap(True)
         card.content_layout.addWidget(self.message)
+        self.performance_review_detail = QLabel("Pakiet wyniku PAPER: sprawdzanie.")
+        self.performance_review_detail.setObjectName("Muted")
+        self.performance_review_detail.setWordWrap(True)
+        card.content_layout.addWidget(self.performance_review_detail)
         self.protection_detail = QLabel("Ochrona SL/TP: sprawdzanie.")
         self.protection_detail.setObjectName("Muted")
         self.protection_detail.setWordWrap(True)
@@ -208,6 +215,11 @@ class ForexPaperPage(QWidget):
             snapshot = {"status": "BLOCKED", "positions": [], "message": "Podgląd jest chwilowo niedostępny."}
         label, tone, safety_banner = forex_paper_safety_view(snapshot)
         self.overall.set_status(label, tone)
+        review_label, review_tone, review_detail = (
+            forex_performance_review_view(snapshot.get("performance_review"))
+        )
+        self.sample_review.set_status(review_label, review_tone)
+        self.performance_review_detail.setText(review_detail)
         protection_label, protection_tone, protection_detail = (
             forex_protection_view(snapshot.get("position_protection"))
         )

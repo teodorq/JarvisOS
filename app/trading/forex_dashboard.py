@@ -13,6 +13,9 @@ from app.trading.forex_entry_blocks import (
     dashboard_block_message,
     opening_block_details,
 )
+from app.trading.forex_performance_review import (
+    ForexPaperPerformanceReviewPacket,
+)
 
 
 _MAJOR_PAIRS = (
@@ -24,13 +27,24 @@ class ForexPaperDashboard:
 
     MAX_RESULT_BYTES = 2_000_000
 
-    def __init__(self, project_root: str | Path | None, *, executor: Any) -> None:
+    def __init__(
+        self,
+        project_root: str | Path | None,
+        *,
+        executor: Any,
+        performance_review: Any | None = None,
+    ) -> None:
         root = resolve_project_root(project_root)
         self.result_path = root / "data" / "trading" / "forex_paper_last.json"
         self.observer_status_path = (
             root / "data" / "trading" / "forex_observer_status.json"
         )
         self.executor = executor
+        self.performance_review = (
+            performance_review
+            if performance_review is not None
+            else ForexPaperPerformanceReviewPacket(root)
+        )
 
     def snapshot(self) -> dict[str, Any]:
         payload = self._load_result()
@@ -168,6 +182,7 @@ class ForexPaperDashboard:
     ) -> dict[str, Any]:
         positions = self._positions(account.get("open_positions"))
         performance = self._performance(account.get("performance"))
+        performance_review = self._performance_review(account)
         loss_streak_safety = self._loss_streak_safety(
             account.get("loss_streak_safety")
         )
@@ -206,6 +221,7 @@ class ForexPaperDashboard:
             "positions": positions,
             "closed_trade_count": self._count(account.get("closed_trade_count")),
             "performance": performance,
+            "performance_review": performance_review,
             "processed_cycle_count": self._count(
                 account.get("processed_cycle_count")
             ),
@@ -220,6 +236,68 @@ class ForexPaperDashboard:
             "live_orders_sent": False,
             "real_money_access": False,
             "message": message,
+        }
+
+    def _performance_review(self, account: dict[str, Any]) -> dict[str, Any]:
+        blocked = self._blocked_performance_review()
+        try:
+            value = self.performance_review.review(account)
+        except Exception:
+            return blocked
+        packet = dict(value) if isinstance(value, dict) else {}
+        status = str(packet.get("status", ""))
+        count = self._count(packet.get("valid_closed_trade_count"))
+        required = self._count(packet.get("minimum_closed_trades_for_review"))
+        remaining = self._count(packet.get("remaining_closed_trades_for_review"))
+        source_valid = packet.get("source_valid") is True
+        persisted = packet.get("packet_persisted") is True
+        frozen = packet.get("review_snapshot_frozen") is True
+        waiting = bool(
+            status == "WAITING_FOR_PAPER_SAMPLE"
+            and source_valid
+            and not persisted
+            and not frozen
+            and required > 0
+            and count < required
+            and remaining == required - count
+        )
+        ready = bool(
+            status == "READY_FOR_OWNER_REVIEW"
+            and source_valid
+            and persisted
+            and frozen
+            and required > 0
+            and count >= required
+            and remaining == 0
+        )
+        if not (waiting or ready):
+            return blocked
+        return {
+            "status": status,
+            "source_valid": True,
+            "valid_closed_trade_count": count,
+            "minimum_closed_trades_for_review": required,
+            "remaining_closed_trades_for_review": remaining,
+            "packet_persisted": persisted,
+            "review_snapshot_frozen": frozen,
+            "owner_review_required": True,
+            "live_activation_ready": False,
+            "real_money_access": False,
+        }
+
+    @staticmethod
+    def _blocked_performance_review() -> dict[str, Any]:
+        return {
+            "status": "BLOCKED_INVALID_PAPER_PERFORMANCE_EVIDENCE",
+            "source_valid": False,
+            "valid_closed_trade_count": 0,
+            "minimum_closed_trades_for_review": 0,
+            "remaining_closed_trades_for_review": 0,
+            "packet_persisted": False,
+            "review_snapshot_frozen": False,
+            "owner_review_required": True,
+            "live_activation_ready": False,
+            "real_money_access": False,
         }
 
     def _position_protection(self) -> dict[str, Any]:
@@ -797,6 +875,9 @@ class ForexPaperDashboard:
             "mode": "FOREX_PAPER_ONLY",
             "positions": [],
             "position_count": 0,
+            "performance_review": (
+                ForexPaperDashboard._blocked_performance_review()
+            ),
             "broker_orders_sent": False,
             "live_orders_sent": False,
             "real_money_access": False,

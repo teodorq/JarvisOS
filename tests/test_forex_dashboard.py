@@ -16,6 +16,15 @@ class _Executor:
         return dict(self.value)
 
 
+class _PerformanceReview:
+    def __init__(self, value: dict) -> None:
+        self.value = value
+
+    def review(self, account: object) -> dict:
+        assert isinstance(account, dict)
+        return dict(self.value)
+
+
 def _account() -> dict:
     return {
         "mode": "FOREX_PAPER_ONLY",
@@ -602,3 +611,39 @@ def test_dashboard_drops_invalid_positions_and_numbers() -> None:
         assert snapshot["balance_pln"] == "0.00"
         assert snapshot["positions"] == []
         assert snapshot["position_count"] == 0
+
+
+def test_dashboard_exposes_only_safe_performance_review_progress() -> None:
+    with TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        _write_result(root, _account())
+        review = _PerformanceReview({
+            "status": "WAITING_FOR_PAPER_SAMPLE",
+            "source_valid": True,
+            "valid_closed_trade_count": 4,
+            "minimum_closed_trades_for_review": 20,
+            "remaining_closed_trades_for_review": 16,
+            "packet_persisted": False,
+            "review_snapshot_frozen": False,
+            "source_audit_head_hash": "secret-evidence-hash",
+        })
+
+        snapshot = ForexPaperDashboard(
+            root,
+            executor=_Executor({}),
+            performance_review=review,
+        ).snapshot()
+
+        assert snapshot["performance_review"] == {
+            "status": "WAITING_FOR_PAPER_SAMPLE",
+            "source_valid": True,
+            "valid_closed_trade_count": 4,
+            "minimum_closed_trades_for_review": 20,
+            "remaining_closed_trades_for_review": 16,
+            "packet_persisted": False,
+            "review_snapshot_frozen": False,
+            "owner_review_required": True,
+            "live_activation_ready": False,
+            "real_money_access": False,
+        }
+        assert "source_audit_head_hash" not in snapshot["performance_review"]

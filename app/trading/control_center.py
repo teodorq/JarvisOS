@@ -55,9 +55,13 @@ class TradingControlCenter:
             self.project_root,
             settings=self.forex_data,
         )
+        self.forex_performance_review = ForexPaperPerformanceReviewPacket(
+            self.project_root
+        )
         self.forex_dashboard = ForexPaperDashboard(
             self.project_root,
             executor=self.forex_executor,
+            performance_review=self.forex_performance_review,
         )
         self.forex_observations = ForexObservationJournal(self.project_root)
         self.forex_research = ForexHistoricalResearchGate(self.project_root)
@@ -65,9 +69,6 @@ class TradingControlCenter:
             self.project_root
         )
         self.forex_forward_review = ForexV2OwnerReviewPacket(self.project_root)
-        self.forex_performance_review = ForexPaperPerformanceReviewPacket(
-            self.project_root
-        )
         self.forex_strategy_cohorts = ForexStrategyCohortReview(
             self.project_root
         )
