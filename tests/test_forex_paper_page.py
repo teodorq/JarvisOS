@@ -11,6 +11,7 @@ from app.gui.forex_paper_page import ForexPaperPage
 from app.gui.forex_performance_review_view import forex_performance_review_view
 from app.gui.forex_paper_safety_view import forex_paper_safety_view
 from app.gui.forex_paper_safety_view import forex_paper_safety_view
+from app.gui.forex_runtime_cycle_view import forex_runtime_cycle_text
 from app.gui.forex_v2_research_view import forex_v2_research_text
 
 
@@ -65,6 +66,21 @@ class _Dashboard:
                 "filtered_entry_signal_count": 1,
                 "packet_persisted": True,
                 "review_snapshot_frozen": True,
+            },
+            "last_runtime_cycle": {
+                "available": True,
+                "status": "PAPER_CYCLE_COMPLETED",
+                "decision": "NO_ENTRY_SIGNAL",
+                "ready_pair_count": 7,
+                "blocked_pair_count": 0,
+                "execution_count": 0,
+                "reason_codes": {
+                    "NO_NEW_CROSSOVER": 6,
+                    "LONG_TREND_INTACT": 1,
+                },
+                "high_impact_event_window": False,
+                "live_orders_sent": False,
+                "real_money_access": False,
             },
             "pair_review": {
                 "ready_pair_count": 0,
@@ -153,6 +169,8 @@ def test_forex_page_shows_position_and_has_no_execution_controls() -> None:
         assert "niezmienny materiał" in page.performance_review_detail.text()
         assert "sygnały bazowe 1" in page.v2_research_detail.text()
         assert "nie wynik" in page.v2_research_detail.text()
+        assert "brak nowego sygnału wejścia" in page.message.text()
+        assert "brak nowego przecięcia średnich: 6" in page.message.text()
         assert "brak działania" in page.protection_detail.text()
         assert "NOWE WEJŚCIA: PRZERWA" in page.safety.text()
         labels = [button.text() for button in page.findChildren(QPushButton)]
@@ -218,6 +236,26 @@ def test_v2_research_text_does_not_call_signal_sample_a_result() -> None:
     assert "zamrożone" in text
     assert "sygnały bazowe 1" in text
     assert "nie wynik ani potwierdzenie skuteczności" in text
+
+
+def test_runtime_cycle_text_translates_safe_reason_counts() -> None:
+    text = forex_runtime_cycle_text({
+        "available": True,
+        "status": "PAPER_CYCLE_COMPLETED",
+        "decision": "NO_ENTRY_SIGNAL",
+        "ready_pair_count": 7,
+        "reason_codes": {
+            "NO_NEW_CROSSOVER": 6,
+            "LONG_TREND_INTACT": 1,
+            "UNRECOGNIZED_INTERNAL_CODE": 3,
+        },
+    })
+
+    assert "dane gotowe dla 7/7 par" in text
+    assert "brak nowego przecięcia średnich: 6" in text
+    assert "trend wzrostowy trwa" in text
+    assert "inne warunki bezpieczeństwa: 3" in text
+    assert "UNRECOGNIZED_INTERNAL_CODE" not in text
 
 
 def test_safety_banner_shows_weekly_loss_pause() -> None:

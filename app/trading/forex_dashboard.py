@@ -16,6 +16,7 @@ from app.trading.forex_entry_blocks import (
 from app.trading.forex_performance_review import (
     ForexPaperPerformanceReviewPacket,
 )
+from app.trading.forex_runtime_summary import ForexRuntimeCycleSummary
 from app.trading.forex_v2_research_dashboard import ForexV2ResearchDashboard
 
 
@@ -35,6 +36,7 @@ class ForexPaperDashboard:
         executor: Any,
         performance_review: Any | None = None,
         v2_research: Any | None = None,
+        runtime_summary: Any | None = None,
     ) -> None:
         root = resolve_project_root(project_root)
         self.result_path = root / "data" / "trading" / "forex_paper_last.json"
@@ -51,6 +53,11 @@ class ForexPaperDashboard:
             v2_research
             if v2_research is not None
             else ForexV2ResearchDashboard(root)
+        )
+        self.runtime_summary = (
+            runtime_summary
+            if runtime_summary is not None
+            else ForexRuntimeCycleSummary(root)
         )
 
     def snapshot(self) -> dict[str, Any]:
@@ -194,6 +201,10 @@ class ForexPaperDashboard:
             v2_research = self.v2_research.snapshot()
         except Exception:
             v2_research = ForexV2ResearchDashboard.blocked_snapshot()
+        try:
+            runtime_summary = self.runtime_summary.snapshot()
+        except Exception:
+            runtime_summary = ForexRuntimeCycleSummary.empty_snapshot()
         loss_streak_safety = self._loss_streak_safety(
             account.get("loss_streak_safety")
         )
@@ -234,6 +245,7 @@ class ForexPaperDashboard:
             "performance": performance,
             "performance_review": performance_review,
             "v2_research": v2_research,
+            "last_runtime_cycle": runtime_summary,
             "processed_cycle_count": self._count(
                 account.get("processed_cycle_count")
             ),
@@ -891,6 +903,7 @@ class ForexPaperDashboard:
                 ForexPaperDashboard._blocked_performance_review()
             ),
             "v2_research": ForexV2ResearchDashboard.blocked_snapshot(),
+            "last_runtime_cycle": ForexRuntimeCycleSummary.empty_snapshot(),
             "broker_orders_sent": False,
             "live_orders_sent": False,
             "real_money_access": False,

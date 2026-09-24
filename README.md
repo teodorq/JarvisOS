@@ -195,6 +195,10 @@ checks in the same state do not create notification spam.
 The `FOREX PAPER` toolbar projects the same bounded heartbeat as a separate
 `OCHRONA` pill, so healthy, retrying, stale, closed-market and attention states
 are visible without opening the owner text report.
+The safety panel also translates the latest bounded PAPER-cycle summary into a
+plain-language explanation of why no new entry was opened. Only whitelisted
+reason labels and counts are shown; unsafe result flags fail closed and no raw
+market payload or credential can reach the page.
 On observer start, MT5 recovery or a long runtime gap, JARVIS runs the local
 close-only position check before any full analysis cycle. New PAPER entries stay
 locked until that check returns a healthy result. This stricter execution rule is

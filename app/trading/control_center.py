@@ -26,6 +26,7 @@ from app.trading.forex_performance_review import (
 )
 from app.trading.forex_research_status import ForexHistoricalResearchGate
 from app.trading.forex_risk import ForexPaperPolicy
+from app.trading.forex_runtime_summary import ForexRuntimeCycleSummary
 from app.trading.forex_scanner import ForexMarketScanner
 from app.trading.forex_strategy_cohorts import ForexStrategyCohortReview
 from app.trading.forex_v2_research_dashboard import ForexV2ResearchDashboard
@@ -73,11 +74,13 @@ class TradingControlCenter:
             forward_evidence=self.forex_forward_evidence,
             owner_review=self.forex_forward_review,
         )
+        self.forex_runtime_summary = ForexRuntimeCycleSummary(self.project_root)
         self.forex_dashboard = ForexPaperDashboard(
             self.project_root,
             executor=self.forex_executor,
             performance_review=self.forex_performance_review,
             v2_research=self.forex_v2_dashboard,
+            runtime_summary=self.forex_runtime_summary,
         )
 
     def status(self) -> dict[str, Any]:
@@ -196,98 +199,7 @@ class TradingControlCenter:
 
     def _last_runtime_cycle(self) -> dict[str, Any]:
         """Read a bounded, secret-free summary of the watchdog's last result."""
-        path = self.project_root / "data" / "trading" / "forex_paper_last.json"
-        empty = {
-            "available": False,
-            "status": "NO_RESULT",
-            "observed_at": "",
-            "decision": "NO_RECORDED_CYCLE",
-            "ready_pair_count": 0,
-            "blocked_pair_count": 0,
-            "execution_count": 0,
-            "reason_codes": {},
-            "high_impact_event_window": False,
-            "broker_orders_sent": False,
-            "live_orders_sent": False,
-            "real_money_access": False,
-        }
-        try:
-            if not path.is_file() or path.stat().st_size > 2_000_000:
-                return empty
-            payload = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, UnicodeError, json.JSONDecodeError):
-            return {**empty, "status": "INVALID_RESULT"}
-        if not isinstance(payload, dict):
-            return {**empty, "status": "INVALID_RESULT"}
-        paper = payload.get("paper")
-        paper = dict(paper) if isinstance(paper, dict) else {}
-        observation = payload.get("observation")
-        observation = dict(observation) if isinstance(observation, dict) else {}
-        opening_blocks = observation.get("opening_blocks")
-        high_impact_event_window = bool(
-            observation.get("status") == "OBSERVATION_RECORDED"
-            and observation.get("fully_cross_checked") is True
-            and opening_blocks == ["HIGH_IMPACT_EVENT_WINDOW"]
-        )
-        assessments = [
-            dict(item)
-            for item in list(paper.get("assessments", []) or [])[:20]
-            if isinstance(item, dict)
-        ]
-        execution = paper.get("execution")
-        execution = dict(execution) if isinstance(execution, dict) else {}
-        executions = [
-            dict(item)
-            for item in list(execution.get("executions", []) or [])[:20]
-            if isinstance(item, dict)
-        ]
-        reasons: dict[str, int] = {}
-        top_reason = str(payload.get("reason", "")).strip().upper()[:80]
-        if top_reason:
-            reasons[top_reason] = 1
-        for assessment in assessments:
-            for raw_code in list(assessment.get("reason_codes", []) or [])[:8]:
-                code = str(raw_code or "").strip().upper()[:80]
-                if code:
-                    reasons[code] = reasons.get(code, 0) + 1
-        ready_count = sum(item.get("status") == "READY" for item in assessments)
-        blocked_count = sum(item.get("status") == "BLOCKED" for item in assessments)
-        outer_status = str(payload.get("status", ""))
-        if executions:
-            decision = "PAPER_EXECUTED"
-        elif (
-            outer_status != "PAPER_CYCLE_COMPLETED"
-            or str(paper.get("status", "")) == "DATA_BLOCKED"
-        ):
-            decision = "DATA_BLOCKED"
-        elif blocked_count and not ready_count:
-            decision = "PAIR_DATA_BLOCKED"
-        else:
-            decision = "NO_ENTRY_SIGNAL"
-        unsafe = any(
-            payload.get(key) is not False
-            for key in (
-                "broker_orders_sent",
-                "live_orders_sent",
-                "real_money_access",
-            )
-        )
-        return {
-            "available": True,
-            "status": "SAFETY_VIOLATION" if unsafe else outer_status,
-            "observed_at": str(payload.get("observed_at", ""))[:64],
-            "decision": decision,
-            "ready_pair_count": ready_count,
-            "blocked_pair_count": blocked_count,
-            "execution_count": len(executions),
-            "reason_codes": dict(
-                sorted(reasons.items(), key=lambda item: (-item[1], item[0]))
-            ),
-            "high_impact_event_window": high_impact_event_window,
-            "broker_orders_sent": payload.get("broker_orders_sent") is True,
-            "live_orders_sent": payload.get("live_orders_sent") is True,
-            "real_money_access": payload.get("real_money_access") is True,
-        }
+        return self.forex_runtime_summary.snapshot()
 
     def _observer_runtime_status(self) -> dict[str, Any]:
         path = self.project_root / "data" / "trading" / "forex_observer_status.json"

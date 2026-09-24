@@ -278,6 +278,9 @@ def test_dashboard_projects_latest_safe_paper_cycle() -> None:
         assert snapshot["unrealized_pnl_pln"] == "-1.88"
         assert snapshot["performance"]["valid_closed_trade_count"] == 1
         assert snapshot["performance"]["profit_factor"] == "0.0000"
+        assert snapshot["last_runtime_cycle"]["decision"] == "NO_ENTRY_SIGNAL"
+        assert snapshot["last_runtime_cycle"]["ready_pair_count"] == 0
+        assert snapshot["last_runtime_cycle"]["live_orders_sent"] is False
         assert snapshot["performance"]["evidence_valid"] is True
         assert snapshot["performance"]["live_promotion_ready"] is False
         pair = snapshot["performance"]["pair_breakdown"]["USD_CHF"]

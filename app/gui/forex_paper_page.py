@@ -27,6 +27,7 @@ from app.gui.forex_pair_results_table import ForexPairResultsTable
 from app.gui.forex_performance_review_view import forex_performance_review_view
 from app.gui.forex_paper_safety_view import forex_paper_safety_view
 from app.gui.forex_protection_view import forex_protection_view
+from app.gui.forex_runtime_cycle_view import forex_runtime_cycle_text
 from app.gui.forex_v2_research_view import forex_v2_research_text
 
 
@@ -285,7 +286,9 @@ class ForexPaperPage(QWidget):
             "Ostatnia aktualizacja: " + self._visible_time(snapshot.get("observed_at"))
         )
         self.safety.setText(safety_banner)
-        self.message.setText(str(snapshot.get("message", "Gotowy."))[:240])
+        message = str(snapshot.get("message", "Gotowy."))[:240]
+        decision = forex_runtime_cycle_text(snapshot.get("last_runtime_cycle"))
+        self.message.setText(f"{message}\n{decision}")
 
     def _fill_history(self, history: list[object]) -> None:
         events = [dict(item) for item in history[-50:] if isinstance(item, dict)]
