@@ -199,6 +199,10 @@ The safety panel also translates the latest bounded PAPER-cycle summary into a
 plain-language explanation of why no new entry was opened. Only whitelisted
 reason labels and counts are shown; unsafe result flags fail closed and no raw
 market payload or credential can reach the page.
+Every newly opened PAPER position now preserves its exact execution-time risk in
+PLN in both the position and fill audit. The read-only position table displays
+that value; older positions created before this telemetry field are labelled as
+missing historical risk instead of being reconstructed from a later exchange rate.
 On observer start, MT5 recovery or a long runtime gap, JARVIS runs the local
 close-only position check before any full analysis cycle. New PAPER entries stay
 locked until that check returns a healthy result. This stricter execution rule is

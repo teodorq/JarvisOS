@@ -136,6 +136,8 @@ class ForexPaperAutopilotTests(unittest.TestCase):
             first["execution"]["executions"][0]["fill"]["take_profit"]
         )
         opened_fill = first["execution"]["executions"][0]["fill"]
+        self.assertGreater(Decimal(opened_fill["initial_risk_pln"]), 0)
+        self.assertLessEqual(Decimal(opened_fill["initial_risk_pln"]), Decimal("250"))
         self.assertEqual(
             opened_fill["sample_contract_id"],
             self.autopilot.sample_contract["contract_id"],
@@ -149,13 +151,20 @@ class ForexPaperAutopilotTests(unittest.TestCase):
         self.assertTrue(replay["execution"]["idempotent_replay"])
         status = self.autopilot.executor.status()
         self.assertEqual(status["position_count"], 1)
+        self.assertEqual(
+            status["open_positions"][0]["initial_risk_pln"],
+            opened_fill["initial_risk_pln"],
+        )
         self.assertEqual(status["take_profit_protected_position_count"], 1)
         self.assertEqual(status["legacy_position_without_take_profit_count"], 0)
         self.assertEqual(status["fill_count"], 1)
         self.assertTrue(status["audit_chain_valid"])
 
     def test_later_cycle_closes_existing_position_before_any_entry(self) -> None:
-        self.run_cycle("forex-cycle-open")
+        opened = self.run_cycle("forex-cycle-open")
+        initial_risk = opened["execution"]["executions"][0]["fill"][
+            "initial_risk_pln"
+        ]
         later = self.now + timedelta(minutes=15)
         result = self.run_cycle(
             "forex-cycle-close",
@@ -175,6 +184,7 @@ class ForexPaperAutopilotTests(unittest.TestCase):
             self.autopilot.sample_contract["fingerprint_sha256"],
         )
         closed_fill = result["execution"]["executions"][0]["fill"]
+        self.assertEqual(closed_fill["initial_risk_pln"], initial_risk)
         self.assertEqual(closed_fill["opened_at"], self.now.isoformat())
         self.assertEqual(closed_fill["closed_at"], later.isoformat())
         status = self.autopilot.executor.status()

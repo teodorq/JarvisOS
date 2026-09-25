@@ -52,6 +52,7 @@ def _account() -> dict:
             "stop_loss": "0.800040",
             "take_profit": "0.797040",
             "opened_at": "2026-08-21T10:09:38+00:00",
+            "initial_risk_pln": "8.01",
         }],
         "closed_trade_count": 0,
         "performance": {
@@ -274,6 +275,8 @@ def test_dashboard_projects_latest_safe_paper_cycle() -> None:
             "stop_loss": "0.800040",
             "take_profit": "0.797040",
             "opened_at": "2026-08-21T10:09:38+00:00",
+            "initial_risk_pln": "8.01",
+            "risk_recorded": True,
         }
         assert snapshot["unrealized_pnl_pln"] == "-1.88"
         assert snapshot["performance"]["valid_closed_trade_count"] == 1
@@ -622,6 +625,21 @@ def test_dashboard_drops_invalid_positions_and_numbers() -> None:
         assert snapshot["balance_pln"] == "0.00"
         assert snapshot["positions"] == []
         assert snapshot["position_count"] == 0
+
+
+def test_dashboard_marks_legacy_position_without_recorded_risk() -> None:
+    with TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        account = _account()
+        account["open_positions"][0].pop("initial_risk_pln")
+        _write_result(root, account)
+
+        position = ForexPaperDashboard(
+            root, executor=_Executor({})
+        ).snapshot()["positions"][0]
+
+        assert position["initial_risk_pln"] == ""
+        assert position["risk_recorded"] is False
 
 
 def test_dashboard_exposes_only_safe_performance_review_progress() -> None:

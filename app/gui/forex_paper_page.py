@@ -35,7 +35,7 @@ class ForexPaperPage(QWidget):
     """Display current PAPER positions without exposing execution controls."""
 
     REFRESH_INTERVAL_MS = 5000
-    HEADERS = ("PARA", "KIERUNEK", "JEDNOSTKI", "WEJŚCIE", "CENA", "STOP LOSS", "TAKE PROFIT")
+    HEADERS = ("PARA", "KIERUNEK", "JEDNOSTKI", "WEJŚCIE", "CENA", "STOP LOSS", "TAKE PROFIT", "RYZYKO STARTOWE")
     HISTORY_HEADERS = ("CZAS", "ZDARZENIE", "WIADOMOŚĆ", "STATUS")
     def __init__(self, dashboard: Any, *, activity: Any | None = None) -> None:
         super().__init__()
@@ -340,11 +340,12 @@ class ForexPaperPage(QWidget):
             self.table.setSpan(0, 0, 1, len(self.HEADERS))
             return
         self.table.setRowCount(len(positions))
-        keys = ("pair", "side", "units", "entry_price", "current_price", "stop_loss", "take_profit")
+        keys = ("pair", "side", "units", "entry_price", "current_price", "stop_loss", "take_profit", "initial_risk_pln")
         for row, position in enumerate(positions):
             values = [str(position.get(key, "—")) for key in keys]
             values[0] = values[0].replace("_", "/")
             values[1] = "KUPNO / LONG" if values[1] == "LONG" else "SPRZEDAŻ / SHORT"
+            values[-1] = f"{values[-1]} PLN" if position.get("risk_recorded") else "BRAK ZAPISU"
             for column, value in enumerate(values):
                 item = QTableWidgetItem(value)
                 item.setTextAlignment(Qt.AlignCenter)

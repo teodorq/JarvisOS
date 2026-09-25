@@ -95,6 +95,8 @@ class _Dashboard:
                 "current_price": "0.799040",
                 "stop_loss": "0.800040",
                 "take_profit": "0.797040",
+                "initial_risk_pln": "8.01",
+                "risk_recorded": True,
             }],
             "loss_streak_safety": {
                 "active": True,
@@ -145,6 +147,7 @@ def test_forex_page_shows_position_and_has_no_execution_controls() -> None:
         assert page.table.item(0, 0).text() == "USD/CHF"
         assert page.table.item(0, 1).text() == "SPRZEDAŻ / SHORT"
         assert page.table.item(0, 5).text() == "0.800040"
+        assert page.table.item(0, 7).text() == "8.01 PLN"
         assert page.metrics["unrealized"].value_label.text() == "-1.88 PLN"
         assert page.metrics["closed"].value_label.text() == "1 / 20"
         assert page.metrics["average"].value_label.text() == "-44.26 PLN"

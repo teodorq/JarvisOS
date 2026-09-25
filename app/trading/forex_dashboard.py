@@ -854,15 +854,16 @@ class ForexPaperDashboard:
         }
 
     @classmethod
-    def _positions(cls, value: object) -> list[dict[str, str]]:
+    def _positions(cls, value: object) -> list[dict[str, Any]]:
         items = list(value) if isinstance(value, list) else []
-        result: list[dict[str, str]] = []
+        result: list[dict[str, Any]] = []
         for raw in items[:5]:
             item = dict(raw) if isinstance(raw, dict) else {}
             pair = str(item.get("pair", "")).strip().upper()
             side = str(item.get("side", "")).strip().upper()
             if pair not in _MAJOR_PAIRS or side not in {"LONG", "SHORT"}:
                 continue
+            initial_risk = cls._positive_money(item.get("initial_risk_pln"))
             result.append({
                 "pair": pair,
                 "side": side,
@@ -872,8 +873,20 @@ class ForexPaperDashboard:
                 "stop_loss": cls._number(item.get("stop_loss"), 6),
                 "take_profit": cls._number(item.get("take_profit"), 6),
                 "opened_at": " ".join(str(item.get("opened_at", "")).split())[:64],
+                "initial_risk_pln": initial_risk,
+                "risk_recorded": bool(initial_risk),
             })
         return result
+
+    @staticmethod
+    def _positive_money(value: object) -> str:
+        try:
+            number = Decimal(str(value))
+            if not number.is_finite() or number <= 0:
+                raise InvalidOperation
+        except (InvalidOperation, TypeError, ValueError):
+            return ""
+        return f"{number:.2f}"
 
     @staticmethod
     def _number(value: object, places: int) -> str:

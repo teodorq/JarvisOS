@@ -321,6 +321,7 @@ class ForexPaperExecutionEngine:
             opened_at=now,
             take_profit=target,
         )
+        initial_risk_pln = self.risk.position_risk_pln(position, rates)
         stored = {
             "pair": position.pair.symbol,
             "side": position.side,
@@ -330,6 +331,7 @@ class ForexPaperExecutionEngine:
             "stop_loss": _text(position.stop_loss, _PRICE),
             "take_profit": _text(target, _PRICE),
             "opened_at": position.opened_at.isoformat(),
+            "initial_risk_pln": _text(initial_risk_pln),
             "sample_contract_id": str(sample_contract["contract_id"]),
             "sample_contract_fingerprint_sha256": str(
                 sample_contract["fingerprint_sha256"]
@@ -393,6 +395,7 @@ class ForexPaperExecutionEngine:
             ),
             "opened_at": position.opened_at.isoformat(),
             "closed_at": now.isoformat(),
+            "initial_risk_pln": self._stored_initial_risk_pln(stored_position),
             "reason_codes": [
                 str(value)[:80]
                 for value in list(instruction.get("reason_codes", []) or [])[:8]
@@ -606,9 +609,12 @@ class ForexPaperExecutionEngine:
                         else ""
                     ),
                     "opened_at": position.opened_at.isoformat(),
+                    "initial_risk_pln": self._stored_initial_risk_pln(
+                        dict(state.get("positions", {}) or {}).get(symbol)
+                    ),
                 }
-                for position in sorted(
-                    positions.values(), key=lambda item: item.pair.symbol
+                for symbol, position in sorted(
+                    positions.items(), key=lambda item: item[0]
                 )
             ],
             "take_profit_protected_position_count": sum(
@@ -864,6 +870,15 @@ class ForexPaperExecutionEngine:
         raise LiveTradingBlockedError(
             "LIVE_TRADING_BLOCKED: wykonanie Forex działa wyłącznie PAPER_ONLY."
         )
+
+    @staticmethod
+    def _stored_initial_risk_pln(value: object) -> str:
+        stored = dict(value) if isinstance(value, dict) else {}
+        raw = stored.get("initial_risk_pln")
+        if raw is None or str(raw).strip() == "":
+            return ""
+        amount = _decimal(raw)
+        return _text(amount) if amount > 0 else ""
 
     def _positions(self, state: Mapping[str, Any]) -> dict[str, ForexPosition]:
         result: dict[str, ForexPosition] = {}
