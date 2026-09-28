@@ -37,13 +37,14 @@ def _append_closed_trade(
     index: int,
     *,
     record_risk: bool = True,
+    pair: str = "EUR_USD",
 ) -> None:
     filled_at = NOW + timedelta(minutes=15 * index)
     pnl = Decimal("2.00") if index % 2 else Decimal("-1.00")
     fill = {
         "fill_id": f"paper-performance-close-{index:03d}",
         "action": "CLOSE_LONG",
-        "pair": "EUR_USD",
+        "pair": pair,
         "realized_pnl_pln": str(pnl),
         "filled_at": filled_at.isoformat(),
         "opened_at": (filled_at - timedelta(minutes=30)).isoformat(),
@@ -108,7 +109,7 @@ def test_first_complete_sample_is_frozen_and_survives_later_trades(
     frozen = store.refresh(first_account, generated_at=NOW)
 
     assert frozen["status"] == "READY_FOR_OWNER_REVIEW"
-    assert frozen["schema_version"] == 3
+    assert frozen["schema_version"] == 4
     assert frozen["valid_closed_trade_count"] == 20
     assert frozen["packet_persisted"] is True
     assert frozen["review_snapshot_frozen"] is True
@@ -131,6 +132,14 @@ def test_first_complete_sample_is_frozen_and_survives_later_trades(
         "maximum_observed_consecutive_losses": 1,
         "current_observed_consecutive_losses": 0,
     }
+    assert frozen["pair_risk_snapshot"]["EUR_USD"] == frozen["risk_snapshot"]
+    assert frozen["pair_risk_snapshot"]["GBP_USD"]["status"] == (
+        "NO_CLOSED_TRADES"
+    )
+    assert sum(
+        item["closed_trade_count"]
+        for item in frozen["pair_risk_snapshot"].values()
+    ) == 20
     assert verify_forex_paper_performance_review_packet(frozen)
     assert verify_forex_paper_performance_review_lineage(
         first_account, ledger.snapshot(), frozen
@@ -184,6 +193,34 @@ def test_complete_sample_freezes_partial_legacy_risk_coverage(
         "maximum_observed_consecutive_losses": 1,
         "current_observed_consecutive_losses": 0,
     }
+    assert frozen["pair_risk_snapshot"]["EUR_USD"] == frozen["risk_snapshot"]
+
+
+def test_complete_sample_freezes_each_currency_pair_separately(
+    tmp_path: Path,
+) -> None:
+    ledger = ForexPaperLedger(tmp_path)
+    contract = build_forex_paper_sample_contract()
+    for index in range(20):
+        _append_closed_trade(
+            ledger,
+            contract,
+            index,
+            pair="EUR_USD" if index < 10 else "GBP_USD",
+        )
+
+    frozen = ForexPaperPerformanceReviewPacket(tmp_path).refresh(
+        _account(tmp_path, contract),
+        generated_at=NOW,
+    )
+
+    pairs = frozen["pair_risk_snapshot"]
+    assert pairs["EUR_USD"]["closed_trade_count"] == 10
+    assert pairs["GBP_USD"]["closed_trade_count"] == 10
+    assert pairs["EUR_USD"]["average_r_multiple"] == "0.2500"
+    assert pairs["GBP_USD"]["average_r_multiple"] == "0.2500"
+    assert pairs["USD_JPY"]["status"] == "NO_CLOSED_TRADES"
+    assert verify_forex_paper_performance_review_packet(frozen)
     assert verify_forex_paper_performance_review_packet(frozen)
 
 
@@ -267,6 +304,31 @@ def test_lineage_recomputes_risk_even_if_tampered_packet_is_rehashed(
         generated_at=NOW,
     )
     packet["risk_snapshot"]["average_r_multiple"] = "9.0000"
+    _rehash(packet)
+
+    assert verify_forex_paper_performance_review_packet(packet)
+    assert not verify_forex_paper_performance_review_lineage(
+        account,
+        ledger.snapshot(),
+        packet,
+    )
+
+
+def test_lineage_recomputes_pair_risk_after_packet_rehash(
+    tmp_path: Path,
+) -> None:
+    ledger = ForexPaperLedger(tmp_path)
+    contract = build_forex_paper_sample_contract()
+    for index in range(20):
+        _append_closed_trade(ledger, contract, index)
+    account = _account(tmp_path, contract)
+    packet = ForexPaperPerformanceReviewPacket(tmp_path).refresh(
+        account,
+        generated_at=NOW,
+    )
+    packet["pair_risk_snapshot"]["EUR_USD"][
+        "average_r_multiple"
+    ] = "9.0000"
     _rehash(packet)
 
     assert verify_forex_paper_performance_review_packet(packet)

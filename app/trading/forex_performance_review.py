@@ -15,11 +15,13 @@ from typing import Any, Mapping
 from app.core.exclusive_file_lock import exclusive_file_lock
 from app.core.project_paths import resolve_project_root
 from app.trading.forex_ledger import ForexPaperLedger
+from app.trading.forex_models import MAJOR_FOREX_PAIRS
 from app.trading.forex_risk_diagnostics import build_forex_risk_diagnostics
 from app.trading.models import TradingValidationError, aware_utc
 
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
+_PAIR_SYMBOLS = tuple(pair.symbol for pair in MAJOR_FOREX_PAIRS)
 _LIMITATIONS = (
     "PAPER_SIMULATION_ONLY",
     "SAMPLE_SIZE_READY_FOR_MANUAL_REVIEW_ONLY",
@@ -233,9 +235,74 @@ def _risk_snapshot(value: object, count: int) -> dict[str, Any]:
     return snapshot
 
 
+def _stored_risk_snapshot(value: object, count: int) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        raise TradingValidationError(
+            "performance_review: stored_risk_snapshot_missing"
+        )
+    return _risk_snapshot(
+        {
+            **dict(value),
+            "mode": "FOREX_PAPER_RISK_DIAGNOSTICS_READ_ONLY",
+            "performance_validated": False,
+            "automatic_strategy_change": False,
+            "live_promotion_ready": False,
+        },
+        count,
+    )
+
+
+def _pair_risk_snapshots(
+    fills: list[dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    result: dict[str, dict[str, Any]] = {}
+    for pair in _PAIR_SYMBOLS:
+        pair_fills = [
+            fill for fill in fills
+            if str(fill.get("pair", "")).strip().upper() == pair
+        ]
+        result[pair] = _risk_snapshot(
+            build_forex_risk_diagnostics(pair_fills),
+            len(pair_fills),
+        )
+    return result
+
+
+def _stored_pair_risk_snapshots(
+    value: object,
+    total_count: int,
+) -> dict[str, dict[str, Any]]:
+    if not isinstance(value, Mapping) or set(value) != set(_PAIR_SYMBOLS):
+        raise TradingValidationError(
+            "performance_review: invalid_pair_risk_snapshot"
+        )
+    result: dict[str, dict[str, Any]] = {}
+    pair_total = 0
+    for pair in _PAIR_SYMBOLS:
+        raw = value.get(pair)
+        item = dict(raw) if isinstance(raw, Mapping) else {}
+        pair_count = item.get("closed_trade_count")
+        if type(pair_count) is not int or pair_count < 0:
+            raise TradingValidationError(
+                "performance_review: invalid_pair_risk_count"
+            )
+        selected = _stored_risk_snapshot(item, pair_count)
+        if selected != item:
+            raise TradingValidationError(
+                "performance_review: invalid_pair_risk_snapshot"
+            )
+        result[pair] = selected
+        pair_total += pair_count
+    if pair_total != total_count:
+        raise TradingValidationError(
+            "performance_review: pair_risk_count_mismatch"
+        )
+    return result
+
+
 def _base_packet(now: datetime) -> dict[str, Any]:
     return {
-        "schema_version": 3,
+        "schema_version": 4,
         "mode": "FOREX_PAPER_PERFORMANCE_OWNER_REVIEW_READ_ONLY",
         "generated_at": now.isoformat(),
         "review_scope": "CURRENT_SAMPLE_CONTRACT_CLOSED_TRADES",
@@ -264,6 +331,7 @@ def _blocked_packet(now: datetime, reason: str) -> dict[str, Any]:
         "closed_trade_anchors": [],
         "performance_snapshot": {},
         "risk_snapshot": {},
+        "pair_risk_snapshot": {},
     }
     packet["content_sha256"] = _content_sha256(packet)
     return packet
@@ -391,6 +459,7 @@ def _source(
         ],
         "performance_snapshot": _performance_snapshot(performance, count),
         "risk_snapshot": risk_snapshot,
+        "pair_risk_snapshot": _pair_risk_snapshots(fills),
         "sample_ready": bool(
             performance.get("status") == "READY_FOR_MANUAL_REVIEW"
             and performance.get("sample_size_sufficient_for_review") is True
@@ -446,10 +515,11 @@ def verify_forex_paper_performance_review_packet(value: object) -> bool:
         anchors = packet.get("closed_trade_anchors")
         snapshot = packet.get("performance_snapshot")
         risk_snapshot = packet.get("risk_snapshot")
+        pair_risk_snapshot = packet.get("pair_risk_snapshot")
         content_sha256 = packet.get("content_sha256")
         if (
             type(packet.get("schema_version")) is not int
-            or packet.get("schema_version") != 3
+            or packet.get("schema_version") != 4
             or packet.get("status") != "READY_FOR_OWNER_REVIEW"
             or packet.get("mode")
             != "FOREX_PAPER_PERFORMANCE_OWNER_REVIEW_READ_ONLY"
@@ -488,17 +558,10 @@ def verify_forex_paper_performance_review_packet(value: object) -> bool:
             or not isinstance(snapshot, Mapping)
             or _performance_snapshot(snapshot, count) != dict(snapshot)
             or not isinstance(risk_snapshot, Mapping)
-            or _risk_snapshot(
-                {
-                    **dict(risk_snapshot),
-                    "mode": "FOREX_PAPER_RISK_DIAGNOSTICS_READ_ONLY",
-                    "performance_validated": False,
-                    "automatic_strategy_change": False,
-                    "live_promotion_ready": False,
-                },
-                count,
-            )
+            or _stored_risk_snapshot(risk_snapshot, count)
             != dict(risk_snapshot)
+            or _stored_pair_risk_snapshots(pair_risk_snapshot, count)
+            != dict(pair_risk_snapshot)
             or any(packet.get(field) is not False for field in _safety_contract())
             or not isinstance(content_sha256, str)
             or not _SHA256.fullmatch(content_sha256)
@@ -557,9 +620,13 @@ def verify_forex_paper_performance_review_lineage(
             build_forex_risk_diagnostics(frozen_fills),
             frozen_count,
         )
+        frozen_pair_risk = _pair_risk_snapshots(frozen_fills)
     except (TypeError, ValueError, TradingValidationError):
         return False
-    return frozen_risk == dict(review["risk_snapshot"])
+    return bool(
+        frozen_risk == dict(review["risk_snapshot"])
+        and frozen_pair_risk == dict(review["pair_risk_snapshot"])
+    )
 
 
 class ForexPaperPerformanceReviewPacket:
