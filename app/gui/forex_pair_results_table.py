@@ -31,6 +31,8 @@ class ForexPairResultsTable(QTableWidget):
         "PROFIT FACTOR",
         "POSTĘP",
         "STATUS",
+        "DANE R",
+        "ŚREDNIA R",
     )
 
     def __init__(self) -> None:
@@ -45,6 +47,12 @@ class ForexPairResultsTable(QTableWidget):
             raw = values.get(pair)
             metrics = dict(raw) if isinstance(raw, Mapping) else {}
             factor = metrics.get("profit_factor")
+            raw_risk = metrics.get("risk_diagnostics")
+            risk = dict(raw_risk) if isinstance(raw_risk, Mapping) else {}
+            risk_count = risk.get("risk_observed_trade_count", 0)
+            risk_total = risk.get("closed_trade_count", 0)
+            risk_coverage = risk.get("risk_coverage_pct", "0.00")
+            average_r = risk.get("average_r_multiple")
             review_status = {
                 "NO_CLOSED_TRADES": "BRAK DANYCH",
                 "COLLECTING_PAIR_SAMPLE": "ZBIERANIE",
@@ -65,6 +73,8 @@ class ForexPairResultsTable(QTableWidget):
                     f"{metrics.get('minimum_closed_trades_for_review', 20)}"
                 ),
                 review_status,
+                f"{risk_count}/{risk_total} ({risk_coverage}%)",
+                str(average_r) if average_r is not None else "N/D",
             )
             for column, value in enumerate(columns):
                 item = QTableWidgetItem(value)

@@ -79,6 +79,25 @@ def _account() -> dict:
                     "all_time_net_realized_pnl_pln": "-85.88",
                     "average_trade_pnl_pln": "-44.26",
                     "profit_factor": "0.0000",
+                    "risk_diagnostics": {
+                        "status": "COMPLETE",
+                        "closed_trade_count": 1,
+                        "risk_observed_trade_count": 1,
+                        "risk_missing_trade_count": 0,
+                        "risk_coverage_pct": "100.00",
+                        "net_r_multiple": "-0.5000",
+                        "average_r_multiple": "-0.5000",
+                        "median_r_multiple": "-0.5000",
+                        "best_r_multiple": "-0.5000",
+                        "worst_r_multiple": "-0.5000",
+                        "winning_r_trade_count": 0,
+                        "losing_r_trade_count": 1,
+                        "breakeven_r_trade_count": 0,
+                        "maximum_observed_drawdown_r": "0.5000",
+                        "maximum_observed_consecutive_losses": 1,
+                        "current_observed_consecutive_losses": 1,
+                        "risk_coverage_complete": True,
+                    },
                     "minimum_closed_trades_for_review": 20,
                     "remaining_closed_trades_for_review": 19,
                     "sample_progress_pct": "5.00",
@@ -311,6 +330,8 @@ def test_dashboard_projects_latest_safe_paper_cycle() -> None:
         assert pair["net_realized_pnl_pln"] == "-44.26"
         assert pair["all_time_net_realized_pnl_pln"] == "-85.88"
         assert pair["profit_factor"] == "0.0000"
+        assert pair["risk_diagnostics"]["risk_coverage_pct"] == "100.00"
+        assert pair["risk_diagnostics"]["average_r_multiple"] == "-0.5000"
         assert pair["performance_validated"] is False
         assert pair["review_status"] == "COLLECTING_PAIR_SAMPLE"
         assert pair["sample_progress_pct"] == "5.00"

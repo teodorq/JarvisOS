@@ -48,6 +48,13 @@ class _Dashboard:
                         "net_realized_pnl_pln": "-44.26",
                         "average_trade_pnl_pln": "-44.26",
                         "profit_factor": "0.0000",
+                        "risk_diagnostics": {
+                            "closed_trade_count": 1,
+                            "risk_observed_trade_count": 1,
+                            "risk_missing_trade_count": 0,
+                            "risk_coverage_pct": "100.00",
+                            "average_r_multiple": "-0.5000",
+                        },
                         "minimum_closed_trades_for_review": 20,
                         "review_status": "COLLECTING_PAIR_SAMPLE",
                     },
@@ -170,6 +177,8 @@ def test_forex_page_shows_position_and_has_no_execution_controls() -> None:
         assert page.pair_table.item(3, 7).text() == "0.0000"
         assert page.pair_table.item(3, 8).text() == "1/20"
         assert page.pair_table.item(3, 9).text() == "ZBIERANIE"
+        assert page.pair_table.item(3, 10).text() == "1/1 (100.00%)"
+        assert page.pair_table.item(3, 11).text() == "-0.5000"
         assert page.history_table.rowCount() == 2
         assert page.history_table.item(0, 1).text() == "OCHRONA SL/TP — UWAGA"
         assert page.history_table.item(1, 1).text() == "OTWARCIE"

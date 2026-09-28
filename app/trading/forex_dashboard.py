@@ -619,6 +619,9 @@ class ForexPaperDashboard:
                     if pair_factor is not None
                     else None
                 ),
+                "risk_diagnostics": cls._risk_diagnostics(
+                    metrics.get("risk_diagnostics")
+                ),
                 "minimum_closed_trades_for_review": required,
                 "remaining_closed_trades_for_review": max(
                     0, required - sample_count

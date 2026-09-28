@@ -67,6 +67,36 @@ def test_review_exposes_risk_normalized_diagnostics_without_changing_sample() ->
     assert risk["risk_coverage_pct"] == "50.00"
     assert risk["average_r_multiple"] == "2.0000"
     assert risk["automatic_strategy_change"] is False
+    pair_risk = review["pair_breakdown"]["EUR_USD"]["risk_diagnostics"]
+    assert pair_risk["risk_observed_trade_count"] == 1
+    assert pair_risk["risk_missing_trade_count"] == 1
+    assert pair_risk["average_r_multiple"] == "2.0000"
+
+
+def test_pair_risk_diagnostics_do_not_mix_currency_pairs() -> None:
+    eur = _fill("20", 1)
+    eur["initial_risk_pln"] = "10"
+    gbp = _fill("-5", 2)
+    gbp["pair"] = "GBP_USD"
+    gbp["initial_risk_pln"] = "5"
+
+    review = build_forex_paper_performance_review(
+        [eur, gbp],
+        initial_balance_pln="100000",
+        current_balance_pln="100015",
+        audit_chain_valid=True,
+        execution_audit_matches_ledger=True,
+    )
+
+    eur_risk = review["pair_breakdown"]["EUR_USD"]["risk_diagnostics"]
+    gbp_risk = review["pair_breakdown"]["GBP_USD"]["risk_diagnostics"]
+    assert eur_risk["closed_trade_count"] == 1
+    assert eur_risk["average_r_multiple"] == "2.0000"
+    assert gbp_risk["closed_trade_count"] == 1
+    assert gbp_risk["average_r_multiple"] == "-1.0000"
+    assert review["pair_breakdown"]["USD_JPY"]["risk_diagnostics"][
+        "status"
+    ] == "NO_CLOSED_TRADES"
 
 
 def test_review_calculates_profit_factor_drawdown_and_loss_streak() -> None:

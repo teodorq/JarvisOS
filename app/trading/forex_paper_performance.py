@@ -147,6 +147,9 @@ def build_forex_paper_performance_review(
     sample_pair_values: dict[str, list[Decimal]] = {
         pair.symbol: [] for pair in MAJOR_FOREX_PAIRS
     }
+    sample_pair_fills: dict[str, list[dict[str, Any]]] = {
+        pair.symbol: [] for pair in MAJOR_FOREX_PAIRS
+    }
     expected_contract = (
         dict(expected_sample_contract)
         if isinstance(expected_sample_contract, Mapping)
@@ -198,6 +201,7 @@ def build_forex_paper_performance_review(
             sample_values.append(pnl)
             sample_fills.append(item)
             sample_pair_values[pair].append(pnl)
+            sample_pair_fills[pair].append(item)
         elif is_superseded_sample_contract(
             fill_contract_id,
             fill_fingerprint,
@@ -256,6 +260,9 @@ def build_forex_paper_performance_review(
     blocked_pairs: list[str] = []
     for pair, outcomes in pair_values.items():
         sample_outcomes = sample_pair_values[pair]
+        pair_risk_diagnostics = build_forex_risk_diagnostics(
+            sample_pair_fills[pair]
+        )
         pair_metrics = _outcome_metrics(
             sample_outcomes, starting_equity=Decimal("0")
         )
@@ -286,6 +293,7 @@ def build_forex_paper_performance_review(
             "all_time_net_realized_pnl_pln": pair_all_time[
                 "net_realized_pnl_pln"
             ],
+            "risk_diagnostics": pair_risk_diagnostics,
             "minimum_closed_trades_for_review": required,
             "remaining_closed_trades_for_review": pair_remaining,
             "sample_progress_pct": _text(
