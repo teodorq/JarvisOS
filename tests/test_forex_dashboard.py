@@ -128,6 +128,19 @@ def _account() -> dict:
                 "exit_reason_coverage_complete": True,
                 "diagnostics_complete": True,
             },
+            "risk_diagnostics": {
+                "status": "PARTIAL",
+                "closed_trade_count": 2,
+                "risk_observed_trade_count": 1,
+                "risk_missing_trade_count": 1,
+                "risk_coverage_pct": "50.00",
+                "net_r_multiple": "-0.5000",
+                "average_r_multiple": "-0.5000",
+                "median_r_multiple": "-0.5000",
+                "best_r_multiple": "-0.5000",
+                "worst_r_multiple": "-0.5000",
+                "risk_coverage_complete": False,
+            },
         },
         "processed_cycle_count": 75,
         "audit_chain_valid": True,
@@ -328,6 +341,14 @@ def test_dashboard_projects_latest_safe_paper_cycle() -> None:
             "unspecified": 0,
         }
         assert diagnostics["diagnostics_complete"] is True
+        risk = snapshot["performance"]["risk_diagnostics"]
+        assert risk["status"] == "PARTIAL"
+        assert risk["risk_observed_trade_count"] == 1
+        assert risk["risk_missing_trade_count"] == 1
+        assert risk["risk_coverage_pct"] == "50.00"
+        assert risk["average_r_multiple"] == "-0.5000"
+        assert risk["risk_coverage_complete"] is False
+        assert risk["automatic_strategy_change"] is False
         assert snapshot["new_entries_paused_by_loss_streak"] is True
         assert snapshot["new_entries_paused_by_weekly_loss"] is False
         assert snapshot["weekly_loss_safety"] == {

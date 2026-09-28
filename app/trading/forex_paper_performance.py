@@ -7,6 +7,7 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any, Iterable, Mapping
 
 from app.trading.forex_models import MAJOR_FOREX_PAIRS
+from app.trading.forex_risk_diagnostics import build_forex_risk_diagnostics
 from app.trading.forex_sample_contract import is_superseded_sample_contract
 from app.trading.forex_trade_diagnostics import (
     build_forex_trade_diagnostics,
@@ -230,6 +231,7 @@ def build_forex_paper_performance_review(
     )
     all_time_metrics = _outcome_metrics(values, starting_equity=initial)
     trade_diagnostics = build_forex_trade_diagnostics(sample_fills)
+    risk_diagnostics = build_forex_risk_diagnostics(sample_fills)
 
     evidence_valid = bool(
         audit_chain_valid is True
@@ -371,6 +373,7 @@ def build_forex_paper_performance_review(
         "sample_size_sufficient_for_review": sample_ready,
         "all_time_summary": all_time_metrics,
         "trade_diagnostics": trade_diagnostics,
+        "risk_diagnostics": risk_diagnostics,
         "pair_breakdown": pair_breakdown,
         "pair_review": pair_review,
         "sample_contract_review": sample_contract_review,

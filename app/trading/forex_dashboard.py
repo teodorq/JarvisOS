@@ -641,6 +641,9 @@ class ForexPaperDashboard:
         trade_diagnostics = cls._trade_diagnostics(
             item.get("trade_diagnostics")
         )
+        risk_diagnostics = cls._risk_diagnostics(
+            item.get("risk_diagnostics")
+        )
         return {
             "status": str(item.get("status", "COLLECTING_PAPER_SAMPLE"))[:80],
             "metric_scope": (
@@ -682,6 +685,7 @@ class ForexPaperDashboard:
             "sample_contract_review": contract_review,
             "all_time_summary": all_time_summary,
             "trade_diagnostics": trade_diagnostics,
+            "risk_diagnostics": risk_diagnostics,
             "evidence_valid": evidence_valid,
             "performance_validated": False,
             "live_promotion_ready": False,
@@ -735,6 +739,40 @@ class ForexPaperDashboard:
                 item.get("exit_reason_coverage_complete") is True
             ),
             "diagnostics_complete": item.get("diagnostics_complete") is True,
+            "performance_validated": False,
+            "automatic_strategy_change": False,
+            "live_promotion_ready": False,
+        }
+
+    @classmethod
+    def _risk_diagnostics(cls, value: object) -> dict[str, Any]:
+        item = dict(value) if isinstance(value, dict) else {}
+
+        def optional_ratio(key: str) -> str | None:
+            raw = item.get(key)
+            return cls._number(raw, 4) if raw is not None else None
+
+        return {
+            "status": str(item.get("status", "NO_CLOSED_TRADES"))[:40],
+            "mode": "FOREX_PAPER_RISK_DIAGNOSTICS_READ_ONLY",
+            "closed_trade_count": cls._count(item.get("closed_trade_count")),
+            "risk_observed_trade_count": cls._count(
+                item.get("risk_observed_trade_count")
+            ),
+            "risk_missing_trade_count": cls._count(
+                item.get("risk_missing_trade_count")
+            ),
+            "risk_coverage_pct": cls._number(
+                item.get("risk_coverage_pct"), 2
+            ),
+            "net_r_multiple": optional_ratio("net_r_multiple"),
+            "average_r_multiple": optional_ratio("average_r_multiple"),
+            "median_r_multiple": optional_ratio("median_r_multiple"),
+            "best_r_multiple": optional_ratio("best_r_multiple"),
+            "worst_r_multiple": optional_ratio("worst_r_multiple"),
+            "risk_coverage_complete": (
+                item.get("risk_coverage_complete") is True
+            ),
             "performance_validated": False,
             "automatic_strategy_change": False,
             "live_promotion_ready": False,

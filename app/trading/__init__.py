@@ -89,6 +89,7 @@ from app.trading.forex_strategy_walk_forward import (
 from app.trading.forex_trade_diagnostics import (
     build_forex_trade_diagnostics,
 )
+from app.trading.forex_risk_diagnostics import build_forex_risk_diagnostics
 from app.trading.ledger import PaperTradingLedger
 from app.trading.models import (
     MarketBar,
@@ -181,6 +182,7 @@ __all__ = [
     "ForexStrategyCounterfactualReplay",
     "ForexStrategyCounterfactualWalkForwardComparison",
     "build_forex_trade_diagnostics",
+    "build_forex_risk_diagnostics",
     "sample_contracts_match",
     "verify_forex_paper_sample_contract",
     "WalkForwardPolicy",

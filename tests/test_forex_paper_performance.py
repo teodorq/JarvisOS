@@ -44,6 +44,29 @@ def test_empty_review_is_valid_but_requires_a_real_sample() -> None:
     assert review["integrity"]["evidence_valid"] is True
     assert review["performance_validated"] is False
     assert review["live_promotion_ready"] is False
+    assert review["risk_diagnostics"]["status"] == "NO_CLOSED_TRADES"
+
+
+def test_review_exposes_risk_normalized_diagnostics_without_changing_sample() -> None:
+    first = _fill("20", 1)
+    first["initial_risk_pln"] = "10"
+    second = _fill("-5", 2)
+    review = build_forex_paper_performance_review(
+        [first, second],
+        initial_balance_pln="100000",
+        current_balance_pln="100015",
+        audit_chain_valid=True,
+        execution_audit_matches_ledger=True,
+    )
+
+    assert review["valid_closed_trade_count"] == 2
+    risk = review["risk_diagnostics"]
+    assert risk["status"] == "PARTIAL"
+    assert risk["risk_observed_trade_count"] == 1
+    assert risk["risk_missing_trade_count"] == 1
+    assert risk["risk_coverage_pct"] == "50.00"
+    assert risk["average_r_multiple"] == "2.0000"
+    assert risk["automatic_strategy_change"] is False
 
 
 def test_review_calculates_profit_factor_drawdown_and_loss_streak() -> None:
