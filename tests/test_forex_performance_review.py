@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+import hashlib
+import json
 from pathlib import Path
 
 from app.trading.forex_executor import ForexPaperExecutionEngine
@@ -16,6 +18,17 @@ from app.trading.forex_sample_contract import build_forex_paper_sample_contract
 
 UTC = timezone.utc
 NOW = datetime(2026, 9, 1, 10, 0, tzinfo=UTC)
+
+
+def _rehash(packet: dict) -> None:
+    payload = {key: value for key, value in packet.items() if key != "content_sha256"}
+    encoded = json.dumps(
+        payload,
+        ensure_ascii=True,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    packet["content_sha256"] = hashlib.sha256(encoded).hexdigest()
 
 
 def _append_closed_trade(
@@ -239,3 +252,26 @@ def test_tampered_risk_snapshot_is_rejected_even_with_new_hash_absent(
     packet["risk_snapshot"]["risk_observed_trade_count"] = 19
 
     assert not verify_forex_paper_performance_review_packet(packet)
+
+
+def test_lineage_recomputes_risk_even_if_tampered_packet_is_rehashed(
+    tmp_path: Path,
+) -> None:
+    ledger = ForexPaperLedger(tmp_path)
+    contract = build_forex_paper_sample_contract()
+    for index in range(20):
+        _append_closed_trade(ledger, contract, index)
+    account = _account(tmp_path, contract)
+    packet = ForexPaperPerformanceReviewPacket(tmp_path).refresh(
+        account,
+        generated_at=NOW,
+    )
+    packet["risk_snapshot"]["average_r_multiple"] = "9.0000"
+    _rehash(packet)
+
+    assert verify_forex_paper_performance_review_packet(packet)
+    assert not verify_forex_paper_performance_review_lineage(
+        account,
+        ledger.snapshot(),
+        packet,
+    )

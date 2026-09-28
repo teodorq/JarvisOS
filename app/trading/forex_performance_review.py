@@ -269,6 +269,21 @@ def _blocked_packet(now: datetime, reason: str) -> dict[str, Any]:
     return packet
 
 
+def _contract_closed_fills(
+    state: Mapping[str, Any],
+    contract_id: str,
+    fingerprint: str,
+) -> list[dict[str, Any]]:
+    return [
+        dict(item)
+        for item in list(state.get("fills", []) or [])
+        if isinstance(item, Mapping)
+        and str(item.get("action", "")).startswith("CLOSE_")
+        and item.get("sample_contract_id") == contract_id
+        and item.get("sample_contract_fingerprint_sha256") == fingerprint
+    ]
+
+
 def _source(
     account: object,
     ledger_state: object,
@@ -336,14 +351,7 @@ def _source(
         performance.get("risk_diagnostics"),
         count,
     )
-    fills = [
-        dict(item)
-        for item in list(state.get("fills", []) or [])
-        if isinstance(item, Mapping)
-        and str(item.get("action", "")).startswith("CLOSE_")
-        and item.get("sample_contract_id") == contract_id
-        and item.get("sample_contract_fingerprint_sha256") == fingerprint
-    ]
+    fills = _contract_closed_fills(state, contract_id, fingerprint)
     all_closed_count = sum(
         isinstance(item, Mapping)
         and str(item.get("action", "")).startswith("CLOSE_")
@@ -532,10 +540,26 @@ def verify_forex_paper_performance_review_lineage(
         return False
     current_anchors = source["closed_trade_anchors"]
     frozen_anchors = review["closed_trade_anchors"]
-    return bool(
+    anchors_match = bool(
         len(current_anchors) >= len(frozen_anchors)
         and current_anchors[:len(frozen_anchors)] == frozen_anchors
     )
+    if not anchors_match:
+        return False
+    try:
+        frozen_count = int(review["valid_closed_trade_count"])
+        frozen_fills = _contract_closed_fills(
+            state,
+            str(review["sample_contract_id"]),
+            str(review["sample_contract_fingerprint_sha256"]),
+        )[:frozen_count]
+        frozen_risk = _risk_snapshot(
+            build_forex_risk_diagnostics(frozen_fills),
+            frozen_count,
+        )
+    except (TypeError, ValueError, TradingValidationError):
+        return False
+    return frozen_risk == dict(review["risk_snapshot"])
 
 
 class ForexPaperPerformanceReviewPacket:
