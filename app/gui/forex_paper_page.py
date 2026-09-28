@@ -222,7 +222,7 @@ class ForexPaperPage(QWidget):
         label, tone, safety_banner = forex_paper_safety_view(snapshot)
         self.overall.set_status(label, tone)
         review_label, review_tone, review_detail = (
-            forex_performance_review_view(snapshot.get("performance_review"))
+            forex_performance_review_view(snapshot.get("performance_review"), snapshot.get("performance"))
         )
         self.sample_review.set_status(review_label, review_tone)
         self.performance_review_detail.setText(review_detail)

@@ -30,6 +30,15 @@ class _Dashboard:
                 "profit_factor": "0.0000",
                 "maximum_closed_trade_drawdown_pln": "44.26",
                 "maximum_closed_trade_drawdown_pct": "0.04",
+                "risk_diagnostics": {
+                    "status": "NO_RISK_TELEMETRY",
+                    "closed_trade_count": 1,
+                    "risk_observed_trade_count": 0,
+                    "risk_missing_trade_count": 1,
+                    "risk_coverage_pct": "0.00",
+                    "net_r_multiple": None,
+                    "average_r_multiple": None,
+                },
                 "pair_breakdown": {
                     "USD_CHF": {
                         "closed_trade_count": 1,
@@ -170,6 +179,8 @@ def test_forex_page_shows_position_and_has_no_execution_controls() -> None:
         assert page.protection.full_text == "OCHRONA: DZIAŁA"
         assert page.sample_review.full_text == "PRÓBKA: 1/20"
         assert "niezmienny materiał" in page.performance_review_detail.text()
+        assert "Dane R: 0/1" in page.performance_review_detail.text()
+        assert "niczego nie szacuje" in page.performance_review_detail.text()
         assert "sygnały bazowe 1" in page.v2_research_detail.text()
         assert "nie wynik" in page.v2_research_detail.text()
         assert "brak nowego sygnału wejścia" in page.message.text()
@@ -219,6 +230,34 @@ def test_performance_review_view_marks_frozen_packet_as_manual_only() -> None:
     assert label == "PRÓBKA: ZAMROŻONA"
     assert tone == "healthy"
     assert "ręcznego przeglądu" in detail
+
+
+def test_performance_review_view_explains_partial_risk_coverage() -> None:
+    label, tone, detail = forex_performance_review_view(
+        {
+            "status": "WAITING_FOR_PAPER_SAMPLE",
+            "source_valid": True,
+            "valid_closed_trade_count": 4,
+            "minimum_closed_trades_for_review": 20,
+        },
+        {
+            "risk_diagnostics": {
+                "closed_trade_count": 4,
+                "risk_observed_trade_count": 3,
+                "risk_missing_trade_count": 1,
+                "risk_coverage_pct": "75.00",
+                "net_r_multiple": "1.2500",
+                "average_r_multiple": "0.4167",
+            },
+        },
+    )
+
+    assert label == "PRÓBKA: 4/20"
+    assert tone == "accent"
+    assert "Dane R: 3/4 (75.00%)" in detail
+    assert "suma 1.2500 R" in detail
+    assert "1 R oznacza początkowe ryzyko pozycji" in detail
+    assert "nie szacuje" in detail
 
 
 def test_v2_research_text_does_not_call_signal_sample_a_result() -> None:
