@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 import hashlib
 import json
 import os
@@ -15,6 +15,7 @@ from typing import Any, Mapping
 from app.core.exclusive_file_lock import exclusive_file_lock
 from app.core.project_paths import resolve_project_root
 from app.trading.forex_ledger import ForexPaperLedger
+from app.trading.forex_risk_diagnostics import build_forex_risk_diagnostics
 from app.trading.models import TradingValidationError, aware_utc
 
 
@@ -32,6 +33,13 @@ _MONEY_FIELDS = (
     "maximum_closed_trade_drawdown_pln",
     "maximum_closed_trade_drawdown_pct",
     "win_rate_pct",
+)
+_RISK_METRIC_FIELDS = (
+    "net_r_multiple",
+    "average_r_multiple",
+    "median_r_multiple",
+    "best_r_multiple",
+    "worst_r_multiple",
 )
 
 
@@ -115,9 +123,83 @@ def _performance_snapshot(value: Mapping[str, Any], count: int) -> dict[str, Any
     return snapshot
 
 
+def _risk_snapshot(value: object, count: int) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        raise TradingValidationError(
+            "performance_review: risk_diagnostics_missing"
+        )
+    item = dict(value)
+    observed = item.get("risk_observed_trade_count")
+    missing = item.get("risk_missing_trade_count")
+    if (
+        type(observed) is not int
+        or type(missing) is not int
+        or observed < 0
+        or missing < 0
+        or observed + missing != count
+        or item.get("closed_trade_count") != count
+    ):
+        raise TradingValidationError(
+            "performance_review: risk_count_mismatch"
+        )
+    if count == 0:
+        expected_status = "NO_CLOSED_TRADES"
+    elif observed == 0:
+        expected_status = "NO_RISK_TELEMETRY"
+    elif observed == count:
+        expected_status = "COMPLETE"
+    else:
+        expected_status = "PARTIAL"
+    expected_coverage = (
+        Decimal(observed) * Decimal("100") / Decimal(count)
+        if count
+        else Decimal("0")
+    ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    coverage = _decimal_text(
+        item.get("risk_coverage_pct"),
+        "risk_coverage_pct",
+    )
+    if (
+        item.get("status") != expected_status
+        or item.get("mode") != "FOREX_PAPER_RISK_DIAGNOSTICS_READ_ONLY"
+        or Decimal(coverage) != expected_coverage
+        or item.get("risk_coverage_complete") is not (observed == count)
+        or item.get("performance_validated") is not False
+        or item.get("automatic_strategy_change") is not False
+        or item.get("live_promotion_ready") is not False
+    ):
+        raise TradingValidationError(
+            "performance_review: invalid_risk_diagnostics"
+        )
+    snapshot: dict[str, Any] = {
+        "status": expected_status,
+        "closed_trade_count": count,
+        "risk_observed_trade_count": observed,
+        "risk_missing_trade_count": missing,
+        "risk_coverage_pct": coverage,
+        "risk_coverage_complete": observed == count,
+    }
+    for field in _RISK_METRIC_FIELDS:
+        raw = item.get(field)
+        if observed == 0:
+            if raw is not None:
+                raise TradingValidationError(
+                    f"performance_review: invalid_{field}"
+                )
+            snapshot[field] = None
+            continue
+        selected = _decimal_text(raw, field)
+        if abs(Decimal(selected)) > Decimal("1000000"):
+            raise TradingValidationError(
+                f"performance_review: invalid_{field}"
+            )
+        snapshot[field] = selected
+    return snapshot
+
+
 def _base_packet(now: datetime) -> dict[str, Any]:
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "mode": "FOREX_PAPER_PERFORMANCE_OWNER_REVIEW_READ_ONLY",
         "generated_at": now.isoformat(),
         "review_scope": "CURRENT_SAMPLE_CONTRACT_CLOSED_TRADES",
@@ -145,6 +227,7 @@ def _blocked_packet(now: datetime, reason: str) -> dict[str, Any]:
         "remaining_closed_trades_for_review": 0,
         "closed_trade_anchors": [],
         "performance_snapshot": {},
+        "risk_snapshot": {},
     }
     packet["content_sha256"] = _content_sha256(packet)
     return packet
@@ -213,6 +296,10 @@ def _source(
         or contract_review.get("live_promotion_ready") is not False
     ):
         raise TradingValidationError("performance_review: source_invalid")
+    risk_snapshot = _risk_snapshot(
+        performance.get("risk_diagnostics"),
+        count,
+    )
     fills = [
         dict(item)
         for item in list(state.get("fills", []) or [])
@@ -231,6 +318,13 @@ def _source(
         or selected_account.get("closed_trade_count") != all_closed_count
     ):
         raise TradingValidationError("performance_review: ledger_count_mismatch")
+    if risk_snapshot != _risk_snapshot(
+        build_forex_risk_diagnostics(fills),
+        count,
+    ):
+        raise TradingValidationError(
+            "performance_review: risk_ledger_mismatch"
+        )
     audit = [
         dict(item)
         for item in list(state.get("audit", []) or [])
@@ -252,6 +346,7 @@ def _source(
             for index, fill in enumerate(fills, 1)
         ],
         "performance_snapshot": _performance_snapshot(performance, count),
+        "risk_snapshot": risk_snapshot,
         "sample_ready": bool(
             performance.get("status") == "READY_FOR_MANUAL_REVIEW"
             and performance.get("sample_size_sufficient_for_review") is True
@@ -306,10 +401,11 @@ def verify_forex_paper_performance_review_packet(value: object) -> bool:
         audit_sequence = packet.get("source_audit_sequence")
         anchors = packet.get("closed_trade_anchors")
         snapshot = packet.get("performance_snapshot")
+        risk_snapshot = packet.get("risk_snapshot")
         content_sha256 = packet.get("content_sha256")
         if (
             type(packet.get("schema_version")) is not int
-            or packet.get("schema_version") != 1
+            or packet.get("schema_version") != 2
             or packet.get("status") != "READY_FOR_OWNER_REVIEW"
             or packet.get("mode")
             != "FOREX_PAPER_PERFORMANCE_OWNER_REVIEW_READ_ONLY"
@@ -347,6 +443,18 @@ def verify_forex_paper_performance_review_packet(value: object) -> bool:
             )
             or not isinstance(snapshot, Mapping)
             or _performance_snapshot(snapshot, count) != dict(snapshot)
+            or not isinstance(risk_snapshot, Mapping)
+            or _risk_snapshot(
+                {
+                    **dict(risk_snapshot),
+                    "mode": "FOREX_PAPER_RISK_DIAGNOSTICS_READ_ONLY",
+                    "performance_validated": False,
+                    "automatic_strategy_change": False,
+                    "live_promotion_ready": False,
+                },
+                count,
+            )
+            != dict(risk_snapshot)
             or any(packet.get(field) is not False for field in _safety_contract())
             or not isinstance(content_sha256, str)
             or not _SHA256.fullmatch(content_sha256)
