@@ -248,6 +248,8 @@ def test_performance_review_view_explains_partial_risk_coverage() -> None:
                 "risk_coverage_pct": "75.00",
                 "net_r_multiple": "1.2500",
                 "average_r_multiple": "0.4167",
+                "maximum_observed_drawdown_r": "0.7500",
+                "maximum_observed_consecutive_losses": 2,
             },
         },
     )
@@ -256,6 +258,8 @@ def test_performance_review_view_explains_partial_risk_coverage() -> None:
     assert tone == "accent"
     assert "Dane R: 3/4 (75.00%)" in detail
     assert "suma 1.2500 R" in detail
+    assert "obsunięcie 0.7500 R" in detail
+    assert "seria strat 2" in detail
     assert "1 R oznacza początkowe ryzyko pozycji" in detail
     assert "nie szacuje" in detail
 

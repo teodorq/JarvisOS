@@ -40,6 +40,12 @@ _RISK_METRIC_FIELDS = (
     "median_r_multiple",
     "best_r_multiple",
     "worst_r_multiple",
+    "maximum_observed_drawdown_r",
+)
+_RISK_COUNT_FIELDS = (
+    "winning_r_trade_count",
+    "losing_r_trade_count",
+    "breakeven_r_trade_count",
 )
 
 
@@ -179,6 +185,36 @@ def _risk_snapshot(value: object, count: int) -> dict[str, Any]:
         "risk_coverage_pct": coverage,
         "risk_coverage_complete": observed == count,
     }
+    for field in _RISK_COUNT_FIELDS:
+        selected_count = item.get(field)
+        if type(selected_count) is not int or selected_count < 0:
+            raise TradingValidationError(
+                f"performance_review: invalid_{field}"
+            )
+        snapshot[field] = selected_count
+    if sum(snapshot[field] for field in _RISK_COUNT_FIELDS) != observed:
+        raise TradingValidationError(
+            "performance_review: risk_outcome_count_mismatch"
+        )
+    for field in (
+        "maximum_observed_consecutive_losses",
+        "current_observed_consecutive_losses",
+    ):
+        selected_count = item.get(field)
+        if type(selected_count) is not int or not 0 <= selected_count <= observed:
+            raise TradingValidationError(
+                f"performance_review: invalid_{field}"
+            )
+        snapshot[field] = selected_count
+    if (
+        snapshot["current_observed_consecutive_losses"]
+        > snapshot["maximum_observed_consecutive_losses"]
+        or snapshot["maximum_observed_consecutive_losses"]
+        > snapshot["losing_r_trade_count"]
+    ):
+        raise TradingValidationError(
+            "performance_review: invalid_risk_loss_streak"
+        )
     for field in _RISK_METRIC_FIELDS:
         raw = item.get(field)
         if observed == 0:
@@ -199,7 +235,7 @@ def _risk_snapshot(value: object, count: int) -> dict[str, Any]:
 
 def _base_packet(now: datetime) -> dict[str, Any]:
     return {
-        "schema_version": 2,
+        "schema_version": 3,
         "mode": "FOREX_PAPER_PERFORMANCE_OWNER_REVIEW_READ_ONLY",
         "generated_at": now.isoformat(),
         "review_scope": "CURRENT_SAMPLE_CONTRACT_CLOSED_TRADES",
@@ -405,7 +441,7 @@ def verify_forex_paper_performance_review_packet(value: object) -> bool:
         content_sha256 = packet.get("content_sha256")
         if (
             type(packet.get("schema_version")) is not int
-            or packet.get("schema_version") != 2
+            or packet.get("schema_version") != 3
             or packet.get("status") != "READY_FOR_OWNER_REVIEW"
             or packet.get("mode")
             != "FOREX_PAPER_PERFORMANCE_OWNER_REVIEW_READ_ONLY"

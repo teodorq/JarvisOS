@@ -42,7 +42,14 @@ def _risk_detail(value: object) -> str:
     coverage = _number(risk.get("risk_coverage_pct"), 2)
     average = _number(risk.get("average_r_multiple"), 4)
     net = _number(risk.get("net_r_multiple"), 4)
-    if coverage is None or average is None or net is None:
+    drawdown = _number(risk.get("maximum_observed_drawdown_r"), 4)
+    loss_streak = _count(risk.get("maximum_observed_consecutive_losses"))
+    if (
+        coverage is None
+        or average is None
+        or net is None
+        or drawdown is None
+    ):
         return " Dane R są chwilowo niedostępne; brakujące wartości nie są szacowane."
     completeness = (
         "Zapis ryzyka jest pełny."
@@ -51,7 +58,9 @@ def _risk_detail(value: object) -> str:
     )
     return (
         f" Dane R: {observed}/{count} ({coverage}%); suma {net} R, "
-        f"średnia {average} R. 1 R oznacza początkowe ryzyko pozycji. "
+        f"średnia {average} R, maksymalne obserwowane obsunięcie {drawdown} R, "
+        f"najdłuższa seria strat {loss_streak}. "
+        f"1 R oznacza początkowe ryzyko pozycji. "
         f"{completeness}"
     )
 

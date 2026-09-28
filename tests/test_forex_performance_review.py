@@ -95,7 +95,7 @@ def test_first_complete_sample_is_frozen_and_survives_later_trades(
     frozen = store.refresh(first_account, generated_at=NOW)
 
     assert frozen["status"] == "READY_FOR_OWNER_REVIEW"
-    assert frozen["schema_version"] == 2
+    assert frozen["schema_version"] == 3
     assert frozen["valid_closed_trade_count"] == 20
     assert frozen["packet_persisted"] is True
     assert frozen["review_snapshot_frozen"] is True
@@ -111,6 +111,12 @@ def test_first_complete_sample_is_frozen_and_survives_later_trades(
         "median_r_multiple": "0.2500",
         "best_r_multiple": "1.0000",
         "worst_r_multiple": "-0.5000",
+        "winning_r_trade_count": 10,
+        "losing_r_trade_count": 10,
+        "breakeven_r_trade_count": 0,
+        "maximum_observed_drawdown_r": "0.5000",
+        "maximum_observed_consecutive_losses": 1,
+        "current_observed_consecutive_losses": 0,
     }
     assert verify_forex_paper_performance_review_packet(frozen)
     assert verify_forex_paper_performance_review_lineage(
@@ -158,6 +164,12 @@ def test_complete_sample_freezes_partial_legacy_risk_coverage(
         "median_r_multiple": "1.0000",
         "best_r_multiple": "1.0000",
         "worst_r_multiple": "-0.5000",
+        "winning_r_trade_count": 8,
+        "losing_r_trade_count": 7,
+        "breakeven_r_trade_count": 0,
+        "maximum_observed_drawdown_r": "0.5000",
+        "maximum_observed_consecutive_losses": 1,
+        "current_observed_consecutive_losses": 0,
     }
     assert verify_forex_paper_performance_review_packet(frozen)
 

@@ -770,6 +770,24 @@ class ForexPaperDashboard:
             "median_r_multiple": optional_ratio("median_r_multiple"),
             "best_r_multiple": optional_ratio("best_r_multiple"),
             "worst_r_multiple": optional_ratio("worst_r_multiple"),
+            "winning_r_trade_count": cls._count(
+                item.get("winning_r_trade_count")
+            ),
+            "losing_r_trade_count": cls._count(
+                item.get("losing_r_trade_count")
+            ),
+            "breakeven_r_trade_count": cls._count(
+                item.get("breakeven_r_trade_count")
+            ),
+            "maximum_observed_drawdown_r": optional_ratio(
+                "maximum_observed_drawdown_r"
+            ),
+            "maximum_observed_consecutive_losses": cls._count(
+                item.get("maximum_observed_consecutive_losses")
+            ),
+            "current_observed_consecutive_losses": cls._count(
+                item.get("current_observed_consecutive_losses")
+            ),
             "risk_coverage_complete": (
                 item.get("risk_coverage_complete") is True
             ),

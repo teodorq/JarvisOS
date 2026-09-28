@@ -69,6 +69,26 @@ def build_forex_risk_diagnostics(
     )
     ordered = sorted(multiples)
     if ordered:
+        winning_count = sum(value > 0 for value in multiples)
+        losing_count = sum(value < 0 for value in multiples)
+        breakeven_count = len(multiples) - winning_count - losing_count
+        cumulative = Decimal("0")
+        peak = Decimal("0")
+        maximum_drawdown = Decimal("0")
+        current_loss_streak = 0
+        maximum_loss_streak = 0
+        for value in multiples:
+            cumulative += value
+            peak = max(peak, cumulative)
+            maximum_drawdown = max(maximum_drawdown, peak - cumulative)
+            if value < 0:
+                current_loss_streak += 1
+                maximum_loss_streak = max(
+                    maximum_loss_streak,
+                    current_loss_streak,
+                )
+            else:
+                current_loss_streak = 0
         middle = len(ordered) // 2
         median = (
             ordered[middle]
@@ -83,12 +103,22 @@ def build_forex_risk_diagnostics(
         median_value: str | None = _text(median, _RATIO)
         best: str | None = _text(ordered[-1], _RATIO)
         worst: str | None = _text(ordered[0], _RATIO)
+        maximum_drawdown_r: str | None = _text(
+            maximum_drawdown,
+            _RATIO,
+        )
     else:
+        winning_count = 0
+        losing_count = 0
+        breakeven_count = 0
+        current_loss_streak = 0
+        maximum_loss_streak = 0
         net = None
         average = None
         median_value = None
         best = None
         worst = None
+        maximum_drawdown_r = None
 
     if closed_count == 0:
         status = "NO_CLOSED_TRADES"
@@ -110,6 +140,12 @@ def build_forex_risk_diagnostics(
         "median_r_multiple": median_value,
         "best_r_multiple": best,
         "worst_r_multiple": worst,
+        "winning_r_trade_count": winning_count,
+        "losing_r_trade_count": losing_count,
+        "breakeven_r_trade_count": breakeven_count,
+        "maximum_observed_drawdown_r": maximum_drawdown_r,
+        "maximum_observed_consecutive_losses": maximum_loss_streak,
+        "current_observed_consecutive_losses": current_loss_streak,
         "risk_coverage_complete": closed_count == observed_count,
         "performance_validated": False,
         "automatic_strategy_change": False,

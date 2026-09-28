@@ -139,6 +139,12 @@ def _account() -> dict:
                 "median_r_multiple": "-0.5000",
                 "best_r_multiple": "-0.5000",
                 "worst_r_multiple": "-0.5000",
+                "winning_r_trade_count": 0,
+                "losing_r_trade_count": 1,
+                "breakeven_r_trade_count": 0,
+                "maximum_observed_drawdown_r": "0.5000",
+                "maximum_observed_consecutive_losses": 1,
+                "current_observed_consecutive_losses": 1,
                 "risk_coverage_complete": False,
             },
         },
@@ -347,6 +353,9 @@ def test_dashboard_projects_latest_safe_paper_cycle() -> None:
         assert risk["risk_missing_trade_count"] == 1
         assert risk["risk_coverage_pct"] == "50.00"
         assert risk["average_r_multiple"] == "-0.5000"
+        assert risk["maximum_observed_drawdown_r"] == "0.5000"
+        assert risk["maximum_observed_consecutive_losses"] == 1
+        assert risk["current_observed_consecutive_losses"] == 1
         assert risk["risk_coverage_complete"] is False
         assert risk["automatic_strategy_change"] is False
         assert snapshot["new_entries_paused_by_loss_streak"] is True
