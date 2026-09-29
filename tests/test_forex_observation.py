@@ -558,6 +558,7 @@ class ForexObservationTests(unittest.TestCase):
             self.root
         ).format_observation_review()
         self.assertIn("Kandydat V2 forward", rendered)
+        self.assertIn("Ścisła próbka V3", rendered)
         self.assertIn("odfiltrowane 1", rendered)
         self.assertIn(
             "Raport nie może zmienić stanu PAPER/LIVE ani sam awansować V2",

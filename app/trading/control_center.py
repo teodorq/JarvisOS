@@ -17,7 +17,10 @@ from app.trading.forex_coordinator import ForexPaperCoordinator
 from app.trading.forex_activity import ForexPaperActivityFeed
 from app.trading.forex_dashboard import ForexPaperDashboard
 from app.trading.forex_executor import ForexPaperExecutionEngine
-from app.trading.forex_forward_evidence import ForexV2ForwardEvidenceReport
+from app.trading.forex_forward_evidence import (
+    ForexV2ForwardEvidenceReport,
+    ForexV3ForwardEvidenceReport,
+)
 from app.trading.forex_forward_review import ForexV2OwnerReviewPacket
 from app.trading.forex_models import MAJOR_FOREX_PAIRS
 from app.trading.forex_observation import ForexObservationJournal
@@ -65,6 +68,9 @@ class TradingControlCenter:
         self.forex_forward_evidence = ForexV2ForwardEvidenceReport(
             self.project_root
         )
+        self.forex_v3_forward_evidence = ForexV3ForwardEvidenceReport(
+            self.project_root
+        )
         self.forex_forward_review = ForexV2OwnerReviewPacket(self.project_root)
         self.forex_strategy_cohorts = ForexStrategyCohortReview(
             self.project_root
@@ -89,6 +95,7 @@ class TradingControlCenter:
         observations = self.forex_observations.summary()
         research = self.forex_research.status()
         forward_evidence = self.forex_forward_evidence.review()
+        v3_forward_evidence = self.forex_v3_forward_evidence.review()
         forward_review = self.forex_forward_review.review(forward_evidence)
         forex_account = self.forex_executor.status()
         performance_review = self.forex_performance_review.review(
@@ -141,6 +148,10 @@ class TradingControlCenter:
                     forward_evidence.get("source_state_valid") is True
                     and not forward_evidence.get("invalid_cycle_count", 0)
                 ),
+                "forex_v3_forward_evidence_report": bool(
+                    v3_forward_evidence.get("source_state_valid") is True
+                    and not v3_forward_evidence.get("invalid_cycle_count", 0)
+                ),
                 "forex_v2_owner_review_packet": bool(
                     forward_review.get("status") == "READY_FOR_OWNER_REVIEW"
                     and forward_review.get("packet_persisted") is True
@@ -179,6 +190,7 @@ class TradingControlCenter:
                 "observation": observations,
                 "historical_research": research,
                 "v2_forward_evidence": forward_evidence,
+                "v3_forward_evidence": v3_forward_evidence,
                 "v2_owner_review": forward_review,
                 "paper_account": forex_account,
                 "paper_performance_review": performance_review,
@@ -296,6 +308,7 @@ class TradingControlCenter:
     def format_observation_review(self) -> str:
         review = self.forex_observations.review()
         strict_forward = self.forex_forward_evidence.review()
+        strict_v3 = self.forex_v3_forward_evidence.review()
         remaining = int(review["remaining_qualified_observations"])
         remaining_days = int(review["remaining_market_days"])
         blocks = review["distributions"]["opening_blocks"]
@@ -326,6 +339,14 @@ class TradingControlCenter:
         strict_issues = ", ".join(
             f"{code}: {count}"
             for code, count in strict_forward.get("invalid_issues", {}).items()
+        ) or "brak"
+        v3_exclusions = ", ".join(
+            f"{code}: {count}"
+            for code, count in strict_v3.get("exclusions", {}).items()
+        ) or "brak"
+        v3_issues = ", ".join(
+            f"{code}: {count}"
+            for code, count in strict_v3.get("invalid_issues", {}).items()
         ) or "brak"
         safety = review["safety"]
         if review["status"] == "READY_FOR_OWNER_REVIEW":
@@ -366,6 +387,13 @@ class TradingControlCenter:
             f"status {strict_forward.get('status', 'BRAK')}.\n"
             f"• Ścisłe wykluczenia: {strict_exclusions}; błędy: "
             f"{strict_issues}.\n"
+            f"• Ścisła próbka V3: "
+            f"{strict_v3.get('accepted_cycle_count', 0)}/"
+            f"{strict_v3.get('minimum_accepted_cycle_count', 20)} cykli; "
+            f"dni {strict_v3.get('accepted_market_day_count', 0)}/"
+            f"{strict_v3.get('minimum_market_day_count', 3)}; "
+            f"status {strict_v3.get('status', 'BRAK')}; wykluczenia "
+            f"{v3_exclusions}; błędy {v3_issues}.\n"
             f"• Filtr V2: sygnały bazowe "
             f"{comparison['base_entry_signal_count']}; zachowane "
             f"{comparison['retained_entry_signal_count']}; odfiltrowane "
@@ -377,7 +405,7 @@ class TradingControlCenter:
             f"zlecenia PAPER: {'wykryte' if safety['paper_orders_detected'] else '0'}; "
             f"zlecenia LIVE: {'wykryte' if safety['live_orders_detected'] else '0'}; "
             f"sieć zleceń: {'wykryta' if safety['order_network_access_detected'] else 'wyłączona'}.\n"
-            "• Raport nie może zmienić stanu PAPER/LIVE ani sam awansować V2; "
+            "• Raport nie może zmienić stanu PAPER/LIVE ani sam awansować V2/V3; "
             "próbka sygnałowa nie potwierdza jeszcze wyniku finansowego."
         )
 
@@ -420,6 +448,7 @@ class TradingControlCenter:
         observation = snapshot["forex"]["observation"]
         research = snapshot["forex"]["historical_research"]
         forward_evidence = snapshot["forex"]["v2_forward_evidence"]
+        v3_forward_evidence = snapshot["forex"]["v3_forward_evidence"]
         forward_review = snapshot["forex"]["v2_owner_review"]
         strategy_cohorts = snapshot["forex"]["strategy_cohort_review"]
         cohort_values = dict(strategy_cohorts.get("cohorts", {}) or {})
@@ -608,7 +637,9 @@ class TradingControlCenter:
             )
             if type(duplicate_count) is int and duplicate_count > 0:
                 forward_review_text += (
-                    f"; {duplicate_count} powtórzone odczyty nie zostały doliczone"
+                    "; 1 powtórzony odczyt nie został doliczony"
+                    if duplicate_count == 1
+                    else f"; {duplicate_count} powtórzone odczyty nie zostały doliczone"
                 )
         else:
             forward_review_text = (
@@ -629,6 +660,52 @@ class TradingControlCenter:
                 )
         else:
             forward_signal_text = "niedostępne — dowody zablokowane"
+        v3_status = str(v3_forward_evidence.get("status", ""))
+        v3_valid = bool(
+            v3_forward_evidence.get("source_state_valid") is True
+            and v3_forward_evidence.get("invalid_cycle_count", 0) == 0
+        )
+        if v3_valid:
+            v3_cycles = v3_forward_evidence.get("accepted_cycle_count", 0)
+            v3_required = v3_forward_evidence.get(
+                "minimum_accepted_cycle_count", 20
+            )
+            v3_days = v3_forward_evidence.get("accepted_market_day_count", 0)
+            v3_required_days = v3_forward_evidence.get(
+                "minimum_market_day_count", 3
+            )
+            v3_progress_text = (
+                f"próbka minimalna {v3_cycles}/{v3_required}, dni "
+                f"{v3_days}/{v3_required_days}; wymaga ręcznej oceny"
+                if v3_status == "FORWARD_OBSERVATION_SAMPLE_COMPLETE"
+                else f"zbieranie próbki {v3_cycles}/{v3_required}, dni "
+                f"{v3_days}/{v3_required_days}"
+            )
+            v3_exclusions = v3_forward_evidence.get("exclusions")
+            v3_duplicate_count = (
+                v3_exclusions.get("DUPLICATE_INPUT_REPLAY", 0)
+                if isinstance(v3_exclusions, dict)
+                else 0
+            )
+            if type(v3_duplicate_count) is int and v3_duplicate_count > 0:
+                v3_progress_text += (
+                    "; 1 powtórzony odczyt pominięty"
+                    if v3_duplicate_count == 1
+                    else f"; {v3_duplicate_count} powtórzone odczyty pominięte"
+                )
+            v3_signals = dict(
+                v3_forward_evidence.get("signal_comparison", {}) or {}
+            )
+            v3_signal_text = (
+                f"bazowe {v3_signals.get('base_entry_signal_count', 0)}; "
+                f"V3 zachował {v3_signals.get('retained_entry_signal_count', 0)}, "
+                f"odfiltrował {v3_signals.get('filtered_entry_signal_count', 0)}"
+            )
+        else:
+            v3_progress_text = (
+                "ZABLOKOWANY — bieżące dowody V3 nie przeszły walidacji"
+            )
+            v3_signal_text = "niedostępne — dowody zablokowane"
         if not observation["audit_chain_valid"]:
             gate = (
                 "ZABLOKOWANA — łańcuch audytu obserwacji jest uszkodzony; "
@@ -747,6 +824,9 @@ class TradingControlCenter:
             f"• Pakiet przeglądu Forex V2: {forward_review_text}.\n"
             f"• Forward V2 — sygnały wejścia: {forward_signal_text}; "
             "to nie jest wynik finansowy.\n"
+            f"• Forward V3: {v3_progress_text}.\n"
+            f"• Forward V3 — sygnały wejścia: {v3_signal_text}; "
+            "bez automatycznej zmiany PAPER/LIVE.\n"
             f"• Bramka PAPER: {gate}.\n"
             "• Dane Forex: lokalny adapter MT5 DEMO, opcjonalny OANDA Practice, "
             "Twelve Data, NBP i publiczny kalendarz Forex Factory oraz kontrola "

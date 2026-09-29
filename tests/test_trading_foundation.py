@@ -386,6 +386,7 @@ class TradingControlAndRoutingTests(unittest.TestCase):
         self.assertFalse(status["components"]["external_market_data"])
         self.assertFalse(status["components"]["external_paper_broker"])
         self.assertFalse(status["components"]["forex_v2_owner_review_packet"])
+        self.assertFalse(status["components"]["forex_v3_forward_evidence_report"])
         self.assertEqual(
             status["forex"]["v2_owner_review"]["status"],
             "WAITING_FOR_FORWARD_SAMPLE",
@@ -402,6 +403,7 @@ class TradingControlAndRoutingTests(unittest.TestCase):
         self.assertIn("wykonanie pozostaje WYŁĄCZONE", rendered)
         self.assertIn("Pakiet przeglądu Forex V2: zbieranie próbki 0/20", rendered)
         self.assertIn("Forward V2 — sygnały wejścia: bazowe 0", rendered)
+        self.assertIn("Forward V3: ZABLOKOWANY", rendered)
         self.assertIn("brak sygnałów do porównania", rendered)
         self.assertIn(
             "Zamrożony pakiet wyniku PAPER: oczekuje na próbkę 0/20",
@@ -689,11 +691,29 @@ class TradingControlAndRoutingTests(unittest.TestCase):
             snapshot["forex"]["v2_forward_evidence"]["exclusions"] = {
                 "DUPLICATE_INPUT_REPLAY": 3,
             }
+            snapshot["forex"]["v3_forward_evidence"].update({
+                "status": "COLLECTING_FORWARD_EVIDENCE",
+                "source_state_valid": True,
+                "invalid_cycle_count": 0,
+                "accepted_cycle_count": 3,
+                "minimum_accepted_cycle_count": 20,
+                "accepted_market_day_count": 1,
+                "minimum_market_day_count": 3,
+                "exclusions": {"DUPLICATE_INPUT_REPLAY": 1},
+                "signal_comparison": {
+                    "base_entry_signal_count": 2,
+                    "retained_entry_signal_count": 1,
+                    "filtered_entry_signal_count": 1,
+                },
+            })
             with patch.object(center, "status", return_value=snapshot):
                 rendered = center.format_status()
 
         self.assertIn("zbieranie próbki 18/20", rendered)
         self.assertIn("3 powtórzone odczyty nie zostały doliczone", rendered)
+        self.assertIn("Forward V3: zbieranie próbki 3/20, dni 1/3", rendered)
+        self.assertIn("1 powtórzony odczyt pominięty", rendered)
+        self.assertIn("V3 zachował 1, odfiltrował 1", rendered)
 
     def test_observation_progress_phrases_are_owner_only_read_only_status(self) -> None:
         variants = (
