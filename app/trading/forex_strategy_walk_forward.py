@@ -12,6 +12,7 @@ import sys
 from typing import Any, Iterable, Mapping
 
 from app.trading.forex_candidate_v2 import ForexRegimeFilteredScanner
+from app.trading.forex_candidate_v3 import ForexStrengthFilteredScanner
 from app.trading.forex_coordinator import ForexPaperCoordinator
 from app.trading.forex_models import ForexBar
 from app.trading.forex_portfolio_historical import (
@@ -64,9 +65,9 @@ def _sha256(value: object) -> str:
 
 
 class ForexStrategyCounterfactualWalkForwardComparison:
-    """Compare V1 and frozen V2 on identical isolated PLN portfolios."""
+    """Compare V1, frozen V2 and frozen V3 on isolated PLN portfolios."""
 
-    SCHEMA_VERSION = 1
+    SCHEMA_VERSION = 2
 
     def __init__(
         self,
@@ -81,13 +82,20 @@ class ForexStrategyCounterfactualWalkForwardComparison:
             walk_forward_policy or ForexPortfolioWalkForwardPolicy()
         )
         self.candidate_scanner = ForexRegimeFilteredScanner()
-        if self.candidate_scanner.policy != self.historical_policy.scanner:
+        self.candidate_v3_scanner = ForexStrengthFilteredScanner()
+        if any(
+            scanner.policy != self.historical_policy.scanner
+            for scanner in (self.candidate_scanner, self.candidate_v3_scanner)
+        ):
             raise TradingValidationError(
                 "forex_strategy_walk_forward: scanner_policy_mismatch"
             )
         if (
             self.walk_forward_policy.training_bar_count
-            < self.candidate_scanner.required_history_count
+            < max(
+                self.candidate_scanner.required_history_count,
+                self.candidate_v3_scanner.required_history_count,
+            )
         ):
             raise TradingValidationError(
                 "forex_strategy_walk_forward: insufficient_v2_warmup"
@@ -109,10 +117,24 @@ class ForexStrategyCounterfactualWalkForwardComparison:
             walk_forward_policy=self.walk_forward_policy,
             scanner=self.candidate_scanner,
         ).run(histories)
-        self._validate_results(baseline, candidate)
-        comparisons = self._window_comparisons(baseline, candidate)
+        candidate_v3 = ForexPortfolioHistoricalWalkForwardValidator(
+            historical_policy=self.historical_policy,
+            walk_forward_policy=self.walk_forward_policy,
+            scanner=self.candidate_v3_scanner,
+        ).run(histories)
+        self._validate_results(baseline, candidate, candidate_v3)
+        comparisons = self._window_comparisons(
+            baseline,
+            candidate,
+            candidate_v3,
+        )
         manifest = self._manifest(histories)
-        aggregate = self._aggregate(baseline, candidate, comparisons)
+        aggregate = self._aggregate(
+            baseline,
+            candidate,
+            candidate_v3,
+            comparisons,
+        )
         return {
             "status": "FOREX_COUNTERFACTUAL_WALK_FORWARD_COMPLETED",
             "mode": "LOCAL_HISTORICAL_RESEARCH_ONLY",
@@ -124,6 +146,7 @@ class ForexStrategyCounterfactualWalkForwardComparison:
             "aggregate": aggregate,
             "baseline_v1": baseline,
             "candidate_v2": candidate,
+            "candidate_v3": candidate_v3,
             "identical_source_data": True,
             "identical_execution_policy": True,
             "identical_window_policy": True,
@@ -191,43 +214,45 @@ class ForexStrategyCounterfactualWalkForwardComparison:
     @staticmethod
     def _validate_results(
         baseline: Mapping[str, Any],
-        candidate: Mapping[str, Any],
+        *candidates: Mapping[str, Any],
     ) -> None:
-        if baseline.get("account_currency") != "PLN" or candidate.get(
-            "account_currency"
-        ) != "PLN":
+        if baseline.get("account_currency") != "PLN" or any(
+            candidate.get("account_currency") != "PLN"
+            for candidate in candidates
+        ):
             raise TradingValidationError(
                 "forex_strategy_walk_forward: account_currency_mismatch"
             )
         baseline_windows = tuple(baseline.get("windows", ()))
-        candidate_windows = tuple(candidate.get("windows", ()))
-        if len(baseline_windows) != len(candidate_windows) or not baseline_windows:
-            raise TradingValidationError(
-                "forex_strategy_walk_forward: window_count_mismatch"
-            )
-        for baseline_window, candidate_window in zip(
-            baseline_windows, candidate_windows
-        ):
-            if baseline_window.get("window") != candidate_window.get("window"):
+        for candidate in candidates:
+            candidate_windows = tuple(candidate.get("windows", ()))
+            if len(baseline_windows) != len(candidate_windows) or not baseline_windows:
                 raise TradingValidationError(
-                    "forex_strategy_walk_forward: window_identity_mismatch"
+                    "forex_strategy_walk_forward: window_count_mismatch"
                 )
-            if any(
-                baseline_window.get(field) != candidate_window.get(field)
-                for field in _WINDOW_BOUNDARY_FIELDS
+            for baseline_window, candidate_window in zip(
+                baseline_windows, candidate_windows
             ):
-                raise TradingValidationError(
-                    "forex_strategy_walk_forward: window_boundaries_mismatch"
-                )
-            baseline_test = baseline_window.get("testing", {})
-            candidate_test = candidate_window.get("testing", {})
-            if (
-                baseline_test.get("initial_equity_pln")
-                != candidate_test.get("initial_equity_pln")
-            ):
-                raise TradingValidationError(
-                    "forex_strategy_walk_forward: execution_policy_mismatch"
-                )
+                if baseline_window.get("window") != candidate_window.get("window"):
+                    raise TradingValidationError(
+                        "forex_strategy_walk_forward: window_identity_mismatch"
+                    )
+                if any(
+                    baseline_window.get(field) != candidate_window.get(field)
+                    for field in _WINDOW_BOUNDARY_FIELDS
+                ):
+                    raise TradingValidationError(
+                        "forex_strategy_walk_forward: window_boundaries_mismatch"
+                    )
+                baseline_test = baseline_window.get("testing", {})
+                candidate_test = candidate_window.get("testing", {})
+                if (
+                    baseline_test.get("initial_equity_pln")
+                    != candidate_test.get("initial_equity_pln")
+                ):
+                    raise TradingValidationError(
+                        "forex_strategy_walk_forward: execution_policy_mismatch"
+                    )
         required_true = (
             "chronological_splits_valid",
             "out_of_sample_windows_non_overlapping",
@@ -238,7 +263,7 @@ class ForexStrategyCounterfactualWalkForwardComparison:
         )
         if any(
             result.get(field) is not True
-            for result in (baseline, candidate)
+            for result in (baseline, *candidates)
             for field in required_true
         ):
             raise TradingValidationError(
@@ -252,15 +277,16 @@ class ForexStrategyCounterfactualWalkForwardComparison:
         )
         if any(
             result.get(field) is not False
-            for result in (baseline, candidate)
+            for result in (baseline, *candidates)
             for field in required_false
         ):
             raise TradingValidationError(
                 "forex_strategy_walk_forward: unsafe_execution_state"
             )
-        if baseline.get("scanner_matches_paper") is not True or candidate.get(
-            "scanner_matches_paper"
-        ) is not False:
+        if baseline.get("scanner_matches_paper") is not True or any(
+            candidate.get("scanner_matches_paper") is not False
+            for candidate in candidates
+        ):
             raise TradingValidationError(
                 "forex_strategy_walk_forward: strategy_identity_mismatch"
             )
@@ -269,16 +295,21 @@ class ForexStrategyCounterfactualWalkForwardComparison:
     def _window_comparisons(
         cls,
         baseline: Mapping[str, Any],
-        candidate: Mapping[str, Any],
+        candidate_v2: Mapping[str, Any],
+        candidate_v3: Mapping[str, Any],
     ) -> list[dict[str, Any]]:
         result: list[dict[str, Any]] = []
-        for baseline_window, candidate_window in zip(
-            baseline["windows"], candidate["windows"]
+        for baseline_window, v2_window, v3_window in zip(
+            baseline["windows"],
+            candidate_v2["windows"],
+            candidate_v3["windows"],
         ):
             baseline_test = baseline_window["testing"]
-            candidate_test = candidate_window["testing"]
+            candidate_test = v2_window["testing"]
+            candidate_v3_test = v3_window["testing"]
             v1 = cls._testing_summary(baseline_test)
             v2 = cls._testing_summary(candidate_test)
+            v3 = cls._testing_summary(candidate_v3_test)
             result.append({
                 "window": baseline_window["window"],
                 **{
@@ -287,39 +318,38 @@ class ForexStrategyCounterfactualWalkForwardComparison:
                 },
                 "v1": v1,
                 "v2": v2,
-                "delta_v2_minus_v1": {
-                    "return_pct": _decimal_text(
-                        Decimal(v2["return_pct"]) - Decimal(v1["return_pct"])
-                    ),
-                    "maximum_drawdown_pct": _decimal_text(
-                        Decimal(v2["maximum_drawdown_pct"])
-                        - Decimal(v1["maximum_drawdown_pct"])
-                    ),
-                    "ending_equity_pln": _decimal_text(
-                        Decimal(v2["ending_equity_pln"])
-                        - Decimal(v1["ending_equity_pln"]),
-                        _MONEY,
-                    ),
-                    "trade_count": v2["trade_count"] - v1["trade_count"],
-                    "profitable_trade_count": (
-                        v2["profitable_trade_count"]
-                        - v1["profitable_trade_count"]
-                    ),
-                    "stop_loss_exit_count": (
-                        v2["stop_loss_exit_count"]
-                        - v1["stop_loss_exit_count"]
-                    ),
-                    "take_profit_exit_count": (
-                        v2["take_profit_exit_count"]
-                        - v1["take_profit_exit_count"]
-                    ),
-                    "rejected_candidate_count": (
-                        v2["rejected_candidate_count"]
-                        - v1["rejected_candidate_count"]
-                    ),
-                },
+                "v3": v3,
+                "delta_v2_minus_v1": cls._testing_delta(v1, v2),
+                "delta_v3_minus_v1": cls._testing_delta(v1, v3),
             })
         return result
+
+    @staticmethod
+    def _testing_delta(baseline: Mapping[str, Any], candidate: Mapping[str, Any]) -> dict[str, Any]:
+        return {
+            "return_pct": _decimal_text(
+                Decimal(candidate["return_pct"]) - Decimal(baseline["return_pct"])
+            ),
+            "maximum_drawdown_pct": _decimal_text(
+                Decimal(candidate["maximum_drawdown_pct"])
+                - Decimal(baseline["maximum_drawdown_pct"])
+            ),
+            "ending_equity_pln": _decimal_text(
+                Decimal(candidate["ending_equity_pln"])
+                - Decimal(baseline["ending_equity_pln"]),
+                _MONEY,
+            ),
+            **{
+                key: int(candidate[key]) - int(baseline[key])
+                for key in (
+                    "trade_count",
+                    "profitable_trade_count",
+                    "stop_loss_exit_count",
+                    "take_profit_exit_count",
+                    "rejected_candidate_count",
+                )
+            },
+        }
 
     @staticmethod
     def _testing_summary(value: Mapping[str, Any]) -> dict[str, Any]:
@@ -339,46 +369,62 @@ class ForexStrategyCounterfactualWalkForwardComparison:
     def _aggregate(
         cls,
         baseline: Mapping[str, Any],
-        candidate: Mapping[str, Any],
+        candidate_v2: Mapping[str, Any],
+        candidate_v3: Mapping[str, Any],
         windows: list[dict[str, Any]],
     ) -> dict[str, Any]:
         v1 = cls._portfolio_summary(baseline)
-        v2 = cls._portfolio_summary(candidate)
-        relations = [
+        v2 = cls._portfolio_summary(candidate_v2)
+        v3 = cls._portfolio_summary(candidate_v3)
+        v2_relations = [
             Decimal(window["v2"]["return_pct"])
+            .compare(Decimal(window["v1"]["return_pct"]))
+            for window in windows
+        ]
+        v3_relations = [
+            Decimal(window["v3"]["return_pct"])
             .compare(Decimal(window["v1"]["return_pct"]))
             for window in windows
         ]
         return {
             "v1": v1,
             "v2": v2,
-            "delta_v2_minus_v1": {
-                "average_out_of_sample_return_pct": _decimal_text(
-                    Decimal(v2["average_out_of_sample_return_pct"])
-                    - Decimal(v1["average_out_of_sample_return_pct"])
-                ),
-                "compounded_out_of_sample_return_pct": _decimal_text(
-                    Decimal(v2["compounded_out_of_sample_return_pct"])
-                    - Decimal(v1["compounded_out_of_sample_return_pct"])
-                ),
-                "maximum_out_of_sample_drawdown_pct": _decimal_text(
-                    Decimal(v2["maximum_out_of_sample_drawdown_pct"])
-                    - Decimal(v1["maximum_out_of_sample_drawdown_pct"])
-                ),
-                "out_of_sample_trade_count": (
-                    v2["out_of_sample_trade_count"]
-                    - v1["out_of_sample_trade_count"]
-                ),
-                "profitable_out_of_sample_window_count": (
-                    v2["profitable_out_of_sample_window_count"]
-                    - v1["profitable_out_of_sample_window_count"]
-                ),
-            },
-            "v2_higher_return_window_count": sum(value > 0 for value in relations),
-            "equal_return_window_count": sum(value == 0 for value in relations),
-            "v2_lower_return_window_count": sum(value < 0 for value in relations),
+            "v3": v3,
+            "delta_v2_minus_v1": cls._portfolio_delta(v1, v2),
+            "delta_v3_minus_v1": cls._portfolio_delta(v1, v3),
+            "v2_higher_return_window_count": sum(value > 0 for value in v2_relations),
+            "v2_equal_return_window_count": sum(value == 0 for value in v2_relations),
+            "v2_lower_return_window_count": sum(value < 0 for value in v2_relations),
+            "v3_higher_return_window_count": sum(value > 0 for value in v3_relations),
+            "v3_equal_return_window_count": sum(value == 0 for value in v3_relations),
+            "v3_lower_return_window_count": sum(value < 0 for value in v3_relations),
             "winner_selected": False,
             "strategy_recommendation_generated": False,
+        }
+
+    @staticmethod
+    def _portfolio_delta(baseline: Mapping[str, Any], candidate: Mapping[str, Any]) -> dict[str, Any]:
+        return {
+            "average_out_of_sample_return_pct": _decimal_text(
+                Decimal(candidate["average_out_of_sample_return_pct"])
+                - Decimal(baseline["average_out_of_sample_return_pct"])
+            ),
+            "compounded_out_of_sample_return_pct": _decimal_text(
+                Decimal(candidate["compounded_out_of_sample_return_pct"])
+                - Decimal(baseline["compounded_out_of_sample_return_pct"])
+            ),
+            "maximum_out_of_sample_drawdown_pct": _decimal_text(
+                Decimal(candidate["maximum_out_of_sample_drawdown_pct"])
+                - Decimal(baseline["maximum_out_of_sample_drawdown_pct"])
+            ),
+            "out_of_sample_trade_count": (
+                int(candidate["out_of_sample_trade_count"])
+                - int(baseline["out_of_sample_trade_count"])
+            ),
+            "profitable_out_of_sample_window_count": (
+                int(candidate["profitable_out_of_sample_window_count"])
+                - int(baseline["profitable_out_of_sample_window_count"])
+            ),
         }
 
     @staticmethod
@@ -419,6 +465,7 @@ class ForexStrategyCounterfactualWalkForwardComparison:
             "scanner": asdict(self.historical_policy.scanner),
         }
         candidate = self.candidate_scanner.candidate_policy
+        candidate_v3 = self.candidate_v3_scanner.candidate_policy
         core = {
             "schema_version": self.SCHEMA_VERSION,
             "data_sha256": self._data_sha256(histories),
@@ -430,6 +477,9 @@ class ForexStrategyCounterfactualWalkForwardComparison:
             "v2_candidate_id": candidate.candidate_id,
             "v2_frozen_after": candidate.frozen_after.isoformat(),
             "v2_policy_sha256": candidate.fingerprint_sha256,
+            "v3_candidate_id": candidate_v3.candidate_id,
+            "v3_frozen_after": candidate_v3.frozen_after.isoformat(),
+            "v3_policy_sha256": candidate_v3.fingerprint_sha256,
         }
         return {
             **core,
@@ -486,6 +536,7 @@ class ForexStrategyCounterfactualWalkForwardComparison:
             cls,
             ForexPortfolioHistoricalWalkForwardValidator,
             ForexRegimeFilteredScanner,
+            ForexStrengthFilteredScanner,
             ForexMarketScanner,
             ForexPaperCoordinator,
             ForexPaperPolicy,

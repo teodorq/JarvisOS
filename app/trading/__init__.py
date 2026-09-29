@@ -11,6 +11,10 @@ from app.trading.forex_candidate_v2 import (
     ForexRegimeCandidatePolicy,
     ForexRegimeFilteredScanner,
 )
+from app.trading.forex_candidate_v3 import (
+    ForexStrengthCandidatePolicy,
+    ForexStrengthFilteredScanner,
+)
 from app.trading.forex_autopilot import ForexPaperAutopilot
 from app.trading.forex_executor import ForexPaperExecutionEngine
 from app.trading.forex_forward_evidence import (
@@ -145,6 +149,8 @@ __all__ = [
     "ForexRateBook",
     "ForexRegimeCandidatePolicy",
     "ForexRegimeFilteredScanner",
+    "ForexStrengthCandidatePolicy",
+    "ForexStrengthFilteredScanner",
     "ForexRiskDecision",
     "ForexPaperPerformanceReviewPacket",
     "ForexSafetyContext",

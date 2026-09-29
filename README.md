@@ -303,6 +303,12 @@ The same report contains an isolated `development_candidate_v2` replay. It
 marks the already-known history as reused development data and always requires
 new post-freeze evidence, so repeatedly running the report cannot turn an
 overfit result into validation.
+Report schema 3 also contains the preregistered, research-only
+`FOREX_STRENGTH_V3_20260929` candidate. It keeps the 10/30 M15 crossover but
+requires fixed ATR-normalized moving-average separation and price displacement
+before a new entry. Its thresholds are immutable, exits remain unchanged, and
+the reused historical result can only reject the hypothesis; it cannot validate,
+promote or activate V3 without new post-freeze forward evidence.
 Report schema 2 also stores `counterfactual_walk_forward`: V1 and frozen V2 run
 once on the same verified source, identical non-overlapping out-of-sample
 windows and identical PLN execution policy, but with separate portfolio state.

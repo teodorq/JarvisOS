@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from tools.run_forex_historical_research import (
+    _candidate_summary,
+    _development_candidate,
     _report_content_sha256,
     _source_manifest,
 )
+from app.trading.forex_candidate_v3 import ForexStrengthFilteredScanner
 
 
 def _verified() -> dict[str, object]:
@@ -62,3 +65,30 @@ def test_report_hash_ignores_creation_time_but_covers_results() -> None:
     assert _report_content_sha256(report) == original
     report["result"]["trade_count"] = 11
     assert _report_content_sha256(report) != original
+
+
+def test_v3_development_report_never_promotes_reused_results() -> None:
+    report, portfolio = _development_candidate(
+        ForexStrengthFilteredScanner(),
+        {
+            "strategy_performance_validated": True,
+            "performance_checks": {
+                "average_return_positive": True,
+                "compounded_return_positive": True,
+                "profitable_window_ratio_met": True,
+                "maximum_drawdown_within_limit": True,
+                "minimum_trade_count_met": True,
+            },
+            "windows": [{"window": 1}],
+        },
+    )
+
+    assert report["candidate_id"] == "FOREX_STRENGTH_V3_20260929"
+    assert report["historical_development_checks_passed"] is True
+    assert report["strategy_performance_validated"] is False
+    assert report["strategy_candidate_ready"] is False
+    assert report["strategy_candidate_blocks"] == ["FORWARD_OBSERVATION_REQUIRED"]
+    assert portfolio["automatic_paper_promotion"] is False
+    assert portfolio["paper_orders_sent"] is False
+    assert portfolio["live_orders_sent"] is False
+    assert "windows" not in _candidate_summary(report)["portfolio"]

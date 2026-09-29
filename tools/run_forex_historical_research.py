@@ -33,6 +33,15 @@ from app.trading.forex_strategy_walk_forward import (  # noqa: E402
 from app.trading.models import TradingValidationError  # noqa: E402
 
 
+_BLOCK_BY_CHECK = {
+    "average_return_positive": "PORTFOLIO_AVERAGE_RETURN_NOT_POSITIVE",
+    "compounded_return_positive": "PORTFOLIO_COMPOUNDED_RETURN_NOT_POSITIVE",
+    "profitable_window_ratio_met": "PORTFOLIO_PROFITABLE_WINDOW_RATIO_NOT_MET",
+    "maximum_drawdown_within_limit": "PORTFOLIO_DRAWDOWN_LIMIT_EXCEEDED",
+    "minimum_trade_count_met": "PORTFOLIO_MINIMUM_TRADE_COUNT_NOT_MET",
+}
+
+
 def _write_report(report: dict[str, object]) -> Path:
     target = PROJECT_ROOT / "data" / "trading" / "research" / "latest.json"
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -108,6 +117,58 @@ def _report_content_sha256(report: dict[str, object]) -> str:
         if key not in {"created_at", "content_sha256"}
     }
     return _canonical_sha256(signed)
+
+
+def _development_candidate(
+    scanner: object,
+    portfolio: dict[str, object],
+) -> tuple[dict[str, object], dict[str, object]]:
+    checks = dict(portfolio.get("performance_checks", {}))
+    blocks = [
+        _BLOCK_BY_CHECK[key]
+        for key, passed in checks.items()
+        if passed is not True
+    ]
+    checks_passed = bool(portfolio.get("strategy_performance_validated"))
+    safe_portfolio = {
+        **portfolio,
+        "historical_development_checks_passed": checks_passed,
+        "reused_source_data": True,
+        "forward_validation_required": True,
+        "strategy_performance_validated": False,
+        "automatic_paper_promotion": False,
+        "paper_orders_sent": False,
+        "live_orders_sent": False,
+    }
+    policy = scanner.candidate_policy
+    return ({
+        "status": "DEVELOPMENT_REPLAY_COMPLETED",
+        "candidate_id": policy.candidate_id,
+        "policy_fingerprint_sha256": policy.fingerprint_sha256,
+        "frozen_after": policy.frozen_after.isoformat(),
+        "reused_source_data": True,
+        "historical_development_checks_passed": checks_passed,
+        "historical_development_blocks": blocks,
+        "forward_validation_required": True,
+        "strategy_performance_validated": False,
+        "strategy_candidate_ready": False,
+        "strategy_candidate_blocks": [*blocks, "FORWARD_OBSERVATION_REQUIRED"],
+        "portfolio": safe_portfolio,
+        "automatic_paper_promotion": False,
+        "broker_connection_used": False,
+        "paper_orders_sent": False,
+        "live_orders_sent": False,
+    }, safe_portfolio)
+
+
+def _candidate_summary(value: dict[str, object]) -> dict[str, object]:
+    portfolio = dict(value["portfolio"])
+    return {
+        **{key: item for key, item in value.items() if key != "portfolio"},
+        "portfolio": {
+            key: item for key, item in portfolio.items() if key != "windows"
+        },
+    }
 
 
 def main() -> int:
@@ -195,63 +256,17 @@ def main() -> int:
         counterfactual = comparison_engine.run(histories)
         portfolio = counterfactual["baseline_v1"]
         raw_candidate_portfolio = counterfactual["candidate_v2"]
-        candidate_scanner = comparison_engine.candidate_scanner
-        candidate_historical_checks_passed = bool(
-            raw_candidate_portfolio["strategy_performance_validated"]
+        raw_candidate_v3_portfolio = counterfactual["candidate_v3"]
+        development_candidate_v2, _ = _development_candidate(
+            comparison_engine.candidate_scanner,
+            raw_candidate_portfolio,
         )
-        candidate_portfolio = {
-            **raw_candidate_portfolio,
-            "historical_development_checks_passed": (
-                candidate_historical_checks_passed
-            ),
-            "reused_source_data": True,
-            "forward_validation_required": True,
-            "strategy_performance_validated": False,
-            "automatic_paper_promotion": False,
-            "paper_orders_sent": False,
-            "live_orders_sent": False,
-        }
-        block_by_check = {
-            "average_return_positive": "PORTFOLIO_AVERAGE_RETURN_NOT_POSITIVE",
-            "compounded_return_positive": "PORTFOLIO_COMPOUNDED_RETURN_NOT_POSITIVE",
-            "profitable_window_ratio_met": "PORTFOLIO_PROFITABLE_WINDOW_RATIO_NOT_MET",
-            "maximum_drawdown_within_limit": "PORTFOLIO_DRAWDOWN_LIMIT_EXCEEDED",
-            "minimum_trade_count_met": "PORTFOLIO_MINIMUM_TRADE_COUNT_NOT_MET",
-        }
-        candidate_historical_blocks = [
-            block_by_check[key]
-            for key, passed in raw_candidate_portfolio["performance_checks"].items()
-            if passed is not True
-        ]
-        development_candidate_v2 = {
-            "status": "DEVELOPMENT_REPLAY_COMPLETED",
-            "candidate_id": candidate_scanner.candidate_policy.candidate_id,
-            "policy_fingerprint_sha256": (
-                candidate_scanner.candidate_policy.fingerprint_sha256
-            ),
-            "frozen_after": (
-                candidate_scanner.candidate_policy.frozen_after.isoformat()
-            ),
-            "reused_source_data": True,
-            "historical_development_checks_passed": (
-                candidate_historical_checks_passed
-            ),
-            "historical_development_blocks": candidate_historical_blocks,
-            "forward_validation_required": True,
-            "strategy_performance_validated": False,
-            "strategy_candidate_ready": False,
-            "strategy_candidate_blocks": [
-                *candidate_historical_blocks,
-                "FORWARD_OBSERVATION_REQUIRED",
-            ],
-            "portfolio": candidate_portfolio,
-            "automatic_paper_promotion": False,
-            "broker_connection_used": False,
-            "paper_orders_sent": False,
-            "live_orders_sent": False,
-        }
+        development_candidate_v3, _ = _development_candidate(
+            comparison_engine.candidate_v3_scanner,
+            raw_candidate_v3_portfolio,
+        )
         candidate_blocks = [
-            block_by_check[key]
+            _BLOCK_BY_CHECK[key]
             for key, passed in portfolio["performance_checks"].items()
             if passed is not True
         ]
@@ -259,7 +274,7 @@ def main() -> int:
         counterfactual_report = {
             key: value
             for key, value in counterfactual.items()
-            if key not in {"baseline_v1", "candidate_v2"}
+            if key not in {"baseline_v1", "candidate_v2", "candidate_v3"}
         }
         counterfactual_report["source_export_id"] = verified["export_id"]
         counterfactual_report["source_manifest_sha256"] = _canonical_sha256(
@@ -269,7 +284,7 @@ def main() -> int:
             "closed_bars_only"
         ]
         report: dict[str, object] = {
-            "schema_version": 2,
+            "schema_version": 3,
             "status": "FOREX_MULTI_PAIR_RESEARCH_COMPLETED",
             "mode": "LOCAL_HISTORICAL_RESEARCH_ONLY",
             "created_at": datetime.now(timezone.utc).isoformat(),
@@ -286,6 +301,7 @@ def main() -> int:
             "strategy_candidate_blocks": candidate_blocks,
             "portfolio": portfolio,
             "development_candidate_v2": development_candidate_v2,
+            "development_candidate_v3": development_candidate_v3,
             "counterfactual_walk_forward": counterfactual_report,
             "portfolio_pln_aggregation_performed": True,
             "historical_pln_conversion_series_verified": True,
@@ -338,18 +354,12 @@ def main() -> int:
                 for key, value in portfolio.items()
                 if key != "windows"
             },
-            "development_candidate_v2": {
-                **{
-                    key: value
-                    for key, value in development_candidate_v2.items()
-                    if key != "portfolio"
-                },
-                "portfolio": {
-                    key: value
-                    for key, value in candidate_portfolio.items()
-                    if key != "windows"
-                },
-            },
+            "development_candidate_v2": _candidate_summary(
+                development_candidate_v2
+            ),
+            "development_candidate_v3": _candidate_summary(
+                development_candidate_v3
+            ),
             "counterfactual_walk_forward": {
                 key: value
                 for key, value in counterfactual_report.items()
