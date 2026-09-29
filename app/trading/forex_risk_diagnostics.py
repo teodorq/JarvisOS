@@ -10,6 +10,9 @@ from app.trading.forex_models import MAJOR_FOREX_PAIRS
 
 _PAIR_SYMBOLS = frozenset(pair.symbol for pair in MAJOR_FOREX_PAIRS)
 _RATIO = Decimal("0.0001")
+_RATIO_HALF_UNIT = Decimal("0.00005")
+_MONEY_HALF_UNIT = Decimal("0.005")
+_MAX_ROUNDING_TOLERANCE_R = Decimal("0.005")
 _PERCENT = Decimal("0.01")
 _MAX_ABSOLUTE_VALUE = Decimal("1000000000000")
 _MAX_ABSOLUTE_R_MULTIPLE = Decimal("1000000")
@@ -29,6 +32,20 @@ def _decimal(value: object) -> Decimal | None:
 
 def _text(value: Decimal, quantum: Decimal) -> str:
     return str(value.quantize(quantum, rounding=ROUND_HALF_UP))
+
+
+def _recorded_r_matches(
+    recorded: Decimal | None,
+    derived: Decimal,
+    initial_risk: Decimal,
+) -> bool:
+    if recorded is None or abs(recorded) > _MAX_ABSOLUTE_R_MULTIPLE:
+        return False
+    tolerance = min(
+        _MAX_ROUNDING_TOLERANCE_R,
+        _RATIO_HALF_UNIT + (_MONEY_HALF_UNIT / initial_risk),
+    )
+    return abs(recorded - derived) <= tolerance
 
 
 def build_forex_risk_diagnostics(
@@ -71,10 +88,7 @@ def build_forex_risk_diagnostics(
             continue
         if has_recorded:
             recorded = _decimal(raw_recorded)
-            if (
-                recorded is None
-                or _text(recorded, _RATIO) != _text(multiple, _RATIO)
-            ):
+            if not _recorded_r_matches(recorded, multiple, risk):
                 mismatch_count += 1
             else:
                 recorded_count += 1

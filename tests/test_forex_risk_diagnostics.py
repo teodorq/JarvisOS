@@ -108,6 +108,19 @@ def test_recorded_r_is_checked_against_pnl_and_initial_risk() -> None:
     assert review["net_r_multiple"] == "1.0000"
 
 
+def test_recorded_r_accepts_only_possible_money_rounding_difference() -> None:
+    rounded_legacy = _fill(1, "-8.81", "8.78")
+    rounded_legacy["realized_r_multiple"] = "-1.0029"
+    outside_rounding = _fill(2, "-8.81", "8.78")
+    outside_rounding["realized_r_multiple"] = "-0.9900"
+
+    review = build_forex_risk_diagnostics([rounded_legacy, outside_rounding])
+
+    assert review["realized_r_recorded_trade_count"] == 1
+    assert review["realized_r_derived_trade_count"] == 1
+    assert review["realized_r_mismatch_count"] == 1
+
+
 def test_non_closed_or_non_forex_records_are_ignored() -> None:
     review = build_forex_risk_diagnostics([
         None,
