@@ -38,6 +38,8 @@ def build_forex_risk_diagnostics(
 
     closed_count = 0
     multiples: list[Decimal] = []
+    recorded_count = 0
+    mismatch_count = 0
     for raw in tuple(closed_fills):
         if not isinstance(raw, Mapping):
             continue
@@ -50,14 +52,32 @@ def build_forex_risk_diagnostics(
         closed_count += 1
         pnl = _decimal(item.get("realized_pnl_pln"))
         risk = _decimal(item.get("initial_risk_pln"))
+        raw_recorded = item.get("realized_r_multiple")
+        has_recorded = (
+            raw_recorded is not None
+            and str(raw_recorded).strip() != ""
+        )
         if pnl is None or risk is None or risk <= 0:
+            if has_recorded:
+                mismatch_count += 1
             continue
         multiple = pnl / risk
         if (
             not multiple.is_finite()
             or abs(multiple) > _MAX_ABSOLUTE_R_MULTIPLE
         ):
+            if has_recorded:
+                mismatch_count += 1
             continue
+        if has_recorded:
+            recorded = _decimal(raw_recorded)
+            if (
+                recorded is None
+                or _text(recorded, _RATIO) != _text(multiple, _RATIO)
+            ):
+                mismatch_count += 1
+            else:
+                recorded_count += 1
         multiples.append(multiple)
 
     observed_count = len(multiples)
@@ -134,6 +154,9 @@ def build_forex_risk_diagnostics(
         "closed_trade_count": closed_count,
         "risk_observed_trade_count": observed_count,
         "risk_missing_trade_count": missing_count,
+        "realized_r_recorded_trade_count": recorded_count,
+        "realized_r_derived_trade_count": observed_count - recorded_count,
+        "realized_r_mismatch_count": mismatch_count,
         "risk_coverage_pct": _text(coverage, _PERCENT),
         "net_r_multiple": net,
         "average_r_multiple": average,

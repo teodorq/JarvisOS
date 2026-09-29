@@ -185,6 +185,12 @@ class ForexPaperAutopilotTests(unittest.TestCase):
         )
         closed_fill = result["execution"]["executions"][0]["fill"]
         self.assertEqual(closed_fill["initial_risk_pln"], initial_risk)
+        self.assertEqual(
+            closed_fill["realized_r_multiple"],
+            result["account"]["performance"]["risk_diagnostics"][
+                "average_r_multiple"
+            ],
+        )
         self.assertEqual(closed_fill["opened_at"], self.now.isoformat())
         self.assertEqual(closed_fill["closed_at"], later.isoformat())
         status = self.autopilot.executor.status()

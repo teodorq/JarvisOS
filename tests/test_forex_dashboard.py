@@ -84,6 +84,9 @@ def _account() -> dict:
                         "closed_trade_count": 1,
                         "risk_observed_trade_count": 1,
                         "risk_missing_trade_count": 0,
+                        "realized_r_recorded_trade_count": 1,
+                        "realized_r_derived_trade_count": 0,
+                        "realized_r_mismatch_count": 0,
                         "risk_coverage_pct": "100.00",
                         "net_r_multiple": "-0.5000",
                         "average_r_multiple": "-0.5000",
@@ -152,6 +155,9 @@ def _account() -> dict:
                 "closed_trade_count": 2,
                 "risk_observed_trade_count": 1,
                 "risk_missing_trade_count": 1,
+                "realized_r_recorded_trade_count": 0,
+                "realized_r_derived_trade_count": 1,
+                "realized_r_mismatch_count": 0,
                 "risk_coverage_pct": "50.00",
                 "net_r_multiple": "-0.5000",
                 "average_r_multiple": "-0.5000",
@@ -372,6 +378,9 @@ def test_dashboard_projects_latest_safe_paper_cycle() -> None:
         assert risk["status"] == "PARTIAL"
         assert risk["risk_observed_trade_count"] == 1
         assert risk["risk_missing_trade_count"] == 1
+        assert risk["realized_r_recorded_trade_count"] == 0
+        assert risk["realized_r_derived_trade_count"] == 1
+        assert risk["realized_r_mismatch_count"] == 0
         assert risk["risk_coverage_pct"] == "50.00"
         assert risk["average_r_multiple"] == "-0.5000"
         assert risk["maximum_observed_drawdown_r"] == "0.5000"

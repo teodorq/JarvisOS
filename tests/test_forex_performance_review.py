@@ -109,7 +109,7 @@ def test_first_complete_sample_is_frozen_and_survives_later_trades(
     frozen = store.refresh(first_account, generated_at=NOW)
 
     assert frozen["status"] == "READY_FOR_OWNER_REVIEW"
-    assert frozen["schema_version"] == 4
+    assert frozen["schema_version"] == 5
     assert frozen["valid_closed_trade_count"] == 20
     assert frozen["packet_persisted"] is True
     assert frozen["review_snapshot_frozen"] is True
@@ -118,6 +118,9 @@ def test_first_complete_sample_is_frozen_and_survives_later_trades(
         "closed_trade_count": 20,
         "risk_observed_trade_count": 20,
         "risk_missing_trade_count": 0,
+        "realized_r_recorded_trade_count": 0,
+        "realized_r_derived_trade_count": 20,
+        "realized_r_mismatch_count": 0,
         "risk_coverage_pct": "100.00",
         "risk_coverage_complete": True,
         "net_r_multiple": "5.0000",
@@ -179,6 +182,9 @@ def test_complete_sample_freezes_partial_legacy_risk_coverage(
         "closed_trade_count": 20,
         "risk_observed_trade_count": 15,
         "risk_missing_trade_count": 5,
+        "realized_r_recorded_trade_count": 0,
+        "realized_r_derived_trade_count": 15,
+        "realized_r_mismatch_count": 0,
         "risk_coverage_pct": "75.00",
         "risk_coverage_complete": False,
         "net_r_multiple": "4.5000",
@@ -264,6 +270,26 @@ def test_risk_snapshot_must_match_the_audited_ledger(tmp_path: Path) -> None:
         _append_closed_trade(ledger, contract, index)
     account = _account(tmp_path, contract)
     account["performance"]["risk_diagnostics"]["average_r_multiple"] = "9.0000"
+
+    packet = ForexPaperPerformanceReviewPacket(tmp_path).refresh(
+        account,
+        generated_at=NOW,
+    )
+
+    assert packet["status"] == "BLOCKED_INVALID_PAPER_PERFORMANCE_EVIDENCE"
+    assert packet["packet_persisted"] is False
+    assert not ForexPaperPerformanceReviewPacket(tmp_path).path.exists()
+
+
+def test_recorded_r_mismatch_blocks_final_review(tmp_path: Path) -> None:
+    ledger = ForexPaperLedger(tmp_path)
+    contract = build_forex_paper_sample_contract()
+    for index in range(20):
+        _append_closed_trade(ledger, contract, index)
+    account = _account(tmp_path, contract)
+    account["performance"]["risk_diagnostics"][
+        "realized_r_mismatch_count"
+    ] = 1
 
     packet = ForexPaperPerformanceReviewPacket(tmp_path).refresh(
         account,

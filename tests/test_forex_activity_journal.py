@@ -263,6 +263,21 @@ def test_closed_gui_events_are_delivered_oldest_first_after_start() -> None:
         assert feed.status()["pending_count"] == 0
 
 
+def test_closed_event_includes_recorded_r_multiple() -> None:
+    with TemporaryDirectory() as temporary:
+        journal = ForexPaperActivityJournal(Path(temporary))
+        payload = _payload(8, action="CLOSE_LONG")
+        payload["paper"]["execution"]["executions"][0]["fill"][
+            "realized_r_multiple"
+        ] = "1.23456"
+
+        journal.record(payload)
+        event = journal.events(limit=1)[0]
+
+        assert "12.34 PLN (1.2346 R)" in event["message"]
+        assert "lokalna symulacja" in event["message"]
+
+
 def test_duplicate_cycle_never_creates_duplicate_history_event() -> None:
     with TemporaryDirectory() as temporary:
         journal = ForexPaperActivityJournal(Path(temporary))

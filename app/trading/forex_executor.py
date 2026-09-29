@@ -33,6 +33,7 @@ from app.trading.paper_broker import LiveTradingBlockedError
 _CYCLE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,79}$")
 _MONEY = Decimal("0.01")
 _PRICE = Decimal("0.000001")
+_RATIO = Decimal("0.0001")
 
 
 def _decimal(value: object) -> Decimal:
@@ -377,6 +378,8 @@ class ForexPaperExecutionEngine:
         )
         raw_positions = dict(state.get("positions", {}) or {})
         stored_position = dict(raw_positions.get(pair_name, {}) or {})
+        initial_risk_pln = self._stored_initial_risk_pln(stored_position)
+        realized_pnl_pln = _text(pnl_pln)
         raw_positions.pop(pair_name, None)
         state["positions"] = raw_positions
         fill = {
@@ -395,12 +398,16 @@ class ForexPaperExecutionEngine:
             ),
             "opened_at": position.opened_at.isoformat(),
             "closed_at": now.isoformat(),
-            "initial_risk_pln": self._stored_initial_risk_pln(stored_position),
+            "initial_risk_pln": initial_risk_pln,
+            "realized_r_multiple": self._realized_r_multiple(
+                _decimal(realized_pnl_pln),
+                initial_risk_pln,
+            ),
             "reason_codes": [
                 str(value)[:80]
                 for value in list(instruction.get("reason_codes", []) or [])[:8]
             ],
-            "realized_pnl_pln": _text(pnl_pln),
+            "realized_pnl_pln": realized_pnl_pln,
             "filled_at": now.isoformat(),
             "sample_contract_id": str(
                 stored_position.get("sample_contract_id", "")
@@ -879,6 +886,16 @@ class ForexPaperExecutionEngine:
             return ""
         amount = _decimal(raw)
         return _text(amount) if amount > 0 else ""
+
+    @staticmethod
+    def _realized_r_multiple(pnl_pln: Decimal, initial_risk_pln: object) -> str:
+        risk = _optional_decimal(initial_risk_pln)
+        if risk is None or risk <= 0:
+            return ""
+        multiple = pnl_pln / risk
+        if not multiple.is_finite() or abs(multiple) > Decimal("1000000"):
+            return ""
+        return _text(multiple, _RATIO)
 
     def _positions(self, state: Mapping[str, Any]) -> dict[str, ForexPosition]:
         result: dict[str, ForexPosition] = {}

@@ -139,6 +139,9 @@ def _risk_snapshot(value: object, count: int) -> dict[str, Any]:
     item = dict(value)
     observed = item.get("risk_observed_trade_count")
     missing = item.get("risk_missing_trade_count")
+    recorded = item.get("realized_r_recorded_trade_count")
+    derived = item.get("realized_r_derived_trade_count")
+    mismatched = item.get("realized_r_mismatch_count")
     if (
         type(observed) is not int
         or type(missing) is not int
@@ -146,6 +149,14 @@ def _risk_snapshot(value: object, count: int) -> dict[str, Any]:
         or missing < 0
         or observed + missing != count
         or item.get("closed_trade_count") != count
+        or type(recorded) is not int
+        or type(derived) is not int
+        or type(mismatched) is not int
+        or recorded < 0
+        or derived < 0
+        or mismatched < 0
+        or recorded + derived != observed
+        or mismatched != 0
     ):
         raise TradingValidationError(
             "performance_review: risk_count_mismatch"
@@ -184,6 +195,9 @@ def _risk_snapshot(value: object, count: int) -> dict[str, Any]:
         "closed_trade_count": count,
         "risk_observed_trade_count": observed,
         "risk_missing_trade_count": missing,
+        "realized_r_recorded_trade_count": recorded,
+        "realized_r_derived_trade_count": derived,
+        "realized_r_mismatch_count": mismatched,
         "risk_coverage_pct": coverage,
         "risk_coverage_complete": observed == count,
     }
@@ -302,7 +316,7 @@ def _stored_pair_risk_snapshots(
 
 def _base_packet(now: datetime) -> dict[str, Any]:
     return {
-        "schema_version": 4,
+        "schema_version": 5,
         "mode": "FOREX_PAPER_PERFORMANCE_OWNER_REVIEW_READ_ONLY",
         "generated_at": now.isoformat(),
         "review_scope": "CURRENT_SAMPLE_CONTRACT_CLOSED_TRADES",
@@ -519,7 +533,7 @@ def verify_forex_paper_performance_review_packet(value: object) -> bool:
         content_sha256 = packet.get("content_sha256")
         if (
             type(packet.get("schema_version")) is not int
-            or packet.get("schema_version") != 4
+            or packet.get("schema_version") != 5
             or packet.get("status") != "READY_FOR_OWNER_REVIEW"
             or packet.get("mode")
             != "FOREX_PAPER_PERFORMANCE_OWNER_REVIEW_READ_ONLY"

@@ -15,6 +15,7 @@ from typing import Any, Iterator
 
 from app.core.json_store import JsonStore
 from app.core.project_paths import resolve_project_root
+from app.trading.forex_activity_format import realized_r_text
 from app.trading.forex_entry_blocks import activity_block_message
 from app.trading.forex_review_notifications import (
     normalized_review_fingerprints, review_milestones,
@@ -324,9 +325,11 @@ class ForexPaperActivityJournal:
             )
         side = action.removeprefix("CLOSE_")
         pnl = cls._pnl(fill.get("realized_pnl_pln"))
+        realized_r = realized_r_text(fill.get("realized_r_multiple"))
+        result = f"{pnl} PLN" + (f" ({realized_r} R)" if realized_r else "")
         message = (
             f"Forex PAPER: zamknąłem symulowaną pozycję {side} na {visible_pair}; "
-            f"wynik {pnl} PLN. To wyłącznie lokalna symulacja — nie wysłałem "
+            f"wynik {result}. To wyłącznie lokalna symulacja — nie wysłałem "
             "zlecenia do brokera."
         )
         return cls._spec(

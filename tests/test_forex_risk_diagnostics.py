@@ -24,6 +24,9 @@ def test_risk_diagnostics_calculate_normalized_results() -> None:
     assert review["closed_trade_count"] == 3
     assert review["risk_observed_trade_count"] == 3
     assert review["risk_missing_trade_count"] == 0
+    assert review["realized_r_recorded_trade_count"] == 0
+    assert review["realized_r_derived_trade_count"] == 3
+    assert review["realized_r_mismatch_count"] == 0
     assert review["risk_coverage_pct"] == "100.00"
     assert review["net_r_multiple"] == "1.5000"
     assert review["average_r_multiple"] == "0.5000"
@@ -88,6 +91,21 @@ def test_risk_diagnostics_track_observed_drawdown_and_loss_streak() -> None:
     assert review["losing_r_trade_count"] == 4
     assert review["maximum_observed_consecutive_losses"] == 2
     assert review["current_observed_consecutive_losses"] == 2
+
+
+def test_recorded_r_is_checked_against_pnl_and_initial_risk() -> None:
+    matching = _fill(1, "20", "10")
+    matching["realized_r_multiple"] = "2.00004"
+    mismatched = _fill(2, "-10", "10")
+    mismatched["realized_r_multiple"] = "9.0000"
+
+    review = build_forex_risk_diagnostics([matching, mismatched])
+
+    assert review["risk_observed_trade_count"] == 2
+    assert review["realized_r_recorded_trade_count"] == 1
+    assert review["realized_r_derived_trade_count"] == 1
+    assert review["realized_r_mismatch_count"] == 1
+    assert review["net_r_multiple"] == "1.0000"
 
 
 def test_non_closed_or_non_forex_records_are_ignored() -> None:

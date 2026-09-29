@@ -765,6 +765,15 @@ class ForexPaperDashboard:
             "risk_missing_trade_count": cls._count(
                 item.get("risk_missing_trade_count")
             ),
+            "realized_r_recorded_trade_count": cls._count(
+                item.get("realized_r_recorded_trade_count")
+            ),
+            "realized_r_derived_trade_count": cls._count(
+                item.get("realized_r_derived_trade_count")
+            ),
+            "realized_r_mismatch_count": cls._count(
+                item.get("realized_r_mismatch_count")
+            ),
             "risk_coverage_pct": cls._number(
                 item.get("risk_coverage_pct"), 2
             ),
