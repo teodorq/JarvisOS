@@ -22,6 +22,7 @@ from app.trading.forex_observation import (
     ForexObservationJournal,
     ForexObservationService,
     forex_candidate_implementation_sha256,
+    forex_candidate_v3_implementation_sha256,
 )
 from app.trading.control_center import TradingControlCenter
 from app.trading.models import TradingValidationError
@@ -163,7 +164,7 @@ class ForexObservationTests(unittest.TestCase):
         )
 
         self.assertEqual(result["status"], "OBSERVATION_RECORDED")
-        self.assertEqual(result["observation_schema_version"], 2)
+        self.assertEqual(result["observation_schema_version"], 3)
         self.assertEqual(result["capture_origin"], "MANUAL")
         self.assertEqual(
             result["capture_attestation"],
@@ -222,6 +223,19 @@ class ForexObservationTests(unittest.TestCase):
         )
         self.assertFalse(candidate["paper_orders_sent"])
         self.assertFalse(candidate["live_orders_sent"])
+        candidate_v3 = result["development_candidate_v3"]
+        self.assertEqual(
+            candidate_v3["candidate_id"],
+            "FOREX_STRENGTH_V3_20260929",
+        )
+        self.assertEqual(
+            candidate_v3["implementation_sha256"],
+            forex_candidate_v3_implementation_sha256(),
+        )
+        self.assertFalse(candidate_v3["forward_eligible"])
+        self.assertEqual(candidate_v3["execution"]["status"], "NOT_EXECUTED")
+        self.assertFalse(candidate_v3["paper_orders_sent"])
+        self.assertFalse(candidate_v3["live_orders_sent"])
         self.assertTrue(result["positions_unchanged"])
         self.assertFalse(result["paper_orders_sent"])
         self.assertFalse(result["live_orders_sent"])
@@ -385,7 +399,7 @@ class ForexObservationTests(unittest.TestCase):
         )
 
         self.assertEqual(result["status"], "DATA_BLOCKED")
-        self.assertEqual(result["observation_schema_version"], 2)
+        self.assertEqual(result["observation_schema_version"], 3)
         self.assertEqual(result["capture_origin"], "MANUAL")
         self.assertEqual(
             result["capture_attestation"],

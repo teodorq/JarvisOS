@@ -570,7 +570,7 @@ def build_forex_v2_forward_evidence_report(
         invalid_issues.update(codes)
 
     for observation in observations:
-        if observation.get("observation_schema_version") != 2:
+        if observation.get("observation_schema_version") not in {2, 3}:
             exclude("LEGACY_SCHEMA")
             continue
         status = str(observation.get("status", ""))

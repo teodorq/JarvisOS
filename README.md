@@ -321,10 +321,11 @@ Its read-only forward scorecard separates unqualified post-freeze cycles from
 invalid candidate contracts and compares base entry signals with the entries
 retained or filtered by V2. Counts never validate performance, promote the
 candidate, or enable PAPER/LIVE execution.
-New observation schema 2 additionally binds every cycle to its origin, exact
-closed-M15 fingerprint, combined decision-input fingerprint (quotes, safety
-contexts, positions, PAPER account inputs and diagnostics), frozen V2
-implementation fingerprint and current PAPER sample contract. Only post-freeze
+Observation schema 3 preserves the schema 2 origin, exact closed-M15 and
+combined decision-input fingerprints (quotes, safety contexts, positions,
+PAPER account inputs and diagnostics), frozen V2 implementation identity and
+current PAPER sample contract. It additionally records the frozen V3 policy,
+implementation, assessments and proposed plan without executing it. Only post-freeze
 cycles that pass the local watchdog ancestry/nonce check are labelled
 `SCHEDULED_FORWARD` and can enter the new evidence sample. This provenance check
 prevents an ordinary manual launch from counting, but is deliberately documented

@@ -254,7 +254,7 @@ class ForexPaperRuntimeTests(unittest.TestCase):
             "COLLECTING_FORWARD_EVIDENCE",
         )
         observation = result["observation"]
-        self.assertEqual(observation["observation_schema_version"], 2)
+        self.assertEqual(observation["observation_schema_version"], 3)
         self.assertEqual(observation["capture_origin"], "SCHEDULED_FORWARD")
         self.assertEqual(observation["captured_at"], observation["observed_at"])
         self.assertEqual(

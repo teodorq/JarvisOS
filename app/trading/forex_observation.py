@@ -18,6 +18,7 @@ from app.core.json_store import JsonStore
 from app.core.project_paths import resolve_project_root
 from app.trading.forex_coordinator import ForexPaperCoordinator
 from app.trading.forex_candidate_v2 import ForexRegimeFilteredScanner
+from app.trading.forex_candidate_v3 import ForexStrengthFilteredScanner
 from app.trading.forex_executor import ForexPaperExecutionEngine
 from app.trading.forex_models import (
     MAJOR_FOREX_PAIRS,
@@ -37,7 +38,7 @@ if TYPE_CHECKING:
 
 _OBSERVATION_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,79}$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
-_OBSERVATION_SCHEMA_VERSION = 2
+_OBSERVATION_SCHEMA_VERSION = 3
 _CAPTURE_ORIGINS = frozenset({
     "MANUAL",
     "SCHEDULED_FORWARD",
@@ -99,9 +100,7 @@ def _capture_attestation(value: object, *, origin: str) -> dict[str, Any]:
     }
 
 
-def forex_candidate_implementation_sha256() -> str:
-    """Fingerprint the exact frozen-candidate implementation source."""
-    classes = (ForexRegimeFilteredScanner, ForexMarketScanner, ForexBar)
+def _candidate_implementation_sha256(classes: tuple[type, ...]) -> str:
     module_names = sorted({item.__module__ for item in classes})
     digest = hashlib.sha256()
     for module_name in module_names:
@@ -122,6 +121,67 @@ def forex_candidate_implementation_sha256() -> str:
         digest.update(source)
         digest.update(b"\0")
     return digest.hexdigest()
+
+
+def forex_candidate_implementation_sha256() -> str:
+    """Fingerprint the exact frozen V2 implementation source."""
+    return _candidate_implementation_sha256((
+        ForexRegimeFilteredScanner,
+        ForexMarketScanner,
+        ForexBar,
+    ))
+
+
+def forex_candidate_v3_implementation_sha256() -> str:
+    """Fingerprint the exact frozen V3 implementation source."""
+    return _candidate_implementation_sha256((
+        ForexStrengthFilteredScanner,
+        ForexMarketScanner,
+        ForexBar,
+    ))
+
+
+def _development_candidate_record(
+    *,
+    scanner: Any,
+    assessments: tuple[Any, ...],
+    plan: Mapping[str, Any],
+    implementation_sha256: str,
+    sample_contract: Mapping[str, Any],
+    observed_at: datetime,
+) -> dict[str, Any]:
+    instructions = list(plan.get("instructions", []) or [])
+    policy = scanner.candidate_policy
+    return {
+        "status": "FORWARD_OBSERVATION_RECORDED",
+        "candidate_id": policy.candidate_id,
+        "policy_fingerprint_sha256": policy.fingerprint_sha256,
+        "implementation_sha256": implementation_sha256,
+        "paper_sample_contract_id": sample_contract["contract_id"],
+        "paper_sample_contract_fingerprint_sha256": sample_contract[
+            "fingerprint_sha256"
+        ],
+        "forward_eligible": policy.forward_eligible(observed_at),
+        "audit": scanner.audit(),
+        "assessments": [item.as_dict() for item in assessments],
+        "proposed_plan": dict(plan),
+        "proposed_instruction_count": len(instructions),
+        "would_open_count": sum(
+            str(item.get("action", "")).startswith("OPEN_")
+            for item in instructions
+        ),
+        "would_close_count": sum(
+            item.get("action") == "CLOSE_POSITION"
+            for item in instructions
+        ),
+        "execution": {
+            "status": "NOT_EXECUTED",
+            "reason": "DEVELOPMENT_OBSERVATION_ONLY",
+        },
+        "automatic_paper_promotion": False,
+        "paper_orders_sent": False,
+        "live_orders_sent": False,
+    }
 
 
 def _canonical_source_histories(
@@ -613,7 +673,8 @@ class ForexObservationJournal:
                             "FORWARD_ELIGIBILITY_MISMATCH"
                         )
                     has_v2_provenance = (
-                        item.get("observation_schema_version") == 2
+                        type(item.get("observation_schema_version")) is int
+                        and item.get("observation_schema_version") >= 2
                     )
                     for invalid, code in (
                         (
@@ -1102,6 +1163,9 @@ class ForexObservationService:
         )
         self.scanner = ForexMarketScanner(MAJOR_FOREX_PAIRS)
         self.development_scanner = ForexRegimeFilteredScanner(MAJOR_FOREX_PAIRS)
+        self.development_v3_scanner = ForexStrengthFilteredScanner(
+            MAJOR_FOREX_PAIRS
+        )
         self.coordinator = ForexPaperCoordinator(self.policy)
 
     def observe_once(
@@ -1131,8 +1195,9 @@ class ForexObservationService:
                 paper_policy=self.policy,
                 universe=self.scanner.universe,
             )
-            implementation_sha256 = (
-                forex_candidate_implementation_sha256()
+            implementation_sha256 = forex_candidate_implementation_sha256()
+            v3_implementation_sha256 = (
+                forex_candidate_v3_implementation_sha256()
             )
             all_quotes: dict[str, ForexQuote] = dict(bundle.quotes)
             for quote in bundle.conversion_quotes:
@@ -1201,8 +1266,24 @@ class ForexObservationService:
                 daily_pnl_pln=account["daily_pnl_pln"],
                 now=selected_now,
             )
-            development_instructions = list(
-                development_plan.get("instructions", []) or []
+            development_v3_assessments = self.development_v3_scanner.scan(
+                quotes=bundle.quotes,
+                bars=source_histories,
+                contexts=bundle.contexts,
+                positions={
+                    symbol: position.side
+                    for symbol, position in positions.items()
+                },
+                now=selected_now,
+            )
+            development_v3_plan = self.coordinator.plan(
+                assessments=development_v3_assessments,
+                quotes=bundle.quotes,
+                positions=positions,
+                rates=rates,
+                equity_pln=account["equity_pln"],
+                daily_pnl_pln=account["daily_pnl_pln"],
+                now=selected_now,
             )
             market_open = bool(bundle.contexts) and all(
                 context.market_open for context in bundle.contexts.values()
@@ -1246,48 +1327,22 @@ class ForexObservationService:
                 "data": diagnostics,
                 "assessments": [item.as_dict() for item in assessments],
                 "proposed_plan": plan,
-                "development_candidate_v2": {
-                    "status": "FORWARD_OBSERVATION_RECORDED",
-                    "candidate_id": (
-                        self.development_scanner.candidate_policy.candidate_id
-                    ),
-                    "policy_fingerprint_sha256": (
-                        self.development_scanner.candidate_policy.fingerprint_sha256
-                    ),
-                    "implementation_sha256": implementation_sha256,
-                    "paper_sample_contract_id": sample_contract["contract_id"],
-                    "paper_sample_contract_fingerprint_sha256": (
-                        sample_contract["fingerprint_sha256"]
-                    ),
-                    "forward_eligible": (
-                        self.development_scanner.candidate_policy.forward_eligible(
-                            selected_now
-                        )
-                    ),
-                    "audit": self.development_scanner.audit(),
-                    "assessments": [
-                        item.as_dict() for item in development_assessments
-                    ],
-                    "proposed_plan": development_plan,
-                    "proposed_instruction_count": len(
-                        development_instructions
-                    ),
-                    "would_open_count": sum(
-                        str(item.get("action", "")).startswith("OPEN_")
-                        for item in development_instructions
-                    ),
-                    "would_close_count": sum(
-                        item.get("action") == "CLOSE_POSITION"
-                        for item in development_instructions
-                    ),
-                    "execution": {
-                        "status": "NOT_EXECUTED",
-                        "reason": "DEVELOPMENT_OBSERVATION_ONLY",
-                    },
-                    "automatic_paper_promotion": False,
-                    "paper_orders_sent": False,
-                    "live_orders_sent": False,
-                },
+                "development_candidate_v2": _development_candidate_record(
+                    scanner=self.development_scanner,
+                    assessments=development_assessments,
+                    plan=development_plan,
+                    implementation_sha256=implementation_sha256,
+                    sample_contract=sample_contract,
+                    observed_at=selected_now,
+                ),
+                "development_candidate_v3": _development_candidate_record(
+                    scanner=self.development_v3_scanner,
+                    assessments=development_v3_assessments,
+                    plan=development_v3_plan,
+                    implementation_sha256=v3_implementation_sha256,
+                    sample_contract=sample_contract,
+                    observed_at=selected_now,
+                ),
                 "proposed_instruction_count": len(instructions),
                 "would_open_count": sum(
                     str(item.get("action", "")).startswith("OPEN_")
@@ -1396,4 +1451,5 @@ __all__ = [
     "ForexObservationJournal",
     "ForexObservationService",
     "forex_candidate_implementation_sha256",
+    "forex_candidate_v3_implementation_sha256",
 ]
