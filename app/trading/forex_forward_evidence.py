@@ -12,7 +12,7 @@ from pathlib import Path
 import re
 import sys
 import tempfile
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 from app.core.exclusive_file_lock import exclusive_file_lock
 from app.core.project_paths import resolve_project_root
@@ -20,6 +20,10 @@ from app.trading import forex_observation as observation_module
 from app.trading.forex_candidate_v2 import (
     ForexRegimeCandidatePolicy,
     ForexRegimeFilteredScanner,
+)
+from app.trading.forex_candidate_v3 import (
+    ForexStrengthCandidatePolicy,
+    ForexStrengthFilteredScanner,
 )
 from app.trading.forex_models import ForexBar, MAJOR_FOREX_PAIRS
 from app.trading.forex_observation import ForexObservationJournal
@@ -82,9 +86,11 @@ def _timestamp(value: object, field: str) -> datetime:
     return aware_utc(parsed, field)
 
 
-def _fallback_candidate_implementation_sha256() -> str:
+def _fallback_candidate_implementation_sha256(
+    scanner_class: type = ForexRegimeFilteredScanner,
+) -> str:
     """Match the observation module's public fingerprint during migration."""
-    classes = (ForexRegimeFilteredScanner, ForexMarketScanner, ForexBar)
+    classes = (scanner_class, ForexMarketScanner, ForexBar)
     module_names = sorted({item.__module__ for item in classes})
     digest = hashlib.sha256()
     for module_name in module_names:
@@ -119,6 +125,28 @@ def expected_candidate_implementation_sha256() -> str:
     if not _SHA256.fullmatch(selected):
         raise TradingValidationError(
             "forex_forward_evidence: invalid_implementation_fingerprint"
+        )
+    return selected
+
+
+def expected_v3_candidate_implementation_sha256() -> str:
+    """Return the implementation identity written for frozen V3 observations."""
+    factory = getattr(
+        observation_module,
+        "forex_candidate_v3_implementation_sha256",
+        None,
+    )
+    value = (
+        factory()
+        if callable(factory)
+        else _fallback_candidate_implementation_sha256(
+            ForexStrengthFilteredScanner
+        )
+    )
+    selected = str(value)
+    if not _SHA256.fullmatch(selected):
+        raise TradingValidationError(
+            "forex_forward_evidence: invalid_v3_implementation_fingerprint"
         )
     return selected
 
@@ -253,10 +281,12 @@ def _candidate_contract_issues(
     observation: Mapping[str, Any],
     *,
     expected_implementation_sha256: str,
+    policy: ForexRegimeCandidatePolicy | ForexStrengthCandidatePolicy | None = None,
+    candidate_field: str = "development_candidate_v2",
 ) -> tuple[list[str], dict[str, int]]:
-    policy = ForexRegimeCandidatePolicy()
+    selected_policy = policy or ForexRegimeCandidatePolicy()
     sample = build_forex_paper_sample_contract()
-    raw_candidate = observation.get("development_candidate_v2")
+    raw_candidate = observation.get(candidate_field)
     if not isinstance(raw_candidate, Mapping):
         return ["CANDIDATE_PAYLOAD_MISSING"], {}
     candidate = dict(raw_candidate)
@@ -267,12 +297,12 @@ def _candidate_contract_issues(
             "CANDIDATE_STATUS_INVALID",
         ),
         (
-            candidate.get("candidate_id") != policy.candidate_id,
+            candidate.get("candidate_id") != selected_policy.candidate_id,
             "CANDIDATE_ID_MISMATCH",
         ),
         (
             candidate.get("policy_fingerprint_sha256")
-            != policy.fingerprint_sha256,
+            != selected_policy.fingerprint_sha256,
             "CANDIDATE_POLICY_FINGERPRINT_MISMATCH",
         ),
         (
@@ -335,7 +365,10 @@ def _observation_contract_issues(
     *,
     observed_at: datetime,
     expected_implementation_sha256: str,
+    policy: ForexRegimeCandidatePolicy | ForexStrengthCandidatePolicy | None = None,
+    candidate_field: str = "development_candidate_v2",
 ) -> tuple[list[str], str, str, str, dict[str, int]]:
+    selected_policy = policy or ForexRegimeCandidatePolicy()
     issues: list[str] = []
     if observation.get("mode") != "FOREX_OBSERVATION_ONLY":
         issues.append("OBSERVATION_MODE_INVALID")
@@ -412,12 +445,14 @@ def _observation_contract_issues(
         observation.get("source_evidence"),
         observed_at=observed_at,
         captured_at=captured_at,
-        required_bar_count=ForexRegimeCandidatePolicy().required_m15_bar_count,
+        required_bar_count=selected_policy.required_m15_bar_count,
         )
     )
     candidate_issues, signals = _candidate_contract_issues(
         observation,
         expected_implementation_sha256=expected_implementation_sha256,
+        policy=selected_policy,
+        candidate_field=candidate_field,
     )
     return (
         sorted(set(issues + source_issues + candidate_issues)),
@@ -448,20 +483,22 @@ def _blocked_source_report(
     reason: str,
     *,
     implementation_sha256: str = "",
+    policy: ForexRegimeCandidatePolicy | ForexStrengthCandidatePolicy | None = None,
+    mode: str = "FOREX_V2_FORWARD_SIGNAL_EVIDENCE_ONLY",
 ) -> dict[str, Any]:
-    policy = ForexRegimeCandidatePolicy()
+    selected_policy = policy or ForexRegimeCandidatePolicy()
     report: dict[str, Any] = {
         "schema_version": 1,
         "status": "BLOCKED_SOURCE_INVALID",
-        "mode": "FOREX_V2_FORWARD_SIGNAL_EVIDENCE_ONLY",
+        "mode": mode,
         "generated_at": generated_at.isoformat(),
         "source_state_valid": False,
         "source_error": str(reason)[:160],
         "source_cutoff_sequence": 0,
         "source_head_hash": "",
-        "candidate_id": policy.candidate_id,
-        "frozen_after": policy.frozen_after.isoformat(),
-        "policy_fingerprint_sha256": policy.fingerprint_sha256,
+        "candidate_id": selected_policy.candidate_id,
+        "frozen_after": selected_policy.frozen_after.isoformat(),
+        "policy_fingerprint_sha256": selected_policy.fingerprint_sha256,
         "implementation_sha256": implementation_sha256,
         "accepted_cycle_count": 0,
         "accepted_market_day_count": 0,
@@ -492,22 +529,34 @@ def _blocked_source_report(
     return report
 
 
-def build_forex_v2_forward_evidence_report(
+def _build_forex_candidate_forward_evidence_report(
     observation_state: object,
     *,
+    policy: ForexRegimeCandidatePolicy | ForexStrengthCandidatePolicy,
+    candidate_field: str,
+    mode: str,
+    accepted_schema_versions: frozenset[int],
+    implementation_factory: Callable[[], str],
     generated_at: datetime | None = None,
 ) -> dict[str, Any]:
     """Build a deterministic signal report from one strict journal cutoff."""
     selected_now = aware_utc(generated_at or datetime.now(timezone.utc), "generated_at")
     try:
-        implementation_sha256 = expected_candidate_implementation_sha256()
+        implementation_sha256 = implementation_factory()
     except TradingValidationError as error:
-        return _blocked_source_report(selected_now, str(error))
+        return _blocked_source_report(
+            selected_now,
+            str(error),
+            policy=policy,
+            mode=mode,
+        )
     if not isinstance(observation_state, Mapping):
         return _blocked_source_report(
             selected_now,
             "forex_forward_evidence: state_mapping_required",
             implementation_sha256=implementation_sha256,
+            policy=policy,
+            mode=mode,
         )
     state = dict(observation_state)
     raw_observations = state.get("observations")
@@ -536,16 +585,19 @@ def build_forex_v2_forward_evidence_report(
             selected_now,
             "forex_forward_evidence: observation_audit_invalid",
             implementation_sha256=implementation_sha256,
+            policy=policy,
+            mode=mode,
         )
     if len(raw_observations) >= ForexObservationJournal.MAX_OBSERVATIONS:
         return _blocked_source_report(
             selected_now,
             "forex_forward_evidence: observation_history_retention_boundary",
             implementation_sha256=implementation_sha256,
+            policy=policy,
+            mode=mode,
         )
 
     observations = [dict(item) for item in raw_observations]
-    policy = ForexRegimeCandidatePolicy()
     exclusions: Counter[str] = Counter()
     invalid_issues: Counter[str] = Counter()
     excluded_cycle_count = 0
@@ -570,7 +622,7 @@ def build_forex_v2_forward_evidence_report(
         invalid_issues.update(codes)
 
     for observation in observations:
-        if observation.get("observation_schema_version") not in {2, 3}:
+        if observation.get("observation_schema_version") not in accepted_schema_versions:
             exclude("LEGACY_SCHEMA")
             continue
         status = str(observation.get("status", ""))
@@ -621,7 +673,7 @@ def build_forex_v2_forward_evidence_report(
         if observed_at > selected_now:
             invalidate("OBSERVATION_TIME_IN_FUTURE")
             continue
-        raw_candidate = observation.get("development_candidate_v2")
+        raw_candidate = observation.get(candidate_field)
         candidate = dict(raw_candidate) if isinstance(raw_candidate, Mapping) else {}
         calculated_forward = policy.forward_eligible(observed_at)
         declared_forward = candidate.get("forward_eligible")
@@ -648,6 +700,8 @@ def build_forex_v2_forward_evidence_report(
             observation,
             observed_at=observed_at,
             expected_implementation_sha256=implementation_sha256,
+            policy=policy,
+            candidate_field=candidate_field,
         )
         if issues:
             invalidate(*issues)
@@ -703,7 +757,7 @@ def build_forex_v2_forward_evidence_report(
             if sample_complete
             else "COLLECTING_FORWARD_EVIDENCE"
         ),
-        "mode": "FOREX_V2_FORWARD_SIGNAL_EVIDENCE_ONLY",
+        "mode": mode,
         "generated_at": selected_now.isoformat(),
         "source_state_valid": True,
         "source_cutoff_sequence": len(observations),
@@ -740,9 +794,46 @@ def build_forex_v2_forward_evidence_report(
     return report
 
 
-def verify_forex_v2_forward_evidence_report(
+def build_forex_v2_forward_evidence_report(
+    observation_state: object,
+    *,
+    generated_at: datetime | None = None,
+) -> dict[str, Any]:
+    """Build strict forward-only signal evidence for frozen Forex V2."""
+    return _build_forex_candidate_forward_evidence_report(
+        observation_state,
+        policy=ForexRegimeCandidatePolicy(),
+        candidate_field="development_candidate_v2",
+        mode="FOREX_V2_FORWARD_SIGNAL_EVIDENCE_ONLY",
+        accepted_schema_versions=frozenset({2, 3}),
+        implementation_factory=expected_candidate_implementation_sha256,
+        generated_at=generated_at,
+    )
+
+
+def build_forex_v3_forward_evidence_report(
+    observation_state: object,
+    *,
+    generated_at: datetime | None = None,
+) -> dict[str, Any]:
+    """Build strict forward-only signal evidence for frozen Forex V3."""
+    return _build_forex_candidate_forward_evidence_report(
+        observation_state,
+        policy=ForexStrengthCandidatePolicy(),
+        candidate_field="development_candidate_v3",
+        mode="FOREX_V3_FORWARD_SIGNAL_EVIDENCE_ONLY",
+        accepted_schema_versions=frozenset({3}),
+        implementation_factory=expected_v3_candidate_implementation_sha256,
+        generated_at=generated_at,
+    )
+
+
+def _verify_forex_candidate_forward_evidence_report(
     value: object,
     *,
+    policy: ForexRegimeCandidatePolicy | ForexStrengthCandidatePolicy,
+    mode: str,
+    implementation_factory: Callable[[], str],
     require_complete: bool = False,
 ) -> bool:
     """Verify a persisted report before another subsystem trusts its milestone."""
@@ -752,8 +843,8 @@ def verify_forex_v2_forward_evidence_report(
         report = dict(value)
         generated_at = _timestamp(report.get("generated_at"), "generated_at")
         frozen_after = _timestamp(report.get("frozen_after"), "frozen_after")
-        expected_policy = ForexRegimeCandidatePolicy()
-        expected_implementation = expected_candidate_implementation_sha256()
+        expected_policy = policy
+        expected_implementation = implementation_factory()
         content_sha256 = report.get("content_sha256")
         cutoff = report.get("source_cutoff_sequence")
         accepted_count = report.get("accepted_cycle_count")
@@ -773,8 +864,7 @@ def verify_forex_v2_forward_evidence_report(
             generated_at < frozen_after
             or type(report.get("schema_version")) is not int
             or report.get("schema_version") != 1
-            or report.get("mode")
-            != "FOREX_V2_FORWARD_SIGNAL_EVIDENCE_ONLY"
+            or report.get("mode") != mode
             or report.get("candidate_id") != expected_policy.candidate_id
             or frozen_after != expected_policy.frozen_after
             or report.get("policy_fingerprint_sha256")
@@ -912,17 +1002,69 @@ def verify_forex_v2_forward_evidence_report(
         return False
 
 
+def verify_forex_v2_forward_evidence_report(
+    value: object,
+    *,
+    require_complete: bool = False,
+) -> bool:
+    """Verify a V2 report before another subsystem trusts its milestone."""
+    return _verify_forex_candidate_forward_evidence_report(
+        value,
+        policy=ForexRegimeCandidatePolicy(),
+        mode="FOREX_V2_FORWARD_SIGNAL_EVIDENCE_ONLY",
+        implementation_factory=expected_candidate_implementation_sha256,
+        require_complete=require_complete,
+    )
+
+
+def verify_forex_v3_forward_evidence_report(
+    value: object,
+    *,
+    require_complete: bool = False,
+) -> bool:
+    """Verify a V3 report before another subsystem trusts its milestone."""
+    return _verify_forex_candidate_forward_evidence_report(
+        value,
+        policy=ForexStrengthCandidatePolicy(),
+        mode="FOREX_V3_FORWARD_SIGNAL_EVIDENCE_ONLY",
+        implementation_factory=expected_v3_candidate_implementation_sha256,
+        require_complete=require_complete,
+    )
+
+
 class ForexV2ForwardEvidenceReport:
     """Strictly load and atomically persist the latest forward-only report."""
 
     MAX_SOURCE_BYTES = 100_000_000
     MAX_REPORT_BYTES = 25_000_000
+    REPORT_FILENAME = "forward_v2_latest.json"
+    LOCK_FILENAME = ".forward_v2_latest.lock"
+    TEMP_PREFIX = ".forward-v2-"
 
     def __init__(self, project_root: str | Path | None = None) -> None:
         root = resolve_project_root(project_root)
         self.observation_path = root / "data" / "trading" / "forex_observations.json"
-        self.path = root / "data" / "trading" / "research" / "forward_v2_latest.json"
-        self.lock_path = self.path.with_name(".forward_v2_latest.lock")
+        self.path = root / "data" / "trading" / "research" / self.REPORT_FILENAME
+        self.lock_path = self.path.with_name(self.LOCK_FILENAME)
+
+    def _expected_implementation_sha256(self) -> str:
+        return expected_candidate_implementation_sha256()
+
+    def _blocked_source_report(
+        self,
+        generated_at: datetime,
+        reason: str,
+        *,
+        implementation_sha256: str = "",
+    ) -> dict[str, Any]:
+        return _blocked_source_report(
+            generated_at,
+            reason,
+            implementation_sha256=implementation_sha256,
+        )
+
+    def _verify_report(self, value: object) -> bool:
+        return verify_forex_v2_forward_evidence_report(value)
 
     def build(
         self,
@@ -957,10 +1099,10 @@ class ForexV2ForwardEvidenceReport:
                 TradingValidationError,
             ) as error:
                 try:
-                    implementation = expected_candidate_implementation_sha256()
+                    implementation = self._expected_implementation_sha256()
                 except TradingValidationError:
                     implementation = ""
-                return _blocked_source_report(
+                return self._blocked_source_report(
                     selected_now,
                     str(error),
                     implementation_sha256=implementation,
@@ -977,7 +1119,7 @@ class ForexV2ForwardEvidenceReport:
             MemoryError,
             TradingValidationError,
         ) as error:
-            return _blocked_source_report(
+            return self._blocked_source_report(
                 selected_now,
                 f"forex_forward_evidence: source_build_invalid: {error}",
             )
@@ -989,7 +1131,7 @@ class ForexV2ForwardEvidenceReport:
                     generated_at=selected_now,
                 )
             except TradingValidationError:
-                return _blocked_source_report(
+                return self._blocked_source_report(
                     selected_now,
                     "forex_forward_evidence: saved_report_invalid",
                     implementation_sha256=str(
@@ -997,7 +1139,7 @@ class ForexV2ForwardEvidenceReport:
                     ),
                 )
             except (OSError, RuntimeError):
-                return _blocked_source_report(
+                return self._blocked_source_report(
                     selected_now,
                     "forex_forward_evidence: report_persistence_failed",
                     implementation_sha256=str(
@@ -1027,10 +1169,10 @@ class ForexV2ForwardEvidenceReport:
             TradingValidationError,
         ) as error:
             try:
-                implementation = expected_candidate_implementation_sha256()
+                implementation = self._expected_implementation_sha256()
             except TradingValidationError:
                 implementation = ""
-            return _blocked_source_report(
+            return self._blocked_source_report(
                 selected_now,
                 str(error),
                 implementation_sha256=implementation,
@@ -1045,7 +1187,7 @@ class ForexV2ForwardEvidenceReport:
             MemoryError,
             TradingValidationError,
         ) as error:
-            return _blocked_source_report(
+            return self._blocked_source_report(
                 selected_now,
                 f"forex_forward_evidence: source_build_invalid: {error}",
             )
@@ -1053,7 +1195,7 @@ class ForexV2ForwardEvidenceReport:
             try:
                 previous = self._load_saved_report()
             except (OSError, TradingValidationError):
-                return _blocked_source_report(
+                return self._blocked_source_report(
                     selected_now,
                     "forex_forward_evidence: saved_report_invalid",
                     implementation_sha256=str(
@@ -1063,7 +1205,7 @@ class ForexV2ForwardEvidenceReport:
             if previous is not None:
                 conflict = self._monotonic_conflict(previous, report, state)
                 if conflict is not None:
-                    return _blocked_source_report(
+                    return self._blocked_source_report(
                         selected_now,
                         f"forex_forward_evidence: {conflict}",
                         implementation_sha256=str(
@@ -1104,7 +1246,7 @@ class ForexV2ForwardEvidenceReport:
                     observation_state,
                 )
                 if conflict is not None:
-                    return _blocked_source_report(
+                    return self._blocked_source_report(
                         generated_at,
                         f"forex_forward_evidence: {conflict}",
                         implementation_sha256=str(
@@ -1198,7 +1340,7 @@ class ForexV2ForwardEvidenceReport:
         selected = dict(value)
         if (
             selected.get("source_state_valid") is not True
-            or not verify_forex_v2_forward_evidence_report(selected)
+            or not self._verify_report(selected)
         ):
             raise TradingValidationError(
                 "forex_forward_evidence: saved_report_invalid"
@@ -1208,7 +1350,7 @@ class ForexV2ForwardEvidenceReport:
     def _write_atomic(self, report: Mapping[str, Any]) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         descriptor, temporary_name = tempfile.mkstemp(
-            prefix=".forward-v2-",
+            prefix=self.TEMP_PREFIX,
             suffix=".json",
             dir=self.path.parent,
         )
@@ -1227,9 +1369,53 @@ class ForexV2ForwardEvidenceReport:
             raise
 
 
+class ForexV3ForwardEvidenceReport(ForexV2ForwardEvidenceReport):
+    """Persist V3 evidence independently while reusing the strict V2 safeguards."""
+
+    REPORT_FILENAME = "forward_v3_latest.json"
+    LOCK_FILENAME = ".forward_v3_latest.lock"
+    TEMP_PREFIX = ".forward-v3-"
+
+    def _expected_implementation_sha256(self) -> str:
+        return expected_v3_candidate_implementation_sha256()
+
+    def _blocked_source_report(
+        self,
+        generated_at: datetime,
+        reason: str,
+        *,
+        implementation_sha256: str = "",
+    ) -> dict[str, Any]:
+        return _blocked_source_report(
+            generated_at,
+            reason,
+            implementation_sha256=implementation_sha256,
+            policy=ForexStrengthCandidatePolicy(),
+            mode="FOREX_V3_FORWARD_SIGNAL_EVIDENCE_ONLY",
+        )
+
+    def _verify_report(self, value: object) -> bool:
+        return verify_forex_v3_forward_evidence_report(value)
+
+    def build(
+        self,
+        observation_state: object,
+        *,
+        generated_at: datetime | None = None,
+    ) -> dict[str, Any]:
+        return build_forex_v3_forward_evidence_report(
+            observation_state,
+            generated_at=generated_at,
+        )
+
+
 __all__ = [
     "ForexV2ForwardEvidenceReport",
+    "ForexV3ForwardEvidenceReport",
     "build_forex_v2_forward_evidence_report",
+    "build_forex_v3_forward_evidence_report",
     "expected_candidate_implementation_sha256",
+    "expected_v3_candidate_implementation_sha256",
     "verify_forex_v2_forward_evidence_report",
+    "verify_forex_v3_forward_evidence_report",
 ]

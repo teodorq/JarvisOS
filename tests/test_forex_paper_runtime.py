@@ -306,6 +306,39 @@ class ForexPaperRuntimeTests(unittest.TestCase):
             (self.root / "data/trading/research/forward_v2_owner_review.json").exists()
         )
 
+    def test_post_v3_freeze_cycle_persists_an_isolated_v3_report(self) -> None:
+        observed = datetime(2026, 9, 29, 18, 0, tzinfo=UTC)
+        result = ForexDemoPaperRuntime(
+            self.root,
+            settings=self.settings(),
+            gateway=FakeGateway(),  # type: ignore[arg-type]
+            journal=_ready_journal(self.root),
+        ).run_once(
+            cycle_id="strict-v3-forward-cycle",
+            now=observed,
+            capture_origin="SCHEDULED_FORWARD",
+            capture_attestation=_scheduled_attestation(
+                "strict-v3-forward-cycle"
+            ),
+        )
+
+        report = result["v3_forward_evidence"]
+        self.assertEqual(result["status"], "PAPER_CYCLE_COMPLETED")
+        self.assertEqual(report["status"], "COLLECTING_FORWARD_EVIDENCE")
+        self.assertEqual(
+            report["mode"],
+            "FOREX_V3_FORWARD_SIGNAL_EVIDENCE_ONLY",
+        )
+        self.assertEqual(report["candidate_id"], "FOREX_STRENGTH_V3_20260929")
+        self.assertEqual(report["accepted_cycle_count"], 1)
+        self.assertEqual(report["invalid_cycle_count"], 0)
+        self.assertFalse(report["automatic_paper_promotion"])
+        self.assertFalse(report["paper_orders_sent"])
+        self.assertFalse(report["live_orders_sent"])
+        self.assertTrue(
+            (self.root / "data/trading/research/forward_v3_latest.json").is_file()
+        )
+
     def test_report_write_failure_does_not_block_local_paper_cycle(self) -> None:
         result = ForexDemoPaperRuntime(
             self.root,

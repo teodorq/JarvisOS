@@ -9,7 +9,10 @@ from typing import Any, Mapping
 from app.market_data.forex_environment import ForexDataSettings
 from app.market_data.forex_gateway import ForexReadOnlyDataGateway
 from app.trading.forex_autopilot import ForexPaperAutopilot
-from app.trading.forex_forward_evidence import ForexV2ForwardEvidenceReport
+from app.trading.forex_forward_evidence import (
+    ForexV2ForwardEvidenceReport,
+    ForexV3ForwardEvidenceReport,
+)
 from app.trading.forex_forward_review import ForexV2OwnerReviewPacket
 from app.trading.forex_observation import (
     ForexObservationJournal,
@@ -33,6 +36,7 @@ class ForexDemoPaperRuntime:
         journal: ForexObservationJournal | None = None,
         autopilot: ForexPaperAutopilot | None = None,
         forward_evidence: ForexV2ForwardEvidenceReport | None = None,
+        v3_forward_evidence: ForexV3ForwardEvidenceReport | None = None,
         forward_review: ForexV2OwnerReviewPacket | None = None,
         performance_review: ForexPaperPerformanceReviewPacket | None = None,
     ) -> None:
@@ -43,6 +47,10 @@ class ForexDemoPaperRuntime:
         self.autopilot = autopilot or ForexPaperAutopilot(project_root)
         self.forward_evidence = forward_evidence or ForexV2ForwardEvidenceReport(
             project_root
+        )
+        self.v3_forward_evidence = (
+            v3_forward_evidence
+            or ForexV3ForwardEvidenceReport(project_root)
         )
         self.forward_review = forward_review or ForexV2OwnerReviewPacket(project_root)
         self.performance_review = (
@@ -78,6 +86,7 @@ class ForexDemoPaperRuntime:
                 capture_attestation=capture_attestation,
             )
             forward_evidence = self._refresh_forward_evidence(selected_now)
+            v3_forward_evidence = self._refresh_v3_forward_evidence(selected_now)
             forward_review = self._refresh_forward_review(
                 forward_evidence,
                 selected_now,
@@ -96,6 +105,7 @@ class ForexDemoPaperRuntime:
                     "CURRENT_OBSERVATION_BLOCKED",
                     observation=observation,
                     forward_evidence=forward_evidence,
+                    v3_forward_evidence=v3_forward_evidence,
                     forward_review=forward_review,
                 )
             review = self.journal.review()
@@ -105,6 +115,7 @@ class ForexDemoPaperRuntime:
                     "OBSERVATION_REVIEW_GATE_NOT_READY",
                     observation=observation,
                     forward_evidence=forward_evidence,
+                    v3_forward_evidence=v3_forward_evidence,
                     forward_review=forward_review,
                 )
             paper = self.autopilot.run_cycle(
@@ -135,6 +146,7 @@ class ForexDemoPaperRuntime:
             "unvalidated_strategy_demo_override": True,
             "observation": observation,
             "forward_evidence": forward_evidence,
+            "v3_forward_evidence": v3_forward_evidence,
             "forward_review": forward_review,
             "paper": paper,
             "performance_review": performance_review,
@@ -144,10 +156,12 @@ class ForexDemoPaperRuntime:
         }
 
     @staticmethod
-    def _report_write_failed() -> dict[str, Any]:
+    def _report_write_failed(
+        mode: str = "FOREX_V2_FORWARD_SIGNAL_EVIDENCE_ONLY",
+    ) -> dict[str, Any]:
         return {
             "status": "REPORT_WRITE_FAILED",
-            "mode": "FOREX_V2_FORWARD_SIGNAL_EVIDENCE_ONLY",
+            "mode": mode,
             "source_state_valid": False,
             "strategy_performance_validated": False,
             "automatic_paper_promotion": False,
@@ -162,6 +176,14 @@ class ForexDemoPaperRuntime:
             return self.forward_evidence.refresh(generated_at=now)
         except (OSError, RuntimeError, TradingValidationError):
             return self._report_write_failed()
+
+    def _refresh_v3_forward_evidence(self, now: datetime) -> dict[str, Any]:
+        try:
+            return self.v3_forward_evidence.refresh(generated_at=now)
+        except (OSError, RuntimeError, TradingValidationError):
+            return self._report_write_failed(
+                "FOREX_V3_FORWARD_SIGNAL_EVIDENCE_ONLY"
+            )
 
     def _refresh_forward_review(
         self,
@@ -264,6 +286,7 @@ class ForexDemoPaperRuntime:
         *,
         observation: dict[str, Any] | None = None,
         forward_evidence: dict[str, Any] | None = None,
+        v3_forward_evidence: dict[str, Any] | None = None,
         forward_review: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         return {
@@ -273,6 +296,7 @@ class ForexDemoPaperRuntime:
             "reason": reason,
             "observation": observation or {},
             "forward_evidence": forward_evidence or {},
+            "v3_forward_evidence": v3_forward_evidence or {},
             "forward_review": forward_review or {},
             "broker_orders_sent": False,
             "live_orders_sent": False,

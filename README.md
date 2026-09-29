@@ -336,8 +336,11 @@ snapshots/nonces are explicitly excluded. Legacy observations remain available
 in the tamper-evident journal but are never retroactively upgraded to the stricter
 contract.
 
-Every automatic PAPER cycle atomically refreshes the ignored report at
-`data/trading/research/forward_v2_latest.json`. It records the exact journal
+Every automatic PAPER cycle atomically refreshes two isolated ignored reports:
+`data/trading/research/forward_v2_latest.json` and
+`data/trading/research/forward_v3_latest.json`. V3 accepts only observation
+schema 3 cycles captured after its own freeze and cannot reuse older V2 evidence.
+Each report records the exact journal
 cutoff/head hash, accepted observation hashes, exclusion reasons and its own
 content SHA-256. Cross-process locks prevent two local cycles from losing a
 journal entry, and a stale report cannot replace a newer cutoff. At the bounded
@@ -370,6 +373,8 @@ observation threshold never establishes trading performance or profitability.
 ```powershell
 .\.venv\Scripts\python.exe .\tools\run_forex_forward_evidence.py
 .\.venv\Scripts\python.exe .\tools\run_forex_forward_evidence.py --review
+.\.venv\Scripts\python.exe .\tools\run_forex_forward_evidence.py --candidate v3
+.\.venv\Scripts\python.exe .\tools\run_forex_forward_evidence.py --candidate v3 --review
 ```
 
 If one M15 candle touches both stop and target, the backtest records the stop

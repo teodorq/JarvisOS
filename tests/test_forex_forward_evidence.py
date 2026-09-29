@@ -7,12 +7,17 @@ import json
 from pathlib import Path
 
 from app.trading.forex_candidate_v2 import ForexRegimeCandidatePolicy
+from app.trading.forex_candidate_v3 import ForexStrengthCandidatePolicy
 from app.trading.forex_activity_journal import ForexPaperActivityJournal
 from app.trading.forex_forward_evidence import (
     ForexV2ForwardEvidenceReport,
+    ForexV3ForwardEvidenceReport,
     build_forex_v2_forward_evidence_report,
+    build_forex_v3_forward_evidence_report,
     expected_candidate_implementation_sha256,
+    expected_v3_candidate_implementation_sha256,
     verify_forex_v2_forward_evidence_report,
+    verify_forex_v3_forward_evidence_report,
 )
 from app.trading.forex_forward_review import ForexV2OwnerReviewPacket
 from app.trading.forex_models import MAJOR_FOREX_PAIRS
@@ -23,6 +28,7 @@ from app.trading.forex_v2_research_dashboard import ForexV2ResearchDashboard
 
 UTC = timezone.utc
 AFTER_FREEZE = datetime(2026, 8, 21, 10, 0, tzinfo=UTC)
+AFTER_V3_FREEZE = datetime(2026, 9, 29, 18, 0, tzinfo=UTC)
 
 
 def _fingerprint(seed: str) -> str:
@@ -162,6 +168,42 @@ def _state(tmp_path: Path, *records: dict[str, object]) -> dict[str, object]:
     for record in records:
         journal.record(record)
     return journal.snapshot()
+
+
+def _v3_record(
+    observed_at: datetime = AFTER_V3_FREEZE,
+    *,
+    seed: str = "v3-accepted",
+    observation_id: str = "forward-v3-observation-accepted",
+) -> dict[str, object]:
+    record = _record(
+        observed_at,
+        seed=seed,
+        observation_id=observation_id,
+    )
+    policy = ForexStrengthCandidatePolicy()
+    sample = build_forex_paper_sample_contract()
+    record["observation_schema_version"] = 3
+    record["development_candidate_v3"] = {
+        "status": "FORWARD_OBSERVATION_RECORDED",
+        "candidate_id": policy.candidate_id,
+        "policy_fingerprint_sha256": policy.fingerprint_sha256,
+        "implementation_sha256": (
+            expected_v3_candidate_implementation_sha256()
+        ),
+        "paper_sample_contract_id": sample["contract_id"],
+        "paper_sample_contract_fingerprint_sha256": sample[
+            "fingerprint_sha256"
+        ],
+        "forward_eligible": policy.forward_eligible(observed_at),
+        "assessments": _assessments(retained=False),
+        "proposed_plan": {"instructions": []},
+        "execution": {"status": "NOT_EXECUTED"},
+        "automatic_paper_promotion": False,
+        "paper_orders_sent": False,
+        "live_orders_sent": False,
+    }
+    return record
 
 
 def test_accepts_one_strict_post_freeze_cycle_and_reports_signals(
@@ -1189,3 +1231,97 @@ def test_twentieth_forward_observation_freezes_one_safe_owner_milestone(
     assert blocked_view["status"] == "BLOCKED_INVALID_FORWARD_EVIDENCE"
     assert blocked_view["source_valid"] is False
     assert blocked_view["live_activation_ready"] is False
+
+
+def test_v3_report_accepts_only_strict_schema_three_forward_cycles(
+    tmp_path: Path,
+) -> None:
+    state = _state(tmp_path, _v3_record())
+
+    report = build_forex_v3_forward_evidence_report(
+        state,
+        generated_at=AFTER_V3_FREEZE + timedelta(hours=1),
+    )
+
+    assert report["status"] == "COLLECTING_FORWARD_EVIDENCE"
+    assert report["mode"] == "FOREX_V3_FORWARD_SIGNAL_EVIDENCE_ONLY"
+    assert report["candidate_id"] == "FOREX_STRENGTH_V3_20260929"
+    assert report["implementation_sha256"] == (
+        expected_v3_candidate_implementation_sha256()
+    )
+    assert report["accepted_cycle_count"] == 1
+    assert report["accepted_market_day_count"] == 1
+    assert report["excluded_cycle_count"] == 0
+    assert report["invalid_cycle_count"] == 0
+    assert report["signal_comparison"] == {
+        "base_entry_signal_count": 1,
+        "retained_entry_signal_count": 0,
+        "filtered_entry_signal_count": 1,
+    }
+    assert report["automatic_paper_promotion"] is False
+    assert report["paper_orders_sent"] is False
+    assert report["live_orders_sent"] is False
+    assert report["real_money_access"] is False
+    assert verify_forex_v3_forward_evidence_report(report) is True
+    assert verify_forex_v3_forward_evidence_report(
+        report,
+        require_complete=True,
+    ) is False
+
+
+def test_v3_report_excludes_schema_two_even_with_a_forged_v3_payload(
+    tmp_path: Path,
+) -> None:
+    legacy = _v3_record(
+        seed="v3-legacy",
+        observation_id="forward-v3-observation-legacy",
+    )
+    legacy["observation_schema_version"] = 2
+    state = _state(tmp_path, legacy)
+
+    report = build_forex_v3_forward_evidence_report(
+        state,
+        generated_at=AFTER_V3_FREEZE + timedelta(hours=1),
+    )
+
+    assert report["accepted_cycle_count"] == 0
+    assert report["excluded_cycle_count"] == 1
+    assert report["invalid_cycle_count"] == 0
+    assert report["exclusions"] == {"LEGACY_SCHEMA": 1}
+    assert verify_forex_v3_forward_evidence_report(report) is True
+
+
+def test_v3_report_persists_separately_and_rejects_order_flags(
+    tmp_path: Path,
+) -> None:
+    reporter = ForexV3ForwardEvidenceReport(tmp_path)
+    state = _state(tmp_path, _v3_record())
+
+    saved = reporter.refresh(
+        state,
+        generated_at=AFTER_V3_FREEZE + timedelta(hours=1),
+    )
+
+    assert reporter.path.name == "forward_v3_latest.json"
+    assert reporter.path.is_file()
+    assert not reporter.path.with_name("forward_v2_latest.json").exists()
+    assert verify_forex_v3_forward_evidence_report(saved) is True
+
+    unsafe_root = tmp_path / "unsafe"
+    unsafe = _v3_record(
+        seed="v3-unsafe",
+        observation_id="forward-v3-observation-unsafe",
+    )
+    unsafe["development_candidate_v3"]["paper_orders_sent"] = True
+    blocked = build_forex_v3_forward_evidence_report(
+        _state(unsafe_root, unsafe),
+        generated_at=AFTER_V3_FREEZE + timedelta(hours=1),
+    )
+    assert blocked["status"] == "BLOCKED_INVALID_FORWARD_EVIDENCE"
+    assert blocked["accepted_cycle_count"] == 0
+    assert blocked["invalid_cycle_count"] == 1
+    assert blocked["invalid_issues"] == {
+        "CANDIDATE_PAPER_ORDER_FLAG_INVALID": 1,
+    }
+    assert blocked["paper_orders_sent"] is False
+    assert blocked["live_orders_sent"] is False

@@ -19,8 +19,11 @@ from app.trading.forex_autopilot import ForexPaperAutopilot
 from app.trading.forex_executor import ForexPaperExecutionEngine
 from app.trading.forex_forward_evidence import (
     ForexV2ForwardEvidenceReport,
+    ForexV3ForwardEvidenceReport,
     build_forex_v2_forward_evidence_report,
+    build_forex_v3_forward_evidence_report,
     verify_forex_v2_forward_evidence_report,
+    verify_forex_v3_forward_evidence_report,
 )
 from app.trading.forex_forward_review import (
     ForexV2OwnerReviewPacket,
@@ -134,6 +137,7 @@ __all__ = [
     "ForexPaperAutopilot",
     "ForexPaperExecutionEngine",
     "ForexV2ForwardEvidenceReport",
+    "ForexV3ForwardEvidenceReport",
     "ForexV2OwnerReviewPacket",
     "ForexPaperInstruction",
     "ForexPaperLedger",
@@ -176,9 +180,11 @@ __all__ = [
     "build_forex_paper_performance_review",
     "build_forex_paper_performance_review_packet",
     "build_forex_v2_forward_evidence_report",
+    "build_forex_v3_forward_evidence_report",
     "build_forex_v2_owner_review_packet",
     "verify_forex_v2_owner_review_lineage",
     "verify_forex_v2_forward_evidence_report",
+    "verify_forex_v3_forward_evidence_report",
     "verify_forex_v2_owner_review_packet",
     "verify_forex_paper_performance_review_lineage",
     "verify_forex_paper_performance_review_packet",
