@@ -203,6 +203,9 @@ Every newly opened PAPER position now preserves its exact execution-time risk in
 PLN in both the position and fill audit. The read-only position table displays
 that value; older positions created before this telemetry field are labelled as
 missing historical risk instead of being reconstructed from a later exchange rate.
+The sample summary and every pair row also expose whether an R result was stored
+at close time or derived for an older audited fill. Any mismatch is shown as a
+review block instead of ordinary sample progress.
 On observer start, MT5 recovery or a long runtime gap, JARVIS runs the local
 close-only position check before any full analysis cycle. New PAPER entries stay
 locked until that check returns a healthy result. This stricter execution rule is

@@ -8,6 +8,13 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QHeaderView, QTableWidget, QTableWidgetItem
 
 
+def _count(value: object) -> int:
+    try:
+        return max(0, min(int(value or 0), 1_000_000))
+    except (TypeError, ValueError):
+        return 0
+
+
 class ForexPairResultsTable(QTableWidget):
     """Render sanitized PAPER metrics without any execution controls."""
 
@@ -49,10 +56,18 @@ class ForexPairResultsTable(QTableWidget):
             factor = metrics.get("profit_factor")
             raw_risk = metrics.get("risk_diagnostics")
             risk = dict(raw_risk) if isinstance(raw_risk, Mapping) else {}
-            risk_count = risk.get("risk_observed_trade_count", 0)
-            risk_total = risk.get("closed_trade_count", 0)
+            risk_count = _count(risk.get("risk_observed_trade_count"))
+            risk_total = _count(risk.get("closed_trade_count"))
+            recorded_r = _count(risk.get("realized_r_recorded_trade_count"))
+            derived_r = _count(risk.get("realized_r_derived_trade_count"))
+            mismatched_r = _count(risk.get("realized_r_mismatch_count"))
             risk_coverage = risk.get("risk_coverage_pct", "0.00")
             average_r = risk.get("average_r_multiple")
+            risk_provenance = (
+                f"Zapisane przy zamknięciu: {recorded_r}. "
+                f"Wyliczone kontrolnie ze starszych zapisów: {derived_r}. "
+                f"Niezgodności: {mismatched_r}."
+            )
             review_status = {
                 "NO_CLOSED_TRADES": "BRAK DANYCH",
                 "COLLECTING_PAIR_SAMPLE": "ZBIERANIE",
@@ -79,6 +94,8 @@ class ForexPairResultsTable(QTableWidget):
             for column, value in enumerate(columns):
                 item = QTableWidgetItem(value)
                 item.setTextAlignment(Qt.AlignCenter)
+                if column == 10:
+                    item.setToolTip(risk_provenance)
                 self.setItem(row, column, item)
 
 

@@ -23,6 +23,18 @@ def _number(value: object, places: int) -> str | None:
     return f"{number:.{places}f}"
 
 
+def _risk_evidence_invalid(value: object) -> bool:
+    performance = dict(value) if isinstance(value, dict) else {}
+    raw = performance.get("risk_diagnostics")
+    if not isinstance(raw, dict):
+        return False
+    observed = _count(raw.get("risk_observed_trade_count"))
+    recorded = _count(raw.get("realized_r_recorded_trade_count"))
+    derived = _count(raw.get("realized_r_derived_trade_count"))
+    mismatched = _count(raw.get("realized_r_mismatch_count"))
+    return mismatched > 0 or (observed > 0 and recorded + derived != observed)
+
+
 def _risk_detail(value: object) -> str:
     performance = dict(value) if isinstance(value, dict) else {}
     raw = performance.get("risk_diagnostics")
@@ -30,6 +42,8 @@ def _risk_detail(value: object) -> str:
     count = _count(risk.get("closed_trade_count"))
     observed = _count(risk.get("risk_observed_trade_count"))
     missing = _count(risk.get("risk_missing_trade_count"))
+    recorded = _count(risk.get("realized_r_recorded_trade_count"))
+    derived = _count(risk.get("realized_r_derived_trade_count"))
     if count == 0:
         return " Dane R pojawią się po zamknięciu nowej pozycji."
     if observed > count or missing != count - observed:
@@ -60,6 +74,8 @@ def _risk_detail(value: object) -> str:
         f" Dane R: {observed}/{count} ({coverage}%); suma {net} R, "
         f"średnia {average} R, maksymalne obserwowane obsunięcie {drawdown} R, "
         f"najdłuższa seria strat {loss_streak}. "
+        f"Źródło R: zapisane przy zamknięciu {recorded}, wyliczone kontrolnie "
+        f"ze starszych zapisów {derived}. "
         f"1 R oznacza początkowe ryzyko pozycji. "
         f"{completeness}"
     )
@@ -74,6 +90,13 @@ def forex_performance_review_view(
     source_valid = review.get("source_valid") is True
     persisted = review.get("packet_persisted") is True
     frozen = review.get("review_snapshot_frozen") is True
+    if _risk_evidence_invalid(performance):
+        return (
+            "PRÓBKA: BLOKADA",
+            "danger",
+            "Dane R są niespójne z wynikiem i początkowym ryzykiem. "
+            "Raport próbki pozostaje zablokowany, a handel LIVE wyłączony.",
+        )
     if (
         status == "READY_FOR_OWNER_REVIEW"
         and source_valid

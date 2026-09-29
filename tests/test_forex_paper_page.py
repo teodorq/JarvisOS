@@ -52,6 +52,9 @@ class _Dashboard:
                             "closed_trade_count": 1,
                             "risk_observed_trade_count": 1,
                             "risk_missing_trade_count": 0,
+                            "realized_r_recorded_trade_count": 1,
+                            "realized_r_derived_trade_count": 0,
+                            "realized_r_mismatch_count": 0,
                             "risk_coverage_pct": "100.00",
                             "average_r_multiple": "-0.5000",
                         },
@@ -178,6 +181,9 @@ def test_forex_page_shows_position_and_has_no_execution_controls() -> None:
         assert page.pair_table.item(3, 8).text() == "1/20"
         assert page.pair_table.item(3, 9).text() == "ZBIERANIE"
         assert page.pair_table.item(3, 10).text() == "1/1 (100.00%)"
+        assert "Zapisane przy zamknięciu: 1" in (
+            page.pair_table.item(3, 10).toolTip()
+        )
         assert page.pair_table.item(3, 11).text() == "-0.5000"
         assert page.history_table.rowCount() == 2
         assert page.history_table.item(0, 1).text() == "OCHRONA SL/TP — UWAGA"
@@ -254,6 +260,9 @@ def test_performance_review_view_explains_partial_risk_coverage() -> None:
                 "closed_trade_count": 4,
                 "risk_observed_trade_count": 3,
                 "risk_missing_trade_count": 1,
+                "realized_r_recorded_trade_count": 1,
+                "realized_r_derived_trade_count": 2,
+                "realized_r_mismatch_count": 0,
                 "risk_coverage_pct": "75.00",
                 "net_r_multiple": "1.2500",
                 "average_r_multiple": "0.4167",
@@ -269,8 +278,34 @@ def test_performance_review_view_explains_partial_risk_coverage() -> None:
     assert "suma 1.2500 R" in detail
     assert "obsunięcie 0.7500 R" in detail
     assert "seria strat 2" in detail
+    assert "zapisane przy zamknięciu 1" in detail
+    assert "ze starszych zapisów 2" in detail
     assert "1 R oznacza początkowe ryzyko pozycji" in detail
     assert "nie szacuje" in detail
+
+
+def test_performance_review_view_blocks_mismatched_r_evidence() -> None:
+    label, tone, detail = forex_performance_review_view(
+        {
+            "status": "WAITING_FOR_PAPER_SAMPLE",
+            "source_valid": True,
+            "valid_closed_trade_count": 1,
+            "minimum_closed_trades_for_review": 20,
+        },
+        {
+            "risk_diagnostics": {
+                "risk_observed_trade_count": 1,
+                "realized_r_recorded_trade_count": 0,
+                "realized_r_derived_trade_count": 1,
+                "realized_r_mismatch_count": 1,
+            },
+        },
+    )
+
+    assert label == "PRÓBKA: BLOKADA"
+    assert tone == "danger"
+    assert "Dane R są niespójne" in detail
+    assert "LIVE wyłączony" in detail
 
 
 def test_v2_research_text_does_not_call_signal_sample_a_result() -> None:
