@@ -33,6 +33,7 @@ from app.trading.forex_runtime_summary import ForexRuntimeCycleSummary
 from app.trading.forex_scanner import ForexMarketScanner
 from app.trading.forex_strategy_cohorts import ForexStrategyCohortReview
 from app.trading.forex_v2_research_dashboard import ForexV2ResearchDashboard
+from app.trading.forex_v3_shadow import ForexV3ShadowReadiness
 from app.trading.paper_broker import PaperTradingEngine
 from app.trading.policy import PaperTradingPolicy
 from app.trading.risk import PreTradeRiskEngine
@@ -71,6 +72,10 @@ class TradingControlCenter:
         self.forex_v3_forward_evidence = ForexV3ForwardEvidenceReport(
             self.project_root
         )
+        self.forex_v3_shadow = ForexV3ShadowReadiness(
+            self.project_root,
+            forward_evidence=self.forex_v3_forward_evidence,
+        )
         self.forex_forward_review = ForexV2OwnerReviewPacket(self.project_root)
         self.forex_strategy_cohorts = ForexStrategyCohortReview(
             self.project_root
@@ -96,6 +101,7 @@ class TradingControlCenter:
         research = self.forex_research.status()
         forward_evidence = self.forex_forward_evidence.review()
         v3_forward_evidence = self.forex_v3_forward_evidence.review()
+        v3_shadow = self.forex_v3_shadow.status()
         forward_review = self.forex_forward_review.review(forward_evidence)
         forex_account = self.forex_executor.status()
         performance_review = self.forex_performance_review.review(
@@ -152,6 +158,14 @@ class TradingControlCenter:
                     v3_forward_evidence.get("source_state_valid") is True
                     and not v3_forward_evidence.get("invalid_cycle_count", 0)
                 ),
+                "forex_v3_shadow_readiness": bool(
+                    v3_shadow.get("status")
+                    in {
+                        "WAITING_FOR_FORWARD_SAMPLE",
+                        "READY_FOR_MANUAL_SHADOW_INITIALIZATION",
+                    }
+                    and v3_shadow.get("shadow_execution_enabled") is False
+                ),
                 "forex_v2_owner_review_packet": bool(
                     forward_review.get("status") == "READY_FOR_OWNER_REVIEW"
                     and forward_review.get("packet_persisted") is True
@@ -191,6 +205,7 @@ class TradingControlCenter:
                 "historical_research": research,
                 "v2_forward_evidence": forward_evidence,
                 "v3_forward_evidence": v3_forward_evidence,
+                "v3_shadow": v3_shadow,
                 "v2_owner_review": forward_review,
                 "paper_account": forex_account,
                 "paper_performance_review": performance_review,
@@ -449,6 +464,7 @@ class TradingControlCenter:
         research = snapshot["forex"]["historical_research"]
         forward_evidence = snapshot["forex"]["v2_forward_evidence"]
         v3_forward_evidence = snapshot["forex"]["v3_forward_evidence"]
+        v3_shadow = snapshot["forex"]["v3_shadow"]
         forward_review = snapshot["forex"]["v2_owner_review"]
         strategy_cohorts = snapshot["forex"]["strategy_cohort_review"]
         cohort_values = dict(strategy_cohorts.get("cohorts", {}) or {})
@@ -706,6 +722,22 @@ class TradingControlCenter:
                 "ZABLOKOWANY — bieżące dowody V3 nie przeszły walidacji"
             )
             v3_signal_text = "niedostępne — dowody zablokowane"
+        if v3_shadow.get("status") == "READY_FOR_MANUAL_SHADOW_INITIALIZATION":
+            v3_shadow_text = (
+                "gotowy do ręcznej inicjalizacji oddzielnej księgi; wykonanie "
+                "pozostaje wyłączone"
+            )
+        elif v3_shadow.get("status") == "WAITING_FOR_FORWARD_SAMPLE":
+            v3_shadow_text = (
+                "zablokowany do ukończenia próbki — brakuje "
+                f"{v3_shadow.get('remaining_accepted_cycles', 20)} cykli i "
+                f"{v3_shadow.get('remaining_market_days', 3)} dni rynkowych; "
+                "oddzielna księga nie została jeszcze utworzona"
+            )
+        else:
+            v3_shadow_text = (
+                "ZABLOKOWANY — dowody nie pozwalają przygotować oddzielnej księgi"
+            )
         if not observation["audit_chain_valid"]:
             gate = (
                 "ZABLOKOWANA — łańcuch audytu obserwacji jest uszkodzony; "
@@ -827,6 +859,7 @@ class TradingControlCenter:
             f"• Forward V3: {v3_progress_text}.\n"
             f"• Forward V3 — sygnały wejścia: {v3_signal_text}; "
             "bez automatycznej zmiany PAPER/LIVE.\n"
+            f"• Portfel V3 SHADOW: {v3_shadow_text}.\n"
             f"• Bramka PAPER: {gate}.\n"
             "• Dane Forex: lokalny adapter MT5 DEMO, opcjonalny OANDA Practice, "
             "Twelve Data, NBP i publiczny kalendarz Forex Factory oraz kontrola "

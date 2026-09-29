@@ -96,6 +96,7 @@ from app.trading.forex_strategy_walk_forward import (
 from app.trading.forex_trade_diagnostics import (
     build_forex_trade_diagnostics,
 )
+from app.trading.forex_v3_shadow import ForexV3ShadowReadiness
 from app.trading.forex_risk_diagnostics import build_forex_risk_diagnostics
 from app.trading.ledger import PaperTradingLedger
 from app.trading.models import (
@@ -155,6 +156,7 @@ __all__ = [
     "ForexRegimeFilteredScanner",
     "ForexStrengthCandidatePolicy",
     "ForexStrengthFilteredScanner",
+    "ForexV3ShadowReadiness",
     "ForexRiskDecision",
     "ForexPaperPerformanceReviewPacket",
     "ForexSafetyContext",

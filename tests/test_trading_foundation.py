@@ -387,6 +387,7 @@ class TradingControlAndRoutingTests(unittest.TestCase):
         self.assertFalse(status["components"]["external_paper_broker"])
         self.assertFalse(status["components"]["forex_v2_owner_review_packet"])
         self.assertFalse(status["components"]["forex_v3_forward_evidence_report"])
+        self.assertFalse(status["components"]["forex_v3_shadow_readiness"])
         self.assertEqual(
             status["forex"]["v2_owner_review"]["status"],
             "WAITING_FOR_FORWARD_SAMPLE",
@@ -404,6 +405,7 @@ class TradingControlAndRoutingTests(unittest.TestCase):
         self.assertIn("Pakiet przeglądu Forex V2: zbieranie próbki 0/20", rendered)
         self.assertIn("Forward V2 — sygnały wejścia: bazowe 0", rendered)
         self.assertIn("Forward V3: ZABLOKOWANY", rendered)
+        self.assertIn("Portfel V3 SHADOW: ZABLOKOWANY", rendered)
         self.assertIn("brak sygnałów do porównania", rendered)
         self.assertIn(
             "Zamrożony pakiet wyniku PAPER: oczekuje na próbkę 0/20",
@@ -706,6 +708,12 @@ class TradingControlAndRoutingTests(unittest.TestCase):
                     "filtered_entry_signal_count": 1,
                 },
             })
+            snapshot["forex"]["v3_shadow"].update({
+                "status": "WAITING_FOR_FORWARD_SAMPLE",
+                "remaining_accepted_cycles": 17,
+                "remaining_market_days": 2,
+                "shadow_execution_enabled": False,
+            })
             with patch.object(center, "status", return_value=snapshot):
                 rendered = center.format_status()
 
@@ -714,6 +722,11 @@ class TradingControlAndRoutingTests(unittest.TestCase):
         self.assertIn("Forward V3: zbieranie próbki 3/20, dni 1/3", rendered)
         self.assertIn("1 powtórzony odczyt pominięty", rendered)
         self.assertIn("V3 zachował 1, odfiltrował 1", rendered)
+        self.assertIn(
+            "Portfel V3 SHADOW: zablokowany do ukończenia próbki — brakuje "
+            "17 cykli i 2 dni rynkowych",
+            rendered,
+        )
 
     def test_observation_progress_phrases_are_owner_only_read_only_status(self) -> None:
         variants = (
