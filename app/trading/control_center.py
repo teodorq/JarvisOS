@@ -34,6 +34,9 @@ from app.trading.forex_scanner import ForexMarketScanner
 from app.trading.forex_strategy_cohorts import ForexStrategyCohortReview
 from app.trading.forex_v2_research_dashboard import ForexV2ResearchDashboard
 from app.trading.forex_v3_shadow import ForexV3ShadowReadiness
+from app.trading.forex_v3_shadow_plan_journal import (
+    ForexV3ShadowPlanJournal,
+)
 from app.trading.paper_broker import PaperTradingEngine
 from app.trading.policy import PaperTradingPolicy
 from app.trading.risk import PreTradeRiskEngine
@@ -76,6 +79,9 @@ class TradingControlCenter:
             self.project_root,
             forward_evidence=self.forex_v3_forward_evidence,
         )
+        self.forex_v3_shadow_plans = ForexV3ShadowPlanJournal(
+            self.project_root
+        )
         self.forex_forward_review = ForexV2OwnerReviewPacket(self.project_root)
         self.forex_strategy_cohorts = ForexStrategyCohortReview(
             self.project_root
@@ -102,6 +108,7 @@ class TradingControlCenter:
         forward_evidence = self.forex_forward_evidence.review()
         v3_forward_evidence = self.forex_v3_forward_evidence.review()
         v3_shadow = self.forex_v3_shadow.status()
+        v3_shadow_plans = self.forex_v3_shadow_plans.summary()
         forward_review = self.forex_forward_review.review(forward_evidence)
         forex_account = self.forex_executor.status()
         performance_review = self.forex_performance_review.review(
@@ -167,6 +174,11 @@ class TradingControlCenter:
                     }
                     and v3_shadow.get("shadow_execution_enabled") is False
                 ),
+                "forex_v3_shadow_plan_journal": bool(
+                    v3_shadow_plans.get("audit_chain_valid") is True
+                    and v3_shadow_plans.get("shadow_execution_enabled")
+                    is False
+                ),
                 "forex_v2_owner_review_packet": bool(
                     forward_review.get("status") == "READY_FOR_OWNER_REVIEW"
                     and forward_review.get("packet_persisted") is True
@@ -207,6 +219,7 @@ class TradingControlCenter:
                 "v2_forward_evidence": forward_evidence,
                 "v3_forward_evidence": v3_forward_evidence,
                 "v3_shadow": v3_shadow,
+                "v3_shadow_plans": v3_shadow_plans,
                 "v2_owner_review": forward_review,
                 "paper_account": forex_account,
                 "paper_performance_review": performance_review,
@@ -466,6 +479,7 @@ class TradingControlCenter:
         forward_evidence = snapshot["forex"]["v2_forward_evidence"]
         v3_forward_evidence = snapshot["forex"]["v3_forward_evidence"]
         v3_shadow = snapshot["forex"]["v3_shadow"]
+        v3_shadow_plans = snapshot["forex"]["v3_shadow_plans"]
         forward_review = snapshot["forex"]["v2_owner_review"]
         strategy_cohorts = snapshot["forex"]["strategy_cohort_review"]
         cohort_values = dict(strategy_cohorts.get("cohorts", {}) or {})
@@ -744,6 +758,26 @@ class TradingControlCenter:
             v3_shadow_text = (
                 "ZABLOKOWANY — dowody nie pozwalają przygotować oddzielnej księgi"
             )
+        if v3_shadow_plans.get("status") == "COLLECTING_SHADOW_PLANS":
+            v3_shadow_plans_text = (
+                f"zapisane {v3_shadow_plans.get('plan_count', 0)}; plany wejścia "
+                f"{v3_shadow_plans.get('entry_plan_count', 0)}, zamknięcia "
+                f"{v3_shadow_plans.get('close_plan_count', 0)}, bez działania "
+                f"{v3_shadow_plans.get('no_action_plan_count', 0)}; wykonanie "
+                "wyłączone"
+            )
+        elif (
+            v3_shadow_plans.get("status")
+            == "WAITING_FOR_FIRST_SHADOW_PLAN"
+        ):
+            v3_shadow_plans_text = (
+                "oczekuje na bezpieczną inicjalizację i pierwszy plan; nie "
+                "utworzono żadnej pozycji"
+            )
+        else:
+            v3_shadow_plans_text = (
+                "ZABLOKOWANY — dziennik planów nie przeszedł kontroli audytu"
+            )
         if not observation["audit_chain_valid"]:
             gate = (
                 "ZABLOKOWANA — łańcuch audytu obserwacji jest uszkodzony; "
@@ -866,6 +900,7 @@ class TradingControlCenter:
             f"• Forward V3 — sygnały wejścia: {v3_signal_text}; "
             "bez automatycznej zmiany PAPER/LIVE.\n"
             f"• Portfel V3 SHADOW: {v3_shadow_text}.\n"
+            f"• Dziennik planów V3 SHADOW: {v3_shadow_plans_text}.\n"
             f"• Bramka PAPER: {gate}.\n"
             "• Dane Forex: lokalny adapter MT5 DEMO, opcjonalny OANDA Practice, "
             "Twelve Data, NBP i publiczny kalendarz Forex Factory oraz kontrola "

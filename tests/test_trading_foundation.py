@@ -388,6 +388,9 @@ class TradingControlAndRoutingTests(unittest.TestCase):
         self.assertFalse(status["components"]["forex_v2_owner_review_packet"])
         self.assertFalse(status["components"]["forex_v3_forward_evidence_report"])
         self.assertFalse(status["components"]["forex_v3_shadow_readiness"])
+        self.assertTrue(
+            status["components"]["forex_v3_shadow_plan_journal"]
+        )
         self.assertEqual(
             status["forex"]["v2_owner_review"]["status"],
             "WAITING_FOR_FORWARD_SAMPLE",
@@ -406,6 +409,10 @@ class TradingControlAndRoutingTests(unittest.TestCase):
         self.assertIn("Forward V2 — sygnały wejścia: bazowe 0", rendered)
         self.assertIn("Forward V3: ZABLOKOWANY", rendered)
         self.assertIn("Portfel V3 SHADOW: ZABLOKOWANY", rendered)
+        self.assertIn(
+            "Dziennik planów V3 SHADOW: oczekuje na bezpieczną inicjalizację",
+            rendered,
+        )
         self.assertIn("brak sygnałów do porównania", rendered)
         self.assertIn(
             "Zamrożony pakiet wyniku PAPER: oczekuje na próbkę 0/20",
@@ -737,6 +744,14 @@ class TradingControlAndRoutingTests(unittest.TestCase):
                 "shadow_ledger_initialized": True,
                 "shadow_execution_enabled": False,
             })
+            snapshot["forex"]["v3_shadow_plans"].update({
+                "status": "COLLECTING_SHADOW_PLANS",
+                "plan_count": 3,
+                "entry_plan_count": 1,
+                "close_plan_count": 1,
+                "no_action_plan_count": 1,
+                "shadow_execution_enabled": False,
+            })
             with patch.object(center, "status", return_value=snapshot):
                 rendered = center.format_status()
 
@@ -744,6 +759,11 @@ class TradingControlAndRoutingTests(unittest.TestCase):
             "Portfel V3 SHADOW: oddzielna księga została bezpiecznie "
             "zainicjalizowana; jest pusta, audytowana, a wykonanie pozostaje "
             "wyłączone",
+            rendered,
+        )
+        self.assertIn(
+            "Dziennik planów V3 SHADOW: zapisane 3; plany wejścia 1, "
+            "zamknięcia 1, bez działania 1; wykonanie wyłączone",
             rendered,
         )
 

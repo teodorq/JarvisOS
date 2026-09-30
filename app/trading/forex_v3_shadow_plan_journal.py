@@ -56,6 +56,53 @@ class ForexV3ShadowPlanJournal:
         with self._lock:
             return deepcopy(self._load())
 
+    def summary(self) -> dict[str, Any]:
+        state = self.snapshot()
+        valid = self.verify(state)
+        plans = list(state.get("plans", []) or []) if valid else []
+        decisions = {
+            "ENTRIES_READY": 0,
+            "CLOSES_READY": 0,
+            "NO_ACTION": 0,
+        }
+        instruction_count = 0
+        for entry in plans:
+            decision = str(entry.get("decision_status", ""))
+            if decision in decisions:
+                decisions[decision] += 1
+            count = entry.get("instruction_count")
+            if type(count) is int and count >= 0:
+                instruction_count += count
+        latest = dict(plans[-1]) if plans else {}
+        return {
+            "status": (
+                "BLOCKED_SHADOW_PLAN_JOURNAL_INVALID"
+                if not valid
+                else "COLLECTING_SHADOW_PLANS"
+                if plans
+                else "WAITING_FOR_FIRST_SHADOW_PLAN"
+            ),
+            "mode": self.MODE,
+            "journal_initialized": self.path.exists(),
+            "audit_chain_valid": valid,
+            "plan_count": len(plans),
+            "instruction_count": instruction_count,
+            "entry_plan_count": decisions["ENTRIES_READY"],
+            "close_plan_count": decisions["CLOSES_READY"],
+            "no_action_plan_count": decisions["NO_ACTION"],
+            "latest_cycle_id": str(latest.get("cycle_id", "")),
+            "latest_assessed_at": str(latest.get("assessed_at", "")),
+            "latest_decision_status": str(
+                latest.get("decision_status", "")
+            ),
+            "shadow_execution_enabled": False,
+            "paper_orders_sent": False,
+            "broker_orders_sent": False,
+            "live_orders_sent": False,
+            "network_access": False,
+            "real_money_access": False,
+        }
+
     def record(self, plan: object) -> dict[str, Any]:
         if not verify_forex_v3_shadow_plan(plan):
             return {"status": "INVALID_SHADOW_PLAN", "plans_recorded": 0}

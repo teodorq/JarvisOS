@@ -229,6 +229,14 @@ def test_plan_journal_records_once_without_touching_shadow_positions(
     assert after == before
     assert after["positions"] == {}
     assert after["fills"] == []
+    summary = journal.summary()
+    assert summary["status"] == "COLLECTING_SHADOW_PLANS"
+    assert summary["audit_chain_valid"] is True
+    assert summary["plan_count"] == 1
+    assert summary["entry_plan_count"] == 1
+    assert summary["instruction_count"] == 1
+    assert summary["latest_cycle_id"] == "shadow-plan-journal-0001"
+    assert summary["shadow_execution_enabled"] is False
 
 
 def test_plan_journal_rejects_tampering_without_creating_file(tmp_path) -> None:
@@ -254,6 +262,20 @@ def test_plan_journal_rejects_tampering_without_creating_file(tmp_path) -> None:
 
     assert verify_forex_v3_shadow_plan(plan) is False
     assert result == {"status": "INVALID_SHADOW_PLAN", "plans_recorded": 0}
+    assert not journal.path.exists()
+
+
+def test_empty_plan_journal_summary_does_not_create_file(tmp_path) -> None:
+    journal = ForexV3ShadowPlanJournal(tmp_path)
+
+    summary = journal.summary()
+
+    assert summary["status"] == "WAITING_FOR_FIRST_SHADOW_PLAN"
+    assert summary["journal_initialized"] is False
+    assert summary["audit_chain_valid"] is True
+    assert summary["plan_count"] == 0
+    assert summary["instruction_count"] == 0
+    assert summary["shadow_execution_enabled"] is False
     assert not journal.path.exists()
 
 
@@ -285,6 +307,9 @@ def test_corrupted_existing_plan_journal_is_preserved_and_blocks(tmp_path) -> No
     }
     assert journal.path.read_text(encoding="utf-8") == "{broken"
     assert journal.snapshot()["mode"] == "INVALID"
+    assert journal.summary()["status"] == (
+        "BLOCKED_SHADOW_PLAN_JOURNAL_INVALID"
+    )
 
 
 def test_plan_observer_waits_without_creating_any_shadow_file(tmp_path) -> None:
