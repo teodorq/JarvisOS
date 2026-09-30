@@ -15,7 +15,11 @@ from app.trading.forex_models import (
 from app.trading.forex_executor import ForexPaperExecutionEngine
 from app.trading.forex_risk import ForexRateBook
 from app.trading.forex_v3_shadow_ledger import ForexV3ShadowLedger
+from app.trading.forex_v3_shadow_plan_journal import (
+    ForexV3ShadowPlanJournal,
+)
 from app.trading.forex_v3_shadow_planner import ForexV3ShadowPlanner
+from app.trading.forex_v3_shadow_planner import verify_forex_v3_shadow_plan
 from app.trading.models import TradingValidationError
 from app.trading.paper_broker import LiveTradingBlockedError
 
@@ -185,3 +189,96 @@ def test_initialized_planner_builds_signed_non_executable_v3_plan(tmp_path) -> N
 def test_shadow_planner_live_submission_is_impossible() -> None:
     with pytest.raises(LiveTradingBlockedError):
         ForexV3ShadowPlanner.submit_live_order({"pair": "EUR_USD"})
+
+
+def test_plan_journal_records_once_without_touching_shadow_positions(
+    tmp_path,
+) -> None:
+    ledger = _initialized_ledger(tmp_path)
+    planner = ForexV3ShadowPlanner(
+        tmp_path,
+        readiness=InitializedReadiness(),
+        ledger=ledger,
+    )
+    quotes, bars, contexts, conversions = _market()
+    plan = planner.plan(
+        quotes=quotes,
+        bars=bars,
+        contexts=contexts,
+        conversion_quotes=conversions,
+        cycle_id="shadow-plan-journal-0001",
+        now=NOW,
+    )
+    before = ledger.snapshot()
+    journal = ForexV3ShadowPlanJournal(tmp_path)
+
+    first = journal.record(plan)
+    duplicate = journal.record(plan)
+    state = journal.snapshot()
+    after = ledger.snapshot()
+
+    assert verify_forex_v3_shadow_plan(plan) is True
+    assert first == {"status": "SHADOW_PLAN_RECORDED", "plans_recorded": 1}
+    assert duplicate == {"status": "DUPLICATE_SHADOW_PLAN", "plans_recorded": 0}
+    assert len(state["plans"]) == 1
+    assert state["plans"][0]["instruction_count"] == 1
+    assert ForexV3ShadowPlanJournal.verify(state) is True
+    assert after == before
+    assert after["positions"] == {}
+    assert after["fills"] == []
+
+
+def test_plan_journal_rejects_tampering_without_creating_file(tmp_path) -> None:
+    ledger = _initialized_ledger(tmp_path)
+    planner = ForexV3ShadowPlanner(
+        tmp_path,
+        readiness=InitializedReadiness(),
+        ledger=ledger,
+    )
+    quotes, bars, contexts, conversions = _market()
+    plan = planner.plan(
+        quotes=quotes,
+        bars=bars,
+        contexts=contexts,
+        conversion_quotes=conversions,
+        cycle_id="shadow-plan-journal-0002",
+        now=NOW,
+    )
+    plan["instructions"][0]["executable"] = True
+    journal = ForexV3ShadowPlanJournal(tmp_path)
+
+    result = journal.record(plan)
+
+    assert verify_forex_v3_shadow_plan(plan) is False
+    assert result == {"status": "INVALID_SHADOW_PLAN", "plans_recorded": 0}
+    assert not journal.path.exists()
+
+
+def test_corrupted_existing_plan_journal_is_preserved_and_blocks(tmp_path) -> None:
+    ledger = _initialized_ledger(tmp_path)
+    planner = ForexV3ShadowPlanner(
+        tmp_path,
+        readiness=InitializedReadiness(),
+        ledger=ledger,
+    )
+    quotes, bars, contexts, conversions = _market()
+    plan = planner.plan(
+        quotes=quotes,
+        bars=bars,
+        contexts=contexts,
+        conversion_quotes=conversions,
+        cycle_id="shadow-plan-journal-0003",
+        now=NOW,
+    )
+    journal = ForexV3ShadowPlanJournal(tmp_path)
+    journal.path.parent.mkdir(parents=True, exist_ok=True)
+    journal.path.write_text("{broken", encoding="utf-8")
+
+    result = journal.record(plan)
+
+    assert result == {
+        "status": "BLOCKED_SHADOW_PLAN_JOURNAL_INVALID",
+        "plans_recorded": 0,
+    }
+    assert journal.path.read_text(encoding="utf-8") == "{broken"
+    assert journal.snapshot()["mode"] == "INVALID"

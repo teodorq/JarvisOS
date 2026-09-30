@@ -23,6 +23,7 @@ from app.trading.forex_models import (
 from app.trading.forex_risk import ForexPaperPolicy, ForexRateBook
 from app.trading.forex_sample_contract import (
     build_forex_v3_shadow_sample_contract,
+    verify_forex_v3_shadow_sample_contract,
 )
 from app.trading.forex_v3_shadow import ForexV3ShadowReadiness
 from app.trading.forex_v3_shadow_ledger import ForexV3ShadowLedger
@@ -31,6 +32,78 @@ from app.trading.paper_broker import LiveTradingBlockedError
 
 
 _CYCLE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,79}$")
+_SHA256 = re.compile(r"^[0-9a-f]{64}$")
+
+
+def verify_forex_v3_shadow_plan(value: object) -> bool:
+    """Verify a complete non-executable plan before it can be archived."""
+
+    if not isinstance(value, Mapping):
+        return False
+    plan = dict(value)
+    fingerprint = str(plan.pop("plan_sha256", ""))
+    contract = plan.get("sample_contract")
+    instructions = plan.get("instructions")
+    assessments = plan.get("assessments")
+    rejected = plan.get("rejected")
+    try:
+        assessed_at = datetime.fromisoformat(str(plan.get("assessed_at", "")))
+    except (TypeError, ValueError, OverflowError):
+        return False
+    if (
+        not _SHA256.fullmatch(fingerprint)
+        or plan.get("status") != "SHADOW_PLAN_COMPUTED"
+        or plan.get("decision_status")
+        not in {"ENTRIES_READY", "CLOSES_READY", "NO_ACTION"}
+        or plan.get("mode") != "FOREX_V3_SHADOW_PLAN_ONLY"
+        or not _CYCLE_ID.fullmatch(str(plan.get("cycle_id", "")))
+        or assessed_at.tzinfo is None
+        or plan.get("candidate_id") != "FOREX_STRENGTH_V3_20260929"
+        or not verify_forex_v3_shadow_sample_contract(contract)
+        or not _SHA256.fullmatch(
+            str(plan.get("shadow_ledger_audit_head", ""))
+        )
+        or type(plan.get("shadow_position_count")) is not int
+        or not 0 <= plan["shadow_position_count"] <= 5
+        or type(plan.get("assessment_count")) is not int
+        or not isinstance(assessments, list)
+        or plan["assessment_count"] != len(assessments)
+        or len(assessments) > 7
+        or any(not isinstance(item, Mapping) for item in assessments)
+        or not isinstance(instructions, list)
+        or len(instructions) > 5
+        or not isinstance(rejected, list)
+        or len(rejected) > 20
+        or any(not isinstance(item, Mapping) for item in rejected)
+        or plan.get("executable") is not False
+        or any(
+            plan.get(field) is not False
+            for field in (
+                "shadow_execution_enabled",
+                "paper_orders_sent",
+                "broker_orders_sent",
+                "live_orders_sent",
+                "network_access",
+                "real_money_access",
+            )
+        )
+    ):
+        return False
+    for raw in instructions:
+        if not isinstance(raw, Mapping):
+            return False
+        instruction = dict(raw)
+        if (
+            instruction.get("action")
+            not in {"OPEN_LONG", "OPEN_SHORT", "CLOSE_POSITION"}
+            or instruction.get("mode") != "FOREX_V3_SHADOW_PLAN_ONLY"
+            or instruction.get("executable") is not False
+        ):
+            return False
+    try:
+        return fingerprint == ForexV3ShadowPlanner._fingerprint(plan)
+    except (TypeError, ValueError, OverflowError, RecursionError, MemoryError):
+        return False
 
 
 class ForexV3ShadowPlanner:
@@ -280,4 +353,4 @@ class ForexV3ShadowPlanner:
         }
 
 
-__all__ = ["ForexV3ShadowPlanner"]
+__all__ = ["ForexV3ShadowPlanner", "verify_forex_v3_shadow_plan"]

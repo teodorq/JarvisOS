@@ -370,6 +370,11 @@ decision against that ledger without persisting positions or fills. Every
 instruction is explicitly non-executable and bound to the ledger audit head;
 the ordinary PAPER executor rejects the plan mode and the V3 contract. Before
 initialization the planner returns a blocked result and creates no file.
+Verified plans can later be stored in the separate bounded
+`ForexV3ShadowPlanJournal`. Its entries form a hash chain and deduplicate cycle
+IDs, while the embedded plan remains explicitly non-executable. A modified plan
+or a corrupted existing journal is preserved and blocks closed. The journal is
+not connected to the observer yet and never stores positions or fills.
 
 When that threshold is reached, the existing durable PAPER activity history
 adds one owner notification for the frozen candidate. The notification survives
