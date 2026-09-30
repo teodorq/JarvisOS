@@ -752,6 +752,14 @@ class TradingControlAndRoutingTests(unittest.TestCase):
                 "no_action_plan_count": 1,
                 "shadow_execution_enabled": False,
             })
+            snapshot["forex"]["last_runtime_cycle"].update({
+                "available": True,
+                "v3_shadow_observation_available": True,
+                "v3_shadow_observation_status": "SHADOW_PLAN_OBSERVED",
+                "v3_shadow_decision_status": "PLAN_READY",
+                "v3_shadow_instruction_count": 1,
+                "v3_shadow_safety_valid": True,
+            })
             with patch.object(center, "status", return_value=snapshot):
                 rendered = center.format_status()
 
@@ -764,6 +772,11 @@ class TradingControlAndRoutingTests(unittest.TestCase):
         self.assertIn(
             "Dziennik planów V3 SHADOW: zapisane 3; plany wejścia 1, "
             "zamknięcia 1, bez działania 1; wykonanie wyłączone",
+            rendered,
+        )
+        self.assertIn(
+            "Ostatni cykl V3 SHADOW: zapisano niewykonywalny plan "
+            "PLAN_READY; instrukcje 1; wykonanie wyłączone",
             rendered,
         )
 

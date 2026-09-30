@@ -589,6 +589,50 @@ class TradingControlCenter:
                 )
         else:
             latest_cycle_text = "cykl zakończony bez transakcji"
+        if not runtime_cycle.get("v3_shadow_observation_available"):
+            latest_v3_cycle_text = "brak obserwacji V3 w ostatnim cyklu"
+        elif runtime_cycle.get("v3_shadow_safety_valid") is not True:
+            latest_v3_cycle_text = (
+                "ODRZUCONA — niespójne flagi bezpieczeństwa; wykonanie pozostaje "
+                "wyłączone"
+            )
+        elif (
+            runtime_cycle.get("v3_shadow_observation_status")
+            == "SHADOW_PLAN_OBSERVED"
+        ):
+            latest_v3_cycle_text = (
+                "zapisano niewykonywalny plan "
+                f"{runtime_cycle.get('v3_shadow_decision_status') or 'NO_ACTION'}; "
+                f"instrukcje {runtime_cycle.get('v3_shadow_instruction_count', 0)}; "
+                "wykonanie wyłączone"
+            )
+        elif (
+            runtime_cycle.get("v3_shadow_observation_status")
+            == "SHADOW_PLAN_ALREADY_OBSERVED"
+        ):
+            latest_v3_cycle_text = (
+                "plan z tego cyklu był już zapisany; wykonanie wyłączone"
+            )
+        elif (
+            runtime_cycle.get("v3_shadow_observation_status")
+            == "SHADOW_PLAN_OBSERVATION_WAITING"
+        ):
+            latest_v3_cycle_text = (
+                "oczekuje na ukończenie próbki i bezpieczną inicjalizację; "
+                "nic nie wykonano"
+            )
+        elif (
+            runtime_cycle.get("v3_shadow_observation_status")
+            == "SHADOW_PLAN_OBSERVER_FAILED"
+        ):
+            latest_v3_cycle_text = (
+                "obserwator zgłosił błąd, ale bazowy PAPER działał niezależnie; "
+                "nic nie wykonano"
+            )
+        else:
+            latest_v3_cycle_text = (
+                "plan nie został zapisany; wykonanie pozostaje wyłączone"
+            )
         if not observer_runtime["available"]:
             observer_text = "brak heartbeat; sprawdź zadanie Forex Observer"
         elif observer_runtime["stale"]:
@@ -887,6 +931,7 @@ class TradingControlCenter:
             f"• Otwarte pozycje PAPER: {position_details}.\n"
             f"• Cykle autopilota: {forex_account['processed_cycle_count']}; "
             f"ostatnia decyzja: {latest_cycle_text}.\n"
+            f"• Ostatni cykl V3 SHADOW: {latest_v3_cycle_text}.\n"
             f"• Observer Forex: {observer_text}.\n"
             f"• Audyt: {audit}; wyłącznik awaryjny: {kill_switch}.\n"
             f"• Obserwacje Forex: kwalifikowane {qualified}/{required}; dni "

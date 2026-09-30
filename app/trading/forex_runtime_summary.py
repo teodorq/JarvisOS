@@ -63,6 +63,25 @@ class ForexRuntimeCycleSummary:
             for item in raw_executions[:20]
             if isinstance(item, dict)
         ]
+        raw_v3_observation = payload.get("v3_shadow_plan_observation")
+        v3_malformed = (
+            raw_v3_observation is not None
+            and not isinstance(raw_v3_observation, dict)
+        )
+        v3_observation = (
+            dict(raw_v3_observation)
+            if isinstance(raw_v3_observation, dict)
+            else {}
+        )
+        v3_available = bool(v3_observation)
+        raw_v3_plan = v3_observation.get("plan")
+        v3_plan = dict(raw_v3_plan) if isinstance(raw_v3_plan, dict) else {}
+        raw_v3_instructions = v3_plan.get("instructions")
+        v3_instructions = (
+            raw_v3_instructions
+            if isinstance(raw_v3_instructions, list)
+            else []
+        )
         reasons: dict[str, int] = {}
         top_reason = str(payload.get("reason", "")).strip().upper()[:80]
         if top_reason:
@@ -98,6 +117,50 @@ class ForexRuntimeCycleSummary:
                 "real_money_access",
             )
         )
+        v3_unsafe = v3_malformed
+        if v3_available:
+            v3_unsafe = bool(
+                v3_observation.get("mode")
+                != "FOREX_V3_SHADOW_PLAN_OBSERVATION_ONLY"
+                or any(
+                    v3_observation.get(key) is not False
+                    for key in (
+                        "shadow_execution_enabled",
+                        "paper_orders_sent",
+                        "broker_orders_sent",
+                        "live_orders_sent",
+                        "network_access",
+                        "real_money_access",
+                    )
+                )
+                or not isinstance(raw_v3_plan, dict)
+            )
+            if v3_plan:
+                v3_unsafe = bool(
+                    v3_unsafe
+                    or v3_plan.get("mode") != "FOREX_V3_SHADOW_PLAN_ONLY"
+                    or v3_plan.get("executable") is not False
+                    or any(
+                        v3_plan.get(key) is not False
+                        for key in (
+                            "shadow_execution_enabled",
+                            "paper_orders_sent",
+                            "broker_orders_sent",
+                            "live_orders_sent",
+                            "network_access",
+                            "real_money_access",
+                        )
+                    )
+                    or not isinstance(raw_v3_instructions, list)
+                    or any(
+                        not isinstance(item, dict)
+                        or item.get("mode") != "FOREX_V3_SHADOW_PLAN_ONLY"
+                        or item.get("executable") is not False
+                        for item in v3_instructions[:100]
+                    )
+                    or len(v3_instructions) > 100
+                )
+        unsafe = unsafe or v3_unsafe
         return {
             "available": True,
             "status": "SAFETY_VIOLATION" if unsafe else outer_status,
@@ -110,6 +173,21 @@ class ForexRuntimeCycleSummary:
                 sorted(reasons.items(), key=lambda item: (-item[1], item[0]))
             ),
             "high_impact_event_window": high_impact_event_window,
+            "v3_shadow_observation_available": v3_available,
+            "v3_shadow_observation_status": str(
+                v3_observation.get("status", "")
+            ).strip().upper()[:80],
+            "v3_shadow_journal_status": str(
+                v3_observation.get("journal_status", "")
+            ).strip().upper()[:80],
+            "v3_shadow_plan_status": str(
+                v3_plan.get("status", "")
+            ).strip().upper()[:80],
+            "v3_shadow_decision_status": str(
+                v3_plan.get("decision_status", "")
+            ).strip().upper()[:80],
+            "v3_shadow_instruction_count": min(len(v3_instructions), 100),
+            "v3_shadow_safety_valid": not v3_unsafe,
             "broker_orders_sent": payload.get("broker_orders_sent") is True,
             "live_orders_sent": payload.get("live_orders_sent") is True,
             "real_money_access": payload.get("real_money_access") is True,
@@ -127,6 +205,13 @@ class ForexRuntimeCycleSummary:
             "execution_count": 0,
             "reason_codes": {},
             "high_impact_event_window": False,
+            "v3_shadow_observation_available": False,
+            "v3_shadow_observation_status": "",
+            "v3_shadow_journal_status": "",
+            "v3_shadow_plan_status": "",
+            "v3_shadow_decision_status": "",
+            "v3_shadow_instruction_count": 0,
+            "v3_shadow_safety_valid": True,
             "broker_orders_sent": False,
             "live_orders_sent": False,
             "real_money_access": False,
