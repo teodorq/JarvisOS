@@ -5,7 +5,10 @@ from __future__ import annotations
 import re
 from typing import Any, Mapping
 
-from app.trading.forex_forward_notifications import forward_review_milestone
+from app.trading.forex_forward_notifications import (
+    forward_review_milestone,
+    v3_shadow_readiness_milestone,
+)
 from app.trading.forex_performance_notifications import (
     paper_performance_review_milestone,
 )
@@ -14,6 +17,7 @@ from app.trading.forex_performance_notifications import (
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _FINGERPRINT_FIELDS = (
     "forward_review_fingerprint",
+    "v3_shadow_readiness_fingerprint",
     "performance_review_fingerprint",
 )
 
@@ -31,12 +35,23 @@ def review_milestones(
         payload,
         completed_fingerprint=state.get("performance_review_fingerprint", ""),
     )
+    v3_fingerprint, v3_shadow = v3_shadow_readiness_milestone(
+        payload,
+        completed_fingerprint=state.get(
+            "v3_shadow_readiness_fingerprint",
+            "",
+        ),
+    )
     fingerprints = {}
     if forward_fingerprint:
         fingerprints["forward_review_fingerprint"] = forward_fingerprint
     if performance_fingerprint:
         fingerprints["performance_review_fingerprint"] = performance_fingerprint
-    return fingerprints, [item for item in (forward, performance) if item]
+    if v3_fingerprint:
+        fingerprints["v3_shadow_readiness_fingerprint"] = v3_fingerprint
+    return fingerprints, [
+        item for item in (forward, v3_shadow, performance) if item
+    ]
 
 
 def normalized_review_fingerprints(value: Mapping[str, Any]) -> dict[str, str]:

@@ -14,8 +14,11 @@ from app.market_data.forex_environment import ForexDataSettings
 from app.trading.forex_activity import ForexPaperActivityFeed
 from app.trading.forex_activity_journal import ForexPaperActivityJournal
 from app.trading.forex_candidate_v2 import ForexRegimeCandidatePolicy
+from app.trading.forex_candidate_v3 import ForexStrengthCandidatePolicy
 from app.trading.forex_forward_evidence import (
     expected_candidate_implementation_sha256,
+    expected_v3_candidate_implementation_sha256,
+    verify_forex_v3_forward_evidence_report,
 )
 from app.trading.forex_forward_review import (
     ForexV2OwnerReviewPacket,
@@ -223,6 +226,44 @@ def _descendant_forward_report(first_report: dict) -> dict:
     return report
 
 
+def _complete_v3_forward_report() -> dict:
+    report = _complete_forward_report()
+    policy = ForexStrengthCandidatePolicy()
+    days = ("30",) * 7 + ("01",) * 7 + ("02",) * 6
+    months = ("09",) * 7 + ("10",) * 13
+    for index, item in enumerate(report["accepted_observations"]):
+        item["observed_at"] = (
+            f"2026-{months[index]}-{days[index]}T10:"
+            f"{index % 7 * 2:02d}:00+00:00"
+        )
+    report.update({
+        "mode": "FOREX_V3_FORWARD_SIGNAL_EVIDENCE_ONLY",
+        "generated_at": "2026-10-02T12:00:00+00:00",
+        "candidate_id": policy.candidate_id,
+        "frozen_after": policy.frozen_after.isoformat(),
+        "policy_fingerprint_sha256": policy.fingerprint_sha256,
+        "implementation_sha256": (
+            expected_v3_candidate_implementation_sha256()
+        ),
+        "accepted_by_market_day": {
+            "2026-09-30": 7,
+            "2026-10-01": 7,
+            "2026-10-02": 6,
+        },
+        "signal_comparison": {
+            "base_entry_signal_count": 4,
+            "retained_entry_signal_count": 3,
+            "filtered_entry_signal_count": 1,
+        },
+    })
+    _rehash_forward_report(report)
+    assert verify_forex_v3_forward_evidence_report(
+        report,
+        require_complete=True,
+    )
+    return report
+
+
 def _rehash_forward_report(report: dict) -> None:
     canonical = json.dumps(
         {
@@ -427,6 +468,45 @@ def test_later_valid_report_recovers_missed_review_notification_once() -> None:
             "FOREX_V2_FORWARD_REVIEW_READY"
         ]
         assert "20 cykli i 3 dni" in events[0]["message"]
+
+
+def test_v3_shadow_readiness_notification_is_durable_and_once_only() -> None:
+    with TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        payload = _payload(74)
+        payload["v3_forward_evidence"] = _complete_v3_forward_report()
+
+        first = ForexPaperActivityJournal(root).record(payload)
+        repeated = dict(payload, cycle_id="cycle-75")
+        second = ForexPaperActivityJournal(root).record(repeated)
+        journal = ForexPaperActivityJournal(root)
+        events = journal.events(limit=10)
+        state = journal.store.load()
+
+        assert first == {"status": "RECORDED", "events_recorded": 1}
+        assert second == {"status": "RECORDED", "events_recorded": 0}
+        assert [event["kind"] for event in events] == [
+            "FOREX_V3_SHADOW_INITIALIZATION_READY"
+        ]
+        assert "20 cykli i 3 dni" in events[0]["message"]
+        assert "V3 zachował 3, odfiltrował 1" in events[0]["message"]
+        assert "nie potwierdza zysku" in events[0]["message"]
+        assert len(state["v3_shadow_readiness_fingerprint"]) == 64
+
+
+def test_invalid_v3_evidence_never_creates_shadow_readiness_alert() -> None:
+    with TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        payload = _payload(76)
+        report = _complete_v3_forward_report()
+        report["accepted_cycle_count"] = 21
+        _rehash_forward_report(report)
+        payload["v3_forward_evidence"] = report
+
+        result = ForexPaperActivityJournal(root).record(payload)
+
+        assert result == {"status": "RECORDED", "events_recorded": 0}
+        assert ForexPaperActivityJournal(root).events(limit=10) == []
 
 
 def test_divergent_later_report_cannot_recover_review_notification() -> None:

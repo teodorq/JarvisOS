@@ -50,6 +50,7 @@ class ForexPaperActivityJournal:
             "last_health": "",
             "last_protection_health": "",
             "forward_review_fingerprint": "",
+            "v3_shadow_readiness_fingerprint": "",
             "performance_review_fingerprint": "",
             "protection_consecutive_failure_count": 0,
             "recent_cycle_keys": [],
@@ -534,6 +535,5 @@ class ForexPaperActivityJournal:
                 self.lock_path.unlink()
             except FileNotFoundError:
                 pass
-
 
 __all__ = ["ForexPaperActivityJournal"]
