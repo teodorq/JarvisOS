@@ -32,6 +32,8 @@ class ForexPaperLedger:
     MAX_REJECTIONS = 5_000
     MAX_CYCLES = 20_000
     MAX_AUDIT = 30_000
+    RELATIVE_PATH = Path("data/trading/forex_paper_ledger.json")
+    MODE = "FOREX_PAPER_ONLY"
 
     def __init__(
         self,
@@ -40,7 +42,7 @@ class ForexPaperLedger:
         initial_balance_pln: str = "100000",
     ) -> None:
         root = resolve_project_root(project_root)
-        self.path = root / "data" / "trading" / "forex_paper_ledger.json"
+        self.path = root / self.RELATIVE_PATH
         self.initial_balance_pln = str(initial_balance_pln)
         self.store = JsonStore(self.path, self._default)
         self._lock = _shared_lock(self.path)
@@ -48,7 +50,7 @@ class ForexPaperLedger:
     def _default(self) -> dict[str, Any]:
         return {
             "schema_version": 1,
-            "mode": "FOREX_PAPER_ONLY",
+            "mode": self.MODE,
             "account_currency": "PLN",
             "initial_balance_pln": self.initial_balance_pln,
             "balance_pln": self.initial_balance_pln,
@@ -139,8 +141,8 @@ class ForexPaperLedger:
                     state[key] = deepcopy(value[key])
         state["schema_version"] = 1
         state["mode"] = (
-            "FOREX_PAPER_ONLY"
-            if str(state.get("mode", "")).upper() == "FOREX_PAPER_ONLY"
+            self.MODE
+            if str(state.get("mode", "")).upper() == self.MODE
             else "INVALID"
         )
         state["positions"] = dict(state.get("positions", {}) or {})

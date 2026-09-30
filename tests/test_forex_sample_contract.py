@@ -4,10 +4,13 @@ from decimal import Decimal
 from app.trading.forex_risk import ForexPaperPolicy
 from app.trading.forex_sample_contract import (
     CONTRACT_ID,
+    V3_SHADOW_CONTRACT_ID,
     build_forex_paper_sample_contract,
+    build_forex_v3_shadow_sample_contract,
     is_superseded_sample_contract,
     sample_contracts_match,
     verify_forex_paper_sample_contract,
+    verify_forex_v3_shadow_sample_contract,
 )
 from app.trading.forex_scanner import ForexScannerPolicy
 
@@ -77,6 +80,36 @@ def test_strategy_or_risk_change_produces_a_different_fingerprint() -> None:
         scanner_change["fingerprint_sha256"],
         risk_change["fingerprint_sha256"],
     }) == 3
+
+
+def test_v3_shadow_contract_is_deterministic_isolated_and_not_base() -> None:
+    base = build_forex_paper_sample_contract()
+    first = build_forex_v3_shadow_sample_contract()
+    second = build_forex_v3_shadow_sample_contract()
+
+    assert first == second
+    assert first["contract_id"] == V3_SHADOW_CONTRACT_ID
+    assert first["portfolio_scope"] == "ISOLATED_V3_SHADOW"
+    assert first["specification"]["strategy_id"] == (
+        "FOREX_STRENGTH_V3_20260929"
+    )
+    assert first["paper_only"] is True
+    assert first["live_trading_enabled"] is False
+    assert first["automatic_paper_promotion"] is False
+    assert first["automatic_live_promotion"] is False
+    assert len(first["candidate_policy_fingerprint_sha256"]) == 64
+    assert verify_forex_v3_shadow_sample_contract(first) is True
+    assert verify_forex_paper_sample_contract(first) is False
+    assert sample_contracts_match(base, first) is False
+    assert first["fingerprint_sha256"] != base["fingerprint_sha256"]
+
+
+def test_v3_shadow_contract_tampering_fails_closed() -> None:
+    contract = build_forex_v3_shadow_sample_contract()
+    tampered = deepcopy(contract)
+    tampered["portfolio_scope"] = "FOREX_BASE_PAPER"
+
+    assert verify_forex_v3_shadow_sample_contract(tampered) is False
 
 
 def test_tampering_or_live_flag_invalidates_contract() -> None:

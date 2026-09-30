@@ -9,6 +9,7 @@ import hmac
 import json
 from typing import Any, Iterable, Mapping
 
+from app.trading.forex_candidate_v3 import ForexStrengthCandidatePolicy
 from app.trading.forex_coordinator import ForexPaperCoordinator
 from app.trading.forex_models import ForexPair, MAJOR_FOREX_PAIRS
 from app.trading.forex_risk import ForexPaperPolicy
@@ -16,6 +17,7 @@ from app.trading.forex_scanner import ForexScannerPolicy
 
 
 CONTRACT_ID = "FOREX_PAPER_V5_20260902"
+V3_SHADOW_CONTRACT_ID = "FOREX_V3_SHADOW_PAPER_V1_20260930"
 SUPERSEDED_CONTRACT_FINGERPRINTS = {
     "FOREX_PAPER_V1_20260831": (
         "a77112c8f1264aab11403dabf4b51b835deb96773799c8fdea1f0ace0707276a"
@@ -59,6 +61,60 @@ def _fingerprint(value: Mapping[str, Any]) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
+def _specification(
+    *,
+    scanner: ForexScannerPolicy,
+    paper: ForexPaperPolicy,
+    universe: Iterable[ForexPair],
+    strategy_id: str,
+) -> dict[str, Any]:
+    pairs = tuple(pair.symbol for pair in universe)
+    if pairs != tuple(pair.symbol for pair in MAJOR_FOREX_PAIRS):
+        raise ValueError("forex_sample_contract: unexpected_universe")
+    return {
+        "strategy_id": strategy_id,
+        "timeframe": "M15_CLOSED_BARS",
+        "universe": list(pairs),
+        "scanner_policy": _policy_values(scanner),
+        "paper_risk_policy": _policy_values(paper),
+        "coordinator": {
+            "minimum_stop_pips": str(
+                ForexPaperCoordinator.MINIMUM_STOP_PIPS
+            ),
+            "maximum_stop_pips": str(
+                ForexPaperCoordinator.MAXIMUM_STOP_PIPS
+            ),
+        },
+        "execution_model": {
+            "open_long_price": "ASK",
+            "open_short_price": "BID",
+            "close_long_price": "BID",
+            "close_short_price": "ASK",
+            "commission_model": "NONE",
+            "swap_model": "NONE",
+            "extra_slippage_model": "NONE",
+            "entry_and_signal_exit_interval_seconds": 900,
+            "position_protection_interval_seconds": 60,
+            "position_protection_source": "LOCAL_MT5_DEMO",
+            "position_protection_actions": ["CLOSE_POSITION"],
+            "position_check_required_before_first_full_cycle": True,
+            "position_check_required_after_runtime_gap": True,
+            "new_entries_blocked_until_position_check": True,
+            "position_recovery_replay_timeframe": "M1_CLOSED_BARS",
+            "position_recovery_bar_limit": 10_080,
+            "position_recovery_ambiguous_bar_policy": (
+                "STOP_FIRST_CONSERVATIVE"
+            ),
+            "position_recovery_spread_policy": "CURRENT_MT5_SPREAD",
+            "weekly_loss_window": "MONDAY_00_00_UTC",
+            "weekly_loss_source": "AUDITED_CLOSED_PAPER_FILLS",
+            "weekly_loss_reference": "INITIAL_PAPER_BALANCE",
+            "weekly_loss_blocks": ["OPEN_LONG", "OPEN_SHORT"],
+            "weekly_loss_allows": ["CLOSE_POSITION"],
+        },
+    }
+
+
 def build_forex_paper_sample_contract(
     *,
     scanner_policy: ForexScannerPolicy | None = None,
@@ -67,58 +123,57 @@ def build_forex_paper_sample_contract(
 ) -> dict[str, Any]:
     scanner = scanner_policy or ForexScannerPolicy()
     paper = paper_policy or ForexPaperPolicy()
-    pairs = tuple(pair.symbol for pair in universe)
-    if pairs != tuple(pair.symbol for pair in MAJOR_FOREX_PAIRS):
-        raise ValueError("forex_sample_contract: unexpected_universe")
     contract: dict[str, Any] = {
         "schema_version": 1,
         "contract_id": CONTRACT_ID,
         "mode": "FOREX_PAPER_SAMPLE_CONTRACT",
-        "specification": {
-            "strategy_id": "M15_SMA_CROSSOVER_V1",
-            "timeframe": "M15_CLOSED_BARS",
-            "universe": list(pairs),
-            "scanner_policy": _policy_values(scanner),
-            "paper_risk_policy": _policy_values(paper),
-            "coordinator": {
-                "minimum_stop_pips": str(
-                    ForexPaperCoordinator.MINIMUM_STOP_PIPS
-                ),
-                "maximum_stop_pips": str(
-                    ForexPaperCoordinator.MAXIMUM_STOP_PIPS
-                ),
-            },
-            "execution_model": {
-                "open_long_price": "ASK",
-                "open_short_price": "BID",
-                "close_long_price": "BID",
-                "close_short_price": "ASK",
-                "commission_model": "NONE",
-                "swap_model": "NONE",
-                "extra_slippage_model": "NONE",
-                "entry_and_signal_exit_interval_seconds": 900,
-                "position_protection_interval_seconds": 60,
-                "position_protection_source": "LOCAL_MT5_DEMO",
-                "position_protection_actions": ["CLOSE_POSITION"],
-                "position_check_required_before_first_full_cycle": True,
-                "position_check_required_after_runtime_gap": True,
-                "new_entries_blocked_until_position_check": True,
-                "position_recovery_replay_timeframe": "M1_CLOSED_BARS",
-                "position_recovery_bar_limit": 10_080,
-                "position_recovery_ambiguous_bar_policy": (
-                    "STOP_FIRST_CONSERVATIVE"
-                ),
-                "position_recovery_spread_policy": "CURRENT_MT5_SPREAD",
-                "weekly_loss_window": "MONDAY_00_00_UTC",
-                "weekly_loss_source": "AUDITED_CLOSED_PAPER_FILLS",
-                "weekly_loss_reference": "INITIAL_PAPER_BALANCE",
-                "weekly_loss_blocks": ["OPEN_LONG", "OPEN_SHORT"],
-                "weekly_loss_allows": ["CLOSE_POSITION"],
-            },
-        },
+        "specification": _specification(
+            scanner=scanner,
+            paper=paper,
+            universe=universe,
+            strategy_id="M15_SMA_CROSSOVER_V1",
+        ),
         "paper_only": True,
         "live_trading_enabled": False,
         "automatic_strategy_change": False,
+        "automatic_live_promotion": False,
+    }
+    contract["fingerprint_sha256"] = _fingerprint(contract)
+    return contract
+
+
+def build_forex_v3_shadow_sample_contract(
+    *,
+    paper_policy: ForexPaperPolicy | None = None,
+    universe: Iterable[ForexPair] = MAJOR_FOREX_PAIRS,
+) -> dict[str, Any]:
+    """Build the immutable contract for a future isolated V3 shadow cohort."""
+
+    candidate = ForexStrengthCandidatePolicy()
+    paper = paper_policy or ForexPaperPolicy()
+    scanner = ForexScannerPolicy(
+        fast_window=candidate.m15_fast_window,
+        slow_window=candidate.m15_slow_window,
+    )
+    contract: dict[str, Any] = {
+        "schema_version": 1,
+        "contract_id": V3_SHADOW_CONTRACT_ID,
+        "mode": "FOREX_V3_SHADOW_SAMPLE_CONTRACT",
+        "portfolio_scope": "ISOLATED_V3_SHADOW",
+        "candidate_policy": candidate.as_dict(),
+        "candidate_policy_fingerprint_sha256": (
+            candidate.fingerprint_sha256
+        ),
+        "specification": _specification(
+            scanner=scanner,
+            paper=paper,
+            universe=universe,
+            strategy_id=candidate.candidate_id,
+        ),
+        "paper_only": True,
+        "live_trading_enabled": False,
+        "automatic_strategy_change": False,
+        "automatic_paper_promotion": False,
         "automatic_live_promotion": False,
     }
     contract["fingerprint_sha256"] = _fingerprint(contract)
@@ -143,6 +198,42 @@ def verify_forex_paper_sample_contract(value: object) -> bool:
         for key in (
             "live_trading_enabled",
             "automatic_strategy_change",
+            "automatic_live_promotion",
+        )
+    ):
+        return False
+    return hmac.compare_digest(fingerprint, _fingerprint(contract))
+
+
+def verify_forex_v3_shadow_sample_contract(value: object) -> bool:
+    if not isinstance(value, Mapping):
+        return False
+    contract = dict(value)
+    fingerprint = str(contract.pop("fingerprint_sha256", ""))
+    if len(fingerprint) != 64:
+        return False
+    if contract.get("contract_id") != V3_SHADOW_CONTRACT_ID:
+        return False
+    if contract.get("mode") != "FOREX_V3_SHADOW_SAMPLE_CONTRACT":
+        return False
+    if contract.get("portfolio_scope") != "ISOLATED_V3_SHADOW":
+        return False
+    candidate = ForexStrengthCandidatePolicy()
+    if contract.get("candidate_policy") != candidate.as_dict():
+        return False
+    if not hmac.compare_digest(
+        str(contract.get("candidate_policy_fingerprint_sha256", "")),
+        candidate.fingerprint_sha256,
+    ):
+        return False
+    if contract.get("paper_only") is not True:
+        return False
+    if any(
+        contract.get(key) is not False
+        for key in (
+            "live_trading_enabled",
+            "automatic_strategy_change",
+            "automatic_paper_promotion",
             "automatic_live_promotion",
         )
     ):
@@ -182,9 +273,12 @@ def is_superseded_sample_contract(
 
 __all__ = [
     "CONTRACT_ID",
+    "V3_SHADOW_CONTRACT_ID",
     "SUPERSEDED_CONTRACT_FINGERPRINTS",
     "build_forex_paper_sample_contract",
+    "build_forex_v3_shadow_sample_contract",
     "is_superseded_sample_contract",
     "sample_contracts_match",
     "verify_forex_paper_sample_contract",
+    "verify_forex_v3_shadow_sample_contract",
 ]

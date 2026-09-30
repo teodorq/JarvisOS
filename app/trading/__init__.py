@@ -80,10 +80,13 @@ from app.trading.forex_scanner import (
 )
 from app.trading.forex_sample_contract import (
     CONTRACT_ID as FOREX_PAPER_SAMPLE_CONTRACT_ID,
+    V3_SHADOW_CONTRACT_ID as FOREX_V3_SHADOW_SAMPLE_CONTRACT_ID,
     build_forex_paper_sample_contract,
+    build_forex_v3_shadow_sample_contract,
     is_superseded_sample_contract,
     sample_contracts_match,
     verify_forex_paper_sample_contract,
+    verify_forex_v3_shadow_sample_contract,
 )
 from app.trading.forex_strategy_cohorts import (
     ForexStrategyCohortReview,
@@ -97,6 +100,7 @@ from app.trading.forex_trade_diagnostics import (
     build_forex_trade_diagnostics,
 )
 from app.trading.forex_v3_shadow import ForexV3ShadowReadiness
+from app.trading.forex_v3_shadow_ledger import ForexV3ShadowLedger
 from app.trading.forex_risk_diagnostics import build_forex_risk_diagnostics
 from app.trading.ledger import PaperTradingLedger
 from app.trading.models import (
@@ -157,11 +161,13 @@ __all__ = [
     "ForexStrengthCandidatePolicy",
     "ForexStrengthFilteredScanner",
     "ForexV3ShadowReadiness",
+    "ForexV3ShadowLedger",
     "ForexRiskDecision",
     "ForexPaperPerformanceReviewPacket",
     "ForexSafetyContext",
     "ForexScannerPolicy",
     "FOREX_PAPER_SAMPLE_CONTRACT_ID",
+    "FOREX_V3_SHADOW_SAMPLE_CONTRACT_ID",
     "ForexStrategyCohortReview",
     "ForexWalkForwardPolicy",
     "LiveTradingBlockedError",
@@ -191,6 +197,7 @@ __all__ = [
     "verify_forex_paper_performance_review_lineage",
     "verify_forex_paper_performance_review_packet",
     "build_forex_paper_sample_contract",
+    "build_forex_v3_shadow_sample_contract",
     "is_superseded_sample_contract",
     "build_forex_strategy_cohort_review",
     "ForexStrategyCounterfactualReplay",
@@ -199,5 +206,6 @@ __all__ = [
     "build_forex_risk_diagnostics",
     "sample_contracts_match",
     "verify_forex_paper_sample_contract",
+    "verify_forex_v3_shadow_sample_contract",
     "WalkForwardPolicy",
 ]

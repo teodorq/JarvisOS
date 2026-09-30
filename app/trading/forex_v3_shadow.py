@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 from app.core.project_paths import resolve_project_root
@@ -10,14 +9,13 @@ from app.trading.forex_forward_evidence import (
     ForexV3ForwardEvidenceReport,
     verify_forex_v3_forward_evidence_report,
 )
+from app.trading.forex_v3_shadow_ledger import ForexV3ShadowLedger
 
 
 class ForexV3ShadowReadiness:
     """Expose readiness facts without creating a ledger or executing a trade."""
 
-    LEDGER_RELATIVE_PATH = Path(
-        "data/trading/research/forex_v3_shadow_ledger.json"
-    )
+    LEDGER_RELATIVE_PATH = ForexV3ShadowLedger.RELATIVE_PATH
 
     def __init__(
         self,
