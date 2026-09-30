@@ -14,6 +14,7 @@ class ClientCapabilityPolicy:
         "trading_overview",
         "paper_trading_status",
         "forex_observation_review",
+        "initialize_forex_v3_shadow",
     }
     OWNER_ONLY_MARKERS = (
         "autodev",
@@ -70,6 +71,8 @@ class ClientCapabilityPolicy:
         "obserwacji forex",
         "paper gotowy",
         "paper jest gotowy",
+        "portfel v3 shadow",
+        "przygotuj v3 shadow",
     )
     OWNER_ONLY_THOUGHT_MARKERS = (
         "autodev",

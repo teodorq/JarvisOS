@@ -378,6 +378,10 @@ connected to the local cycle through `ForexV3ShadowPlanObserver`, but remains
 idle until the separate ledger has been manually initialized. It never stores
 positions or fills, and a planner/journal failure is isolated from the existing
 base PAPER cycle. No shadow plan can be passed to the ordinary PAPER executor.
+The owner can issue `przygotuj portfel V3 SHADOW`; before the threshold the
+command only reports the remaining cycles/days and writes nothing. After a
+complete verified sample it calls the guarded initializer and creates only the
+empty inactive ledger, with execution and all order/network flags still off.
 
 When that threshold is reached, the existing durable PAPER activity history
 adds one owner notification for the frozen candidate. The notification survives

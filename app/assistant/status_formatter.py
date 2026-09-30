@@ -20,6 +20,7 @@ class AssistantStatusFormatter:
             "integration_status": "sprawdzenie integracji",
             "weather": "sprawdzenie pogody",
             "paper_trading_status": "sprawdzenie przygotowania paper tradingu",
+            "initialize_forex_v3_shadow": "przygotowanie portfela V3 SHADOW",
             "gmail_search": "wyszukiwanie wiadomości Gmail",
             "natural_action": "wykonanie ostatniego polecenia",
         }

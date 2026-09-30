@@ -780,6 +780,69 @@ class TradingControlAndRoutingTests(unittest.TestCase):
             rendered,
         )
 
+    def test_v3_shadow_initialization_command_waits_without_creating_positions(
+        self,
+    ) -> None:
+        command = "Przygotuj portfel V3 SHADOW"
+        self.assertEqual(
+            NaturalLanguageService.classify(command),
+            "initialize_forex_v3_shadow",
+        )
+        self.assertTrue(PersonalAssistantController.matches(command))
+        self.assertTrue(ClientCapabilityPolicy.denial_message(command))
+        with TemporaryDirectory() as directory:
+            controller = PersonalAssistantController(directory)
+            blocked = {
+                "status": "BLOCKED_SHADOW_INITIALIZATION",
+                "reason": "FORWARD_SAMPLE_INCOMPLETE",
+                "remaining_accepted_cycles": 5,
+                "remaining_market_days": 1,
+                "shadow_ledger_created": False,
+                "shadow_execution_enabled": False,
+                "paper_orders_sent": False,
+                "broker_orders_sent": False,
+                "live_orders_sent": False,
+                "network_access": False,
+                "real_money_access": False,
+            }
+            with patch.object(
+                controller.trading.forex_v3_shadow_initializer,
+                "initialize",
+                return_value=blocked,
+            ):
+                thought = controller.plan(command)
+                response = controller.handle(command)
+
+        self.assertEqual(
+            thought["assistant_intent"],
+            "initialize_forex_v3_shadow",
+        )
+        self.assertFalse(thought["read_only"])
+        self.assertIn("brakuje 5 cykli i 1 dnia rynkowego", response)
+        self.assertIn("Nie utworzono portfela ani pozycji", response)
+
+    def test_v3_shadow_initialization_command_rejects_unsafe_result(self) -> None:
+        with TemporaryDirectory() as directory:
+            center = TradingControlCenter(directory)
+            unsafe = {
+                "status": "INITIALIZED_SHADOW_INACTIVE",
+                "shadow_execution_enabled": True,
+                "paper_orders_sent": False,
+                "broker_orders_sent": False,
+                "live_orders_sent": False,
+                "network_access": False,
+                "real_money_access": False,
+            }
+            with patch.object(
+                center.forex_v3_shadow_initializer,
+                "initialize",
+                return_value=unsafe,
+            ):
+                response = center.initialize_v3_shadow()
+
+        self.assertIn("odrzucona przez kontrolę bezpieczeństwa", response)
+        self.assertIn("Nie utworzono aktywnego portfela", response)
+
     def test_observation_progress_phrases_are_owner_only_read_only_status(self) -> None:
         variants = (
             "Status obserwatora Forex",

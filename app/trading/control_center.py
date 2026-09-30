@@ -33,7 +33,10 @@ from app.trading.forex_runtime_summary import ForexRuntimeCycleSummary
 from app.trading.forex_scanner import ForexMarketScanner
 from app.trading.forex_strategy_cohorts import ForexStrategyCohortReview
 from app.trading.forex_v2_research_dashboard import ForexV2ResearchDashboard
-from app.trading.forex_v3_shadow import ForexV3ShadowReadiness
+from app.trading.forex_v3_shadow import (
+    ForexV3ShadowInitializer,
+    ForexV3ShadowReadiness,
+)
 from app.trading.forex_v3_shadow_plan_journal import (
     ForexV3ShadowPlanJournal,
 )
@@ -76,6 +79,10 @@ class TradingControlCenter:
             self.project_root
         )
         self.forex_v3_shadow = ForexV3ShadowReadiness(
+            self.project_root,
+            forward_evidence=self.forex_v3_forward_evidence,
+        )
+        self.forex_v3_shadow_initializer = ForexV3ShadowInitializer(
             self.project_root,
             forward_evidence=self.forex_v3_forward_evidence,
         )
@@ -333,6 +340,60 @@ class TradingControlCenter:
             "live_orders_sent": False,
             "real_money_access": False,
         }
+
+    def initialize_v3_shadow(self) -> str:
+        """Initialize only the empty, non-executing V3 shadow ledger."""
+        result = self.forex_v3_shadow_initializer.initialize()
+        unsafe = any(
+            result.get(key) is not False
+            for key in (
+                "shadow_execution_enabled",
+                "paper_orders_sent",
+                "broker_orders_sent",
+                "live_orders_sent",
+                "network_access",
+                "real_money_access",
+            )
+        )
+        if unsafe:
+            return (
+                "V3 SHADOW: operacja odrzucona przez kontrolę bezpieczeństwa. "
+                "Nie utworzono aktywnego portfela ani żadnej pozycji."
+            )
+        status = str(result.get("status", ""))
+        if status == "INITIALIZED_SHADOW_INACTIVE":
+            return (
+                "V3 SHADOW: utworzono pusty, audytowany portfel porównawczy. "
+                "Wykonanie pozostaje wyłączone; nie otwarto żadnej pozycji i "
+                "nie wysłano zlecenia."
+            )
+        if status == "ALREADY_INITIALIZED_SHADOW_INACTIVE":
+            return (
+                "V3 SHADOW: pusty portfel porównawczy był już przygotowany. "
+                "Pozostaje nieaktywny i nie wysyła zleceń."
+            )
+        reason = str(result.get("reason", ""))[:160]
+        if reason == "FORWARD_SAMPLE_INCOMPLETE":
+            cycles = result.get("remaining_accepted_cycles", 0)
+            cycles = cycles if type(cycles) is int and 0 <= cycles <= 1_000_000 else 0
+            days = result.get("remaining_market_days", 0)
+            days = days if type(days) is int and 0 <= days <= 1_000_000 else 0
+            day_label = "dnia rynkowego" if days == 1 else "dni rynkowych"
+            return (
+                "V3 SHADOW: próbka nie jest jeszcze kompletna — brakuje "
+                f"{cycles} cykli i {days} {day_label}. "
+                "Nie utworzono portfela ani pozycji."
+            )
+        if status == "BLOCKED_EXISTING_SHADOW_LEDGER":
+            return (
+                "V3 SHADOW: inicjalizacja została zablokowana, ponieważ "
+                "istniejąca księga nie przeszła kontroli. Niczego nie zmieniono."
+            )
+        return (
+            "V3 SHADOW: inicjalizacja została bezpiecznie zablokowana "
+            f"({reason or 'NIEZNANA_PRZYCZYNA'}). Nie utworzono pozycji ani "
+            "nie wysłano zlecenia."
+        )
 
     def format_observation_review(self) -> str:
         review = self.forex_observations.review()

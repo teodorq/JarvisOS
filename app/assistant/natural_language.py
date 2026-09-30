@@ -222,6 +222,7 @@ class NaturalLanguageService:
             ("current_time", ("ktora jest godzina", "jaka jest godzina", "podaj godzine", "powiedz mi godzine", "aktualna godzina")),
             ("weather", ("pogoda", "pogode", "pogody", "prognoza pogody", "weather", "forecast")),
             ("forex_observation_review", ("raport obserwacji forex", "przejrzyj obserwacje forex", "audyt obserwacji forex", "jakosc obserwacji forex")),
+            ("initialize_forex_v3_shadow", ("przygotuj portfel v3 shadow", "zainicjalizuj portfel v3 shadow", "utworz pusty portfel v3 shadow", "przygotuj v3 shadow")),
             ("paper_trading_status", ("status paper tradingu", "stan paper tradingu", "status tradingu", "gotowosc tradingu", "gotowosc do tradingu", "zabezpieczenia tradingu", "audyt tradingu", "status silnika tradingowego", "status forex", "gotowosc forex", "skaner forex", "status obserwatora forex", "ile obserwacji forex", "postep obserwacji forex", "czy paper gotowy", "czy paper jest gotowy")),
             ("integration_status", ("status integracji", "pokaz integracje", "jakie integracje", "polaczenia zewnetrzne", "status revenuecat", "status meta ads", "status claude", "status cartesia", "status elevenlabs")),
             ("assistant_status", ("status asystenta", "status b96", "status b100")),
