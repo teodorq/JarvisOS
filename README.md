@@ -365,6 +365,11 @@ creates an empty, tamper-evident ledger bound to that exact evidence cutoff. It
 is deliberately not called by the observer. Initialization keeps execution,
 network access, broker orders and real-money access disabled; repeating it is
 idempotent, while an unknown or modified pre-existing ledger blocks closed.
+After initialization, `ForexV3ShadowPlanner` can calculate a signed V3-only
+decision against that ledger without persisting positions or fills. Every
+instruction is explicitly non-executable and bound to the ledger audit head;
+the ordinary PAPER executor rejects the plan mode and the V3 contract. Before
+initialization the planner returns a blocked result and creates no file.
 
 When that threshold is reached, the existing durable PAPER activity history
 adds one owner notification for the frozen candidate. The notification survives

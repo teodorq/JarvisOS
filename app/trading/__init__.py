@@ -104,6 +104,7 @@ from app.trading.forex_v3_shadow import (
     ForexV3ShadowReadiness,
 )
 from app.trading.forex_v3_shadow_ledger import ForexV3ShadowLedger
+from app.trading.forex_v3_shadow_planner import ForexV3ShadowPlanner
 from app.trading.forex_risk_diagnostics import build_forex_risk_diagnostics
 from app.trading.ledger import PaperTradingLedger
 from app.trading.models import (
@@ -166,6 +167,7 @@ __all__ = [
     "ForexV3ShadowReadiness",
     "ForexV3ShadowInitializer",
     "ForexV3ShadowLedger",
+    "ForexV3ShadowPlanner",
     "ForexRiskDecision",
     "ForexPaperPerformanceReviewPacket",
     "ForexSafetyContext",
