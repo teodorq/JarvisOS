@@ -9,7 +9,11 @@ from app.trading.forex_forward_evidence import (
     build_forex_v3_forward_evidence_report,
     verify_forex_v3_forward_evidence_report,
 )
-from app.trading.forex_v3_shadow import ForexV3ShadowReadiness
+from app.trading.forex_v3_shadow import (
+    ForexV3ShadowInitializer,
+    ForexV3ShadowReadiness,
+)
+from app.trading.forex_v3_shadow_ledger import ForexV3ShadowLedger
 
 
 UTC = timezone.utc
@@ -168,3 +172,61 @@ def test_tampered_evidence_and_unexpected_ledger_fail_closed(tmp_path) -> None:
     assert unexpected["status"] == "BLOCKED_INVALID_FORWARD_EVIDENCE"
     assert unexpected["reason"] == "UNEXPECTED_SHADOW_LEDGER_PRESENT"
     assert readiness.ledger_path.read_text(encoding="utf-8") == "{}"
+
+
+def test_initializer_refuses_incomplete_sample_without_creating_file(
+    tmp_path,
+) -> None:
+    initializer = ForexV3ShadowInitializer(
+        tmp_path,
+        forward_evidence=StaticEvidence(_empty_report()),
+    )
+
+    result = initializer.initialize(now=NOW)
+
+    assert result["status"] == "BLOCKED_SHADOW_INITIALIZATION"
+    assert result["reason"] == "FORWARD_SAMPLE_INCOMPLETE"
+    assert result["shadow_ledger_created"] is False
+    assert result["shadow_execution_enabled"] is False
+    assert not initializer.ledger_path.exists()
+
+
+def test_initializer_creates_only_an_inactive_audited_shadow_state(
+    tmp_path,
+) -> None:
+    report = _complete_report()
+    evidence = StaticEvidence(report)
+    initializer = ForexV3ShadowInitializer(
+        tmp_path,
+        forward_evidence=evidence,
+    )
+
+    result = initializer.initialize(now=NOW)
+    readiness = ForexV3ShadowReadiness(
+        tmp_path,
+        forward_evidence=evidence,
+    ).status()
+
+    assert result["status"] == "INITIALIZED_SHADOW_INACTIVE"
+    assert result["shadow_ledger_created"] is True
+    assert result["shadow_execution_enabled"] is False
+    assert result["paper_orders_sent"] is False
+    assert result["live_orders_sent"] is False
+    assert result["network_access"] is False
+    assert readiness["status"] == "SHADOW_INITIALIZED_INACTIVE"
+    assert readiness["shadow_ledger_initialized"] is True
+    assert readiness["shadow_execution_enabled"] is False
+    state = ForexV3ShadowLedger(tmp_path).snapshot()
+    assert state["positions"] == {}
+    assert state["fills"] == []
+    assert state["initialization"][
+        "forward_evidence_content_sha256"
+    ] == report["content_sha256"]
+    assert ForexV3ShadowLedger.verify_audit(state) is True
+    assert state["audit"][-1]["event_type"] == (
+        "V3_SHADOW_INITIALIZED_INACTIVE"
+    )
+
+    repeated = initializer.initialize(now=NOW + timedelta(minutes=1))
+    assert repeated["status"] == "ALREADY_INITIALIZED_SHADOW_INACTIVE"
+    assert repeated["shadow_ledger_created"] is False

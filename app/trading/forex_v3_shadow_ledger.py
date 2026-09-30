@@ -59,6 +59,14 @@ class ForexV3ShadowLedger(ForexPaperLedger):
             "sample_contract_fingerprint_sha256": self.sample_contract[
                 "fingerprint_sha256"
             ],
+            "initialization": {
+                "status": "NOT_INITIALIZED",
+                "initialized_at": "",
+                "forward_evidence_content_sha256": "",
+                "source_head_hash": "",
+                "source_cutoff_sequence": 0,
+                "execution_enabled": False,
+            },
         })
         return state
 
@@ -74,6 +82,41 @@ class ForexV3ShadowLedger(ForexPaperLedger):
         )
         if any(state.get(key) != expected[key] for key in protected):
             state["mode"] = "INVALID"
+        initialization = dict(state.get("initialization", {}) or {})
+        expected_initialization = expected["initialization"]
+        for key, default in expected_initialization.items():
+            initialization.setdefault(key, default)
+        status = str(initialization.get("status", ""))
+        if initialization.get("execution_enabled") is not False:
+            state["mode"] = "INVALID"
+        if status == "NOT_INITIALIZED":
+            if any(
+                initialization.get(key) not in ("", 0)
+                for key in (
+                    "initialized_at",
+                    "forward_evidence_content_sha256",
+                    "source_head_hash",
+                    "source_cutoff_sequence",
+                )
+            ):
+                state["mode"] = "INVALID"
+        elif status == "INITIALIZED_SHADOW_INACTIVE":
+            if (
+                not str(initialization.get("initialized_at", ""))
+                or len(
+                    str(initialization.get(
+                        "forward_evidence_content_sha256",
+                        "",
+                    ))
+                ) != 64
+                or len(str(initialization.get("source_head_hash", ""))) != 64
+                or type(initialization.get("source_cutoff_sequence")) is not int
+                or initialization.get("source_cutoff_sequence", 0) <= 0
+            ):
+                state["mode"] = "INVALID"
+        else:
+            state["mode"] = "INVALID"
+        state["initialization"] = initialization
         return state
 
 
