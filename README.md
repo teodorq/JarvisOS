@@ -358,6 +358,14 @@ initialization; it still cannot alter the current PAPER strategy, contact a
 broker or enable LIVE trading. A missing source, tampered report or unexpected
 pre-existing shadow ledger fails closed.
 
+The separate V3 contract and ledger have independent fingerprints, paths and
+portfolio identity, so they cannot be mistaken for the current PAPER cohort.
+`ForexV3ShadowInitializer` accepts only a complete, verified forward report and
+creates an empty, tamper-evident ledger bound to that exact evidence cutoff. It
+is deliberately not called by the observer. Initialization keeps execution,
+network access, broker orders and real-money access disabled; repeating it is
+idempotent, while an unknown or modified pre-existing ledger blocks closed.
+
 When that threshold is reached, the existing durable PAPER activity history
 adds one owner notification for the frozen candidate. The notification survives
 a closed JARVIS window and explicitly remains review-only: it does not claim

@@ -728,6 +728,25 @@ class TradingControlAndRoutingTests(unittest.TestCase):
             rendered,
         )
 
+    def test_initialized_v3_shadow_is_shown_as_inactive_not_blocked(self) -> None:
+        with TemporaryDirectory() as directory:
+            center = TradingControlCenter(directory)
+            snapshot = center.status()
+            snapshot["forex"]["v3_shadow"].update({
+                "status": "SHADOW_INITIALIZED_INACTIVE",
+                "shadow_ledger_initialized": True,
+                "shadow_execution_enabled": False,
+            })
+            with patch.object(center, "status", return_value=snapshot):
+                rendered = center.format_status()
+
+        self.assertIn(
+            "Portfel V3 SHADOW: oddzielna księga została bezpiecznie "
+            "zainicjalizowana; jest pusta, audytowana, a wykonanie pozostaje "
+            "wyłączone",
+            rendered,
+        )
+
     def test_observation_progress_phrases_are_owner_only_read_only_status(self) -> None:
         variants = (
             "Status obserwatora Forex",

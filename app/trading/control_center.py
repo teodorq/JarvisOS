@@ -163,6 +163,7 @@ class TradingControlCenter:
                     in {
                         "WAITING_FOR_FORWARD_SAMPLE",
                         "READY_FOR_MANUAL_SHADOW_INITIALIZATION",
+                        "SHADOW_INITIALIZED_INACTIVE",
                     }
                     and v3_shadow.get("shadow_execution_enabled") is False
                 ),
@@ -726,6 +727,11 @@ class TradingControlCenter:
             v3_shadow_text = (
                 "gotowy do ręcznej inicjalizacji oddzielnej księgi; wykonanie "
                 "pozostaje wyłączone"
+            )
+        elif v3_shadow.get("status") == "SHADOW_INITIALIZED_INACTIVE":
+            v3_shadow_text = (
+                "oddzielna księga została bezpiecznie zainicjalizowana; jest "
+                "pusta, audytowana, a wykonanie pozostaje wyłączone"
             )
         elif v3_shadow.get("status") == "WAITING_FOR_FORWARD_SAMPLE":
             v3_shadow_text = (
