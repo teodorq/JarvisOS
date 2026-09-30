@@ -374,7 +374,10 @@ Verified plans can later be stored in the separate bounded
 `ForexV3ShadowPlanJournal`. Its entries form a hash chain and deduplicate cycle
 IDs, while the embedded plan remains explicitly non-executable. A modified plan
 or a corrupted existing journal is preserved and blocks closed. The journal is
-not connected to the observer yet and never stores positions or fills.
+connected to the local cycle through `ForexV3ShadowPlanObserver`, but remains
+idle until the separate ledger has been manually initialized. It never stores
+positions or fills, and a planner/journal failure is isolated from the existing
+base PAPER cycle. No shadow plan can be passed to the ordinary PAPER executor.
 
 When that threshold is reached, the existing durable PAPER activity history
 adds one owner notification for the frozen candidate. The notification survives

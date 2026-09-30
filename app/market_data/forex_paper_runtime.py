@@ -8,6 +8,7 @@ from typing import Any, Mapping
 
 from app.market_data.forex_environment import ForexDataSettings
 from app.market_data.forex_gateway import ForexReadOnlyDataGateway
+from app.market_data.forex_models import ForexDataBundle
 from app.trading.forex_autopilot import ForexPaperAutopilot
 from app.trading.forex_forward_evidence import (
     ForexV2ForwardEvidenceReport,
@@ -20,6 +21,9 @@ from app.trading.forex_observation import (
 )
 from app.trading.forex_performance_review import (
     ForexPaperPerformanceReviewPacket,
+)
+from app.trading.forex_v3_shadow_plan_observer import (
+    ForexV3ShadowPlanObserver,
 )
 from app.trading.models import TradingValidationError, aware_utc
 
@@ -39,6 +43,7 @@ class ForexDemoPaperRuntime:
         v3_forward_evidence: ForexV3ForwardEvidenceReport | None = None,
         forward_review: ForexV2OwnerReviewPacket | None = None,
         performance_review: ForexPaperPerformanceReviewPacket | None = None,
+        v3_shadow_observer: ForexV3ShadowPlanObserver | None = None,
     ) -> None:
         self.project_root = project_root
         self.settings = settings
@@ -56,6 +61,10 @@ class ForexDemoPaperRuntime:
         self.performance_review = (
             performance_review
             or ForexPaperPerformanceReviewPacket(project_root)
+        )
+        self.v3_shadow_observer = (
+            v3_shadow_observer
+            or ForexV3ShadowPlanObserver(project_root)
         )
 
     def run_once(
@@ -118,6 +127,11 @@ class ForexDemoPaperRuntime:
                     v3_forward_evidence=v3_forward_evidence,
                     forward_review=forward_review,
                 )
+            v3_shadow_plan = self._observe_v3_shadow_plan(
+                bundle=bundle,
+                cycle_id=selected_id,
+                now=selected_now,
+            )
             paper = self.autopilot.run_cycle(
                 quotes=bundle.quotes,
                 bars=bundle.bars,
@@ -148,12 +162,48 @@ class ForexDemoPaperRuntime:
             "forward_evidence": forward_evidence,
             "v3_forward_evidence": v3_forward_evidence,
             "forward_review": forward_review,
+            "v3_shadow_plan_observation": v3_shadow_plan,
             "paper": paper,
             "performance_review": performance_review,
             "broker_orders_sent": False,
             "live_orders_sent": False,
             "real_money_access": False,
         }
+
+    def _observe_v3_shadow_plan(
+        self,
+        *,
+        bundle: ForexDataBundle,
+        cycle_id: str,
+        now: datetime,
+    ) -> dict[str, Any]:
+        try:
+            return self.v3_shadow_observer.observe(
+                quotes=bundle.quotes,
+                bars=bundle.bars,
+                contexts=bundle.contexts,
+                conversion_quotes=bundle.conversion_quotes,
+                cycle_id=cycle_id,
+                now=now,
+            )
+        except (
+            OSError,
+            RuntimeError,
+            TradingValidationError,
+            TypeError,
+            ValueError,
+        ):
+            return {
+                "status": "SHADOW_PLAN_OBSERVER_FAILED",
+                "mode": "FOREX_V3_SHADOW_PLAN_OBSERVATION_ONLY",
+                "plan": {},
+                "shadow_execution_enabled": False,
+                "paper_orders_sent": False,
+                "broker_orders_sent": False,
+                "live_orders_sent": False,
+                "network_access": False,
+                "real_money_access": False,
+            }
 
     @staticmethod
     def _report_write_failed(
@@ -288,6 +338,7 @@ class ForexDemoPaperRuntime:
         forward_evidence: dict[str, Any] | None = None,
         v3_forward_evidence: dict[str, Any] | None = None,
         forward_review: dict[str, Any] | None = None,
+        v3_shadow_plan_observation: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         return {
             "status": "PAPER_CYCLE_BLOCKED",
@@ -298,6 +349,9 @@ class ForexDemoPaperRuntime:
             "forward_evidence": forward_evidence or {},
             "v3_forward_evidence": v3_forward_evidence or {},
             "forward_review": forward_review or {},
+            "v3_shadow_plan_observation": (
+                v3_shadow_plan_observation or {}
+            ),
             "broker_orders_sent": False,
             "live_orders_sent": False,
             "real_money_access": False,

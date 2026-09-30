@@ -18,6 +18,9 @@ from app.trading.forex_v3_shadow_ledger import ForexV3ShadowLedger
 from app.trading.forex_v3_shadow_plan_journal import (
     ForexV3ShadowPlanJournal,
 )
+from app.trading.forex_v3_shadow_plan_observer import (
+    ForexV3ShadowPlanObserver,
+)
 from app.trading.forex_v3_shadow_planner import ForexV3ShadowPlanner
 from app.trading.forex_v3_shadow_planner import verify_forex_v3_shadow_plan
 from app.trading.models import TradingValidationError
@@ -282,3 +285,67 @@ def test_corrupted_existing_plan_journal_is_preserved_and_blocks(tmp_path) -> No
     }
     assert journal.path.read_text(encoding="utf-8") == "{broken"
     assert journal.snapshot()["mode"] == "INVALID"
+
+
+def test_plan_observer_waits_without_creating_any_shadow_file(tmp_path) -> None:
+    observer = ForexV3ShadowPlanObserver(tmp_path)
+
+    result = observer.observe(
+        quotes={},
+        bars={},
+        contexts={},
+        conversion_quotes=(),
+        cycle_id="observer-wait-0001",
+        now=NOW,
+    )
+
+    assert result["status"] == "SHADOW_PLAN_OBSERVATION_WAITING"
+    assert result["journal_status"] == "NOT_WRITTEN"
+    assert result["shadow_execution_enabled"] is False
+    assert result["paper_orders_sent"] is False
+    assert result["live_orders_sent"] is False
+    assert not observer.planner.ledger.path.exists()
+    assert not observer.journal.path.exists()
+
+
+def test_plan_observer_archives_plan_but_never_executes_it(tmp_path) -> None:
+    ledger = _initialized_ledger(tmp_path)
+    planner = ForexV3ShadowPlanner(
+        tmp_path,
+        readiness=InitializedReadiness(),
+        ledger=ledger,
+    )
+    journal = ForexV3ShadowPlanJournal(tmp_path)
+    observer = ForexV3ShadowPlanObserver(
+        tmp_path,
+        planner=planner,
+        journal=journal,
+    )
+    quotes, bars, contexts, conversions = _market()
+    before = ledger.snapshot()
+
+    result = observer.observe(
+        quotes=quotes,
+        bars=bars,
+        contexts=contexts,
+        conversion_quotes=conversions,
+        cycle_id="observer-record-0001",
+        now=NOW,
+    )
+    repeated = observer.observe(
+        quotes=quotes,
+        bars=bars,
+        contexts=contexts,
+        conversion_quotes=conversions,
+        cycle_id="observer-record-0001",
+        now=NOW,
+    )
+
+    assert result["status"] == "SHADOW_PLAN_OBSERVED"
+    assert result["journal_status"] == "SHADOW_PLAN_RECORDED"
+    assert repeated["status"] == "SHADOW_PLAN_ALREADY_OBSERVED"
+    assert result["plan"]["executable"] is False
+    assert result["broker_orders_sent"] is False
+    assert result["live_orders_sent"] is False
+    assert ledger.snapshot() == before
+    assert len(journal.snapshot()["plans"]) == 1

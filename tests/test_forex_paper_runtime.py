@@ -159,6 +159,11 @@ class FailingForwardEvidence:
         raise OSError("simulated report write failure")
 
 
+class FailingV3ShadowObserver:
+    def observe(self, **_kwargs: object) -> dict:
+        raise RuntimeError("simulated V3 observer failure")
+
+
 def _ready_journal(root: Path) -> ForexObservationJournal:
     journal = ForexObservationJournal(root)
     for index in range(20):
@@ -338,6 +343,31 @@ class ForexPaperRuntimeTests(unittest.TestCase):
         self.assertTrue(
             (self.root / "data/trading/research/forward_v3_latest.json").is_file()
         )
+        shadow = result["v3_shadow_plan_observation"]
+        self.assertEqual(shadow["status"], "SHADOW_PLAN_OBSERVATION_WAITING")
+        self.assertFalse(shadow["shadow_execution_enabled"])
+        self.assertFalse(shadow["paper_orders_sent"])
+        self.assertFalse(shadow["live_orders_sent"])
+        self.assertFalse(
+            (self.root / "data/trading/research/forex_v3_shadow_plans.json").exists()
+        )
+
+    def test_v3_shadow_observer_failure_does_not_block_base_paper(self) -> None:
+        result = ForexDemoPaperRuntime(
+            self.root,
+            settings=self.settings(),
+            gateway=FakeGateway(),  # type: ignore[arg-type]
+            journal=_ready_journal(self.root),
+            v3_shadow_observer=FailingV3ShadowObserver(),  # type: ignore[arg-type]
+        ).run_once(cycle_id="shadow-observer-failure", now=NOW)
+
+        self.assertEqual(result["status"], "PAPER_CYCLE_COMPLETED")
+        self.assertEqual(result["paper"]["execution"]["status"], "APPLIED")
+        shadow = result["v3_shadow_plan_observation"]
+        self.assertEqual(shadow["status"], "SHADOW_PLAN_OBSERVER_FAILED")
+        self.assertFalse(shadow["shadow_execution_enabled"])
+        self.assertFalse(shadow["broker_orders_sent"])
+        self.assertFalse(shadow["live_orders_sent"])
 
     def test_report_write_failure_does_not_block_local_paper_cycle(self) -> None:
         result = ForexDemoPaperRuntime(
