@@ -70,6 +70,8 @@ class ForexV3ShadowPlanJournal:
         }
         instruction_count = 0
         market_days: set[str] = set()
+        sample_cutoff_plan_count = 0
+        sample_fingerprint_sha256 = ""
         for entry in plans:
             decision = str(entry.get("decision_status", ""))
             if decision in decisions:
@@ -85,11 +87,30 @@ class ForexV3ShadowPlanJournal:
                     market_days.add(assessed_at.date().isoformat())
             except (TypeError, ValueError, OverflowError):
                 pass
+            if (
+                not sample_cutoff_plan_count
+                and len(market_days) >= self.MINIMUM_MARKET_DAY_COUNT
+                and int(entry.get("sequence", 0)) >= self.MINIMUM_PLAN_COUNT
+            ):
+                sample_cutoff_plan_count = int(entry["sequence"])
+                identity = {
+                    "mode": self.MODE,
+                    "cutoff_plan_count": sample_cutoff_plan_count,
+                    "plan_sha256": [
+                        str(item.get("plan_sha256", ""))
+                        for item in plans[:sample_cutoff_plan_count]
+                    ],
+                }
+                encoded = json.dumps(
+                    identity,
+                    ensure_ascii=True,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+                sample_fingerprint_sha256 = hashlib.sha256(encoded).hexdigest()
         latest = dict(plans[-1]) if plans else {}
-        plan_sample_complete = bool(
-            len(plans) >= self.MINIMUM_PLAN_COUNT
-            and len(market_days) >= self.MINIMUM_MARKET_DAY_COUNT
-        )
+        first = dict(plans[0]) if plans else {}
+        plan_sample_complete = bool(sample_cutoff_plan_count)
         return {
             "status": (
                 "BLOCKED_SHADOW_PLAN_JOURNAL_INVALID"
@@ -116,6 +137,9 @@ class ForexV3ShadowPlanJournal:
                 self.MINIMUM_MARKET_DAY_COUNT - len(market_days),
             ),
             "plan_sample_complete": plan_sample_complete,
+            "sample_cutoff_plan_count": sample_cutoff_plan_count,
+            "sample_fingerprint_sha256": sample_fingerprint_sha256,
+            "first_plan_sha256": str(first.get("plan_sha256", "")),
             "performance_validated": False,
             "simulation_activation_ready": False,
             "instruction_count": instruction_count,

@@ -264,6 +264,62 @@ def _complete_v3_forward_report() -> dict:
     return report
 
 
+def _v3_shadow_plan_observation(*, complete: bool = False) -> dict:
+    first_fingerprint = hashlib.sha256(b"v3-first-shadow-plan").hexdigest()
+    sample_fingerprint = (
+        hashlib.sha256(b"v3-shadow-plan-sample").hexdigest()
+        if complete
+        else ""
+    )
+    plan_count = 20 if complete else 1
+    market_days = 3 if complete else 1
+    summary = {
+        "status": (
+            "SHADOW_PLAN_SAMPLE_COMPLETE"
+            if complete
+            else "COLLECTING_SHADOW_PLANS"
+        ),
+        "mode": "FOREX_V3_SHADOW_PLAN_JOURNAL_ONLY",
+        "audit_chain_valid": True,
+        "plan_count": plan_count,
+        "minimum_plan_count": 20,
+        "remaining_plan_count": max(0, 20 - plan_count),
+        "market_day_count": market_days,
+        "minimum_market_day_count": 3,
+        "remaining_market_day_count": max(0, 3 - market_days),
+        "entry_plan_count": 2 if complete else 0,
+        "close_plan_count": 0,
+        "no_action_plan_count": 18 if complete else 1,
+        "instruction_count": 2 if complete else 0,
+        "plan_sample_complete": complete,
+        "sample_cutoff_plan_count": 20 if complete else 0,
+        "sample_fingerprint_sha256": sample_fingerprint,
+        "first_plan_sha256": first_fingerprint,
+        "latest_assessed_at": "2026-10-03T12:00:00+00:00",
+        "latest_decision_status": "NO_ACTION",
+        "performance_validated": False,
+        "simulation_activation_ready": False,
+        "shadow_execution_enabled": False,
+        "paper_orders_sent": False,
+        "broker_orders_sent": False,
+        "live_orders_sent": False,
+        "network_access": False,
+        "real_money_access": False,
+    }
+    return {
+        "status": "SHADOW_PLAN_OBSERVED",
+        "mode": "FOREX_V3_SHADOW_PLAN_OBSERVATION_ONLY",
+        "journal_status": "SHADOW_PLAN_RECORDED",
+        "journal_summary": summary,
+        "shadow_execution_enabled": False,
+        "paper_orders_sent": False,
+        "broker_orders_sent": False,
+        "live_orders_sent": False,
+        "network_access": False,
+        "real_money_access": False,
+    }
+
+
 def _rehash_forward_report(report: dict) -> None:
     canonical = json.dumps(
         {
@@ -502,6 +558,73 @@ def test_invalid_v3_evidence_never_creates_shadow_readiness_alert() -> None:
         report["accepted_cycle_count"] = 21
         _rehash_forward_report(report)
         payload["v3_forward_evidence"] = report
+
+        result = ForexPaperActivityJournal(root).record(payload)
+
+        assert result == {"status": "RECORDED", "events_recorded": 0}
+        assert ForexPaperActivityJournal(root).events(limit=10) == []
+
+
+def test_v3_first_shadow_plan_notification_is_durable_and_once_only() -> None:
+    with TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        payload = _payload(77)
+        payload["v3_shadow_plan_observation"] = _v3_shadow_plan_observation()
+        journal = ForexPaperActivityJournal(root)
+
+        first = journal.record(payload)
+        repeated = dict(payload, cycle_id="cycle-78")
+        second = journal.record(repeated)
+        events = journal.events(limit=10)
+        state = journal.store.load()
+
+        assert first == {"status": "RECORDED", "events_recorded": 1}
+        assert second == {"status": "RECORDED", "events_recorded": 0}
+        assert [event["kind"] for event in events] == [
+            "FOREX_V3_SHADOW_FIRST_PLAN_RECORDED"
+        ]
+        assert "pierwszy audytowany, niewykonywalny plan" in events[0]["message"]
+        assert "Nie utworzyłem pozycji" in events[0]["message"]
+        assert len(state["v3_shadow_first_plan_fingerprint"]) == 64
+
+
+def test_v3_shadow_plan_sample_notification_is_durable_and_once_only() -> None:
+    with TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        journal = ForexPaperActivityJournal(root)
+        first = _payload(79)
+        first["v3_shadow_plan_observation"] = _v3_shadow_plan_observation()
+        journal.record(first)
+        complete = _payload(80)
+        complete["v3_shadow_plan_observation"] = (
+            _v3_shadow_plan_observation(complete=True)
+        )
+
+        recorded = journal.record(complete)
+        repeated = dict(complete, cycle_id="cycle-81")
+        duplicate = journal.record(repeated)
+        events = journal.events(limit=10)
+        state = journal.store.load()
+
+        assert recorded == {"status": "RECORDED", "events_recorded": 1}
+        assert duplicate == {"status": "RECORDED", "events_recorded": 0}
+        assert [event["kind"] for event in events] == [
+            "FOREX_V3_SHADOW_FIRST_PLAN_RECORDED",
+            "FOREX_V3_SHADOW_PLAN_SAMPLE_READY",
+        ]
+        assert "20/20 planów i 3/3 dni" in events[-1]["message"]
+        assert "To nie jest wynik finansowy" in events[-1]["message"]
+        assert "LIVE pozostają wyłączone" in events[-1]["message"]
+        assert len(state["v3_shadow_plan_sample_fingerprint"]) == 64
+
+
+def test_unsafe_v3_shadow_plan_summary_never_creates_notification() -> None:
+    with TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        payload = _payload(82)
+        observation = _v3_shadow_plan_observation()
+        observation["live_orders_sent"] = True
+        payload["v3_shadow_plan_observation"] = observation
 
         result = ForexPaperActivityJournal(root).record(payload)
 

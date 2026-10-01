@@ -386,6 +386,10 @@ The plan journal then requires at least 20 unique non-executable plans across
 3 market days before it marks the plan-observation sample complete. This gate
 measures only decision frequency and audit continuity: it does not validate
 profitability, enable shadow position simulation, change PAPER or enable LIVE.
+The durable PAPER activity history also records one deduplicated owner notice
+when the first verified V3 plan is archived and another when the 20-plan/3-day
+sample becomes complete. Both notices are derived from the audited journal,
+survive a closed JARVIS window and explicitly keep execution disabled.
 
 When that threshold is reached, the existing durable PAPER activity history
 adds one owner notification for the frozen candidate. The notification survives

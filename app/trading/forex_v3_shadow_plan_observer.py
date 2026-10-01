@@ -68,8 +68,8 @@ class ForexV3ShadowPlanObserver:
             journal_status=journal_status,
         )
 
-    @staticmethod
     def _result(
+        self,
         status: str,
         *,
         plan: Mapping[str, Any],
@@ -79,6 +79,7 @@ class ForexV3ShadowPlanObserver:
             "status": status,
             "mode": "FOREX_V3_SHADOW_PLAN_OBSERVATION_ONLY",
             "journal_status": journal_status,
+            "journal_summary": self.journal.summary(),
             "plan": dict(plan),
             "shadow_execution_enabled": False,
             "paper_orders_sent": False,

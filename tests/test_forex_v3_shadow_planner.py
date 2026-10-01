@@ -239,6 +239,9 @@ def test_plan_journal_records_once_without_touching_shadow_positions(
     assert summary["minimum_market_day_count"] == 3
     assert summary["remaining_market_day_count"] == 2
     assert summary["plan_sample_complete"] is False
+    assert len(summary["first_plan_sha256"]) == 64
+    assert summary["sample_cutoff_plan_count"] == 0
+    assert summary["sample_fingerprint_sha256"] == ""
     assert summary["performance_validated"] is False
     assert summary["simulation_activation_ready"] is False
     assert summary["entry_plan_count"] == 1
@@ -286,6 +289,9 @@ def test_empty_plan_journal_summary_does_not_create_file(tmp_path) -> None:
     assert summary["market_day_count"] == 0
     assert summary["remaining_market_day_count"] == 3
     assert summary["plan_sample_complete"] is False
+    assert summary["first_plan_sha256"] == ""
+    assert summary["sample_cutoff_plan_count"] == 0
+    assert summary["sample_fingerprint_sha256"] == ""
     assert summary["instruction_count"] == 0
     assert summary["shadow_execution_enabled"] is False
     assert not journal.path.exists()
@@ -325,6 +331,9 @@ def test_plan_journal_requires_twenty_plans_across_three_days(tmp_path) -> None:
     assert summary["market_day_count"] == 3
     assert summary["remaining_market_day_count"] == 0
     assert summary["plan_sample_complete"] is True
+    assert summary["sample_cutoff_plan_count"] == 20
+    assert len(summary["sample_fingerprint_sha256"]) == 64
+    assert len(summary["first_plan_sha256"]) == 64
     assert summary["performance_validated"] is False
     assert summary["simulation_activation_ready"] is False
     assert summary["shadow_execution_enabled"] is False
@@ -420,6 +429,8 @@ def test_plan_observer_archives_plan_but_never_executes_it(tmp_path) -> None:
 
     assert result["status"] == "SHADOW_PLAN_OBSERVED"
     assert result["journal_status"] == "SHADOW_PLAN_RECORDED"
+    assert result["journal_summary"]["plan_count"] == 1
+    assert result["journal_summary"]["audit_chain_valid"] is True
     assert repeated["status"] == "SHADOW_PLAN_ALREADY_OBSERVED"
     assert result["plan"]["executable"] is False
     assert result["broker_orders_sent"] is False

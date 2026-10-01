@@ -21,7 +21,6 @@ from app.trading.forex_review_notifications import (
     normalized_review_fingerprints, review_milestones,
 )
 
-
 _PAIR = re.compile(r"^[A-Z]{3}_[A-Z]{3}$")
 
 
@@ -51,6 +50,8 @@ class ForexPaperActivityJournal:
             "last_protection_health": "",
             "forward_review_fingerprint": "",
             "v3_shadow_readiness_fingerprint": "",
+            "v3_shadow_first_plan_fingerprint": "",
+            "v3_shadow_plan_sample_fingerprint": "",
             "performance_review_fingerprint": "",
             "protection_consecutive_failure_count": 0,
             "recent_cycle_keys": [],
@@ -535,5 +536,4 @@ class ForexPaperActivityJournal:
                 self.lock_path.unlink()
             except FileNotFoundError:
                 pass
-
 __all__ = ["ForexPaperActivityJournal"]
