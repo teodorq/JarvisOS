@@ -49,7 +49,7 @@ class InitializedReadiness:
         }
 
 
-def _market():
+def _market(now: datetime = NOW):
     quotes = {}
     bars = {}
     contexts = {}
@@ -60,7 +60,7 @@ def _market():
         bars[pair.symbol] = [
             ForexBar.create(
                 pair=pair,
-                timestamp=NOW - timedelta(minutes=15 * (30 - index)),
+                timestamp=now - timedelta(minutes=15 * (30 - index)),
                 open=price,
                 high=price + pair.pip_size,
                 low=price - pair.pip_size,
@@ -74,10 +74,10 @@ def _market():
             pair=pair,
             bid=prices[-1] - half,
             ask=prices[-1] + half,
-            timestamp=NOW,
+            timestamp=now,
         )
         contexts[pair.symbol] = ForexSafetyContext(
-            observed_at=NOW,
+            observed_at=now,
             market_open=True,
             calendar_ready=True,
             high_impact_event_blocked=False,
@@ -88,7 +88,7 @@ def _market():
         pair=USD_PLN_CONVERSION_PAIR,
         bid="3.999",
         ask="4.001",
-        timestamp=NOW,
+        timestamp=now,
     )]
     return quotes, bars, contexts, conversions
 
@@ -233,6 +233,14 @@ def test_plan_journal_records_once_without_touching_shadow_positions(
     assert summary["status"] == "COLLECTING_SHADOW_PLANS"
     assert summary["audit_chain_valid"] is True
     assert summary["plan_count"] == 1
+    assert summary["minimum_plan_count"] == 20
+    assert summary["remaining_plan_count"] == 19
+    assert summary["market_day_count"] == 1
+    assert summary["minimum_market_day_count"] == 3
+    assert summary["remaining_market_day_count"] == 2
+    assert summary["plan_sample_complete"] is False
+    assert summary["performance_validated"] is False
+    assert summary["simulation_activation_ready"] is False
     assert summary["entry_plan_count"] == 1
     assert summary["instruction_count"] == 1
     assert summary["latest_cycle_id"] == "shadow-plan-journal-0001"
@@ -274,9 +282,53 @@ def test_empty_plan_journal_summary_does_not_create_file(tmp_path) -> None:
     assert summary["journal_initialized"] is False
     assert summary["audit_chain_valid"] is True
     assert summary["plan_count"] == 0
+    assert summary["remaining_plan_count"] == 20
+    assert summary["market_day_count"] == 0
+    assert summary["remaining_market_day_count"] == 3
+    assert summary["plan_sample_complete"] is False
     assert summary["instruction_count"] == 0
     assert summary["shadow_execution_enabled"] is False
     assert not journal.path.exists()
+
+
+def test_plan_journal_requires_twenty_plans_across_three_days(tmp_path) -> None:
+    ledger = _initialized_ledger(tmp_path)
+    planner = ForexV3ShadowPlanner(
+        tmp_path,
+        readiness=InitializedReadiness(),
+        ledger=ledger,
+    )
+    journal = ForexV3ShadowPlanJournal(tmp_path)
+    before = ledger.snapshot()
+
+    for index in range(20):
+        assessed_at = NOW + timedelta(
+            days=index // 7,
+            minutes=15 * (index % 7),
+        )
+        quotes, bars, contexts, conversions = _market(assessed_at)
+        plan = planner.plan(
+            quotes=quotes,
+            bars=bars,
+            contexts=contexts,
+            conversion_quotes=conversions,
+            cycle_id=f"shadow-plan-sample-{index:04d}",
+            now=assessed_at,
+        )
+        assert journal.record(plan)["status"] == "SHADOW_PLAN_RECORDED"
+
+    summary = journal.summary()
+
+    assert summary["status"] == "SHADOW_PLAN_SAMPLE_COMPLETE"
+    assert summary["plan_count"] == 20
+    assert summary["remaining_plan_count"] == 0
+    assert summary["market_day_count"] == 3
+    assert summary["remaining_market_day_count"] == 0
+    assert summary["plan_sample_complete"] is True
+    assert summary["performance_validated"] is False
+    assert summary["simulation_activation_ready"] is False
+    assert summary["shadow_execution_enabled"] is False
+    assert ledger.snapshot() == before
 
 
 def test_corrupted_existing_plan_journal_is_preserved_and_blocks(tmp_path) -> None:

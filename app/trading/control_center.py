@@ -869,7 +869,23 @@ class TradingControlCenter:
                 f"{v3_shadow_plans.get('entry_plan_count', 0)}, zamknięcia "
                 f"{v3_shadow_plans.get('close_plan_count', 0)}, bez działania "
                 f"{v3_shadow_plans.get('no_action_plan_count', 0)}; wykonanie "
-                "wyłączone"
+                "wyłączone; próbka planów "
+                f"{v3_shadow_plans.get('plan_count', 0)}/"
+                f"{v3_shadow_plans.get('minimum_plan_count', 20)}, dni "
+                f"{v3_shadow_plans.get('market_day_count', 0)}/"
+                f"{v3_shadow_plans.get('minimum_market_day_count', 3)}"
+            )
+        elif v3_shadow_plans.get("status") == "SHADOW_PLAN_SAMPLE_COMPLETE":
+            v3_shadow_plans_text = (
+                "próbka planów kompletna "
+                f"{v3_shadow_plans.get('plan_count', 0)}/"
+                f"{v3_shadow_plans.get('minimum_plan_count', 20)}, dni "
+                f"{v3_shadow_plans.get('market_day_count', 0)}/"
+                f"{v3_shadow_plans.get('minimum_market_day_count', 3)}; "
+                f"plany wejścia {v3_shadow_plans.get('entry_plan_count', 0)}, "
+                f"zamknięcia {v3_shadow_plans.get('close_plan_count', 0)}, "
+                f"bez działania {v3_shadow_plans.get('no_action_plan_count', 0)}; "
+                "to nie jest wynik finansowy i wykonanie pozostaje wyłączone"
             )
         elif (
             v3_shadow_plans.get("status")
@@ -877,7 +893,7 @@ class TradingControlCenter:
         ):
             v3_shadow_plans_text = (
                 "oczekuje na bezpieczną inicjalizację i pierwszy plan; nie "
-                "utworzono żadnej pozycji"
+                "utworzono żadnej pozycji; próbka planów 0/20, dni 0/3"
             )
         else:
             v3_shadow_plans_text = (

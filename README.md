@@ -382,6 +382,10 @@ The owner can issue `przygotuj portfel V3 SHADOW`; before the threshold the
 command only reports the remaining cycles/days and writes nothing. After a
 complete verified sample it calls the guarded initializer and creates only the
 empty inactive ledger, with execution and all order/network flags still off.
+The plan journal then requires at least 20 unique non-executable plans across
+3 market days before it marks the plan-observation sample complete. This gate
+measures only decision frequency and audit continuity: it does not validate
+profitability, enable shadow position simulation, change PAPER or enable LIVE.
 
 When that threshold is reached, the existing durable PAPER activity history
 adds one owner notification for the frozen candidate. The notification survives

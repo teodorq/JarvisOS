@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from datetime import datetime
 import hashlib
 import json
 from pathlib import Path
@@ -35,6 +36,8 @@ class ForexV3ShadowPlanJournal:
     MODE = "FOREX_V3_SHADOW_PLAN_JOURNAL_ONLY"
     MAX_PLANS = 500
     MAX_BYTES = 20_000_000
+    MINIMUM_PLAN_COUNT = 20
+    MINIMUM_MARKET_DAY_COUNT = 3
 
     def __init__(self, project_root: str | Path | None = None) -> None:
         root = resolve_project_root(project_root)
@@ -66,6 +69,7 @@ class ForexV3ShadowPlanJournal:
             "NO_ACTION": 0,
         }
         instruction_count = 0
+        market_days: set[str] = set()
         for entry in plans:
             decision = str(entry.get("decision_status", ""))
             if decision in decisions:
@@ -73,11 +77,25 @@ class ForexV3ShadowPlanJournal:
             count = entry.get("instruction_count")
             if type(count) is int and count >= 0:
                 instruction_count += count
+            try:
+                assessed_at = datetime.fromisoformat(
+                    str(entry.get("assessed_at", ""))
+                )
+                if assessed_at.tzinfo is not None:
+                    market_days.add(assessed_at.date().isoformat())
+            except (TypeError, ValueError, OverflowError):
+                pass
         latest = dict(plans[-1]) if plans else {}
+        plan_sample_complete = bool(
+            len(plans) >= self.MINIMUM_PLAN_COUNT
+            and len(market_days) >= self.MINIMUM_MARKET_DAY_COUNT
+        )
         return {
             "status": (
                 "BLOCKED_SHADOW_PLAN_JOURNAL_INVALID"
                 if not valid
+                else "SHADOW_PLAN_SAMPLE_COMPLETE"
+                if plan_sample_complete
                 else "COLLECTING_SHADOW_PLANS"
                 if plans
                 else "WAITING_FOR_FIRST_SHADOW_PLAN"
@@ -86,6 +104,20 @@ class ForexV3ShadowPlanJournal:
             "journal_initialized": self.path.exists(),
             "audit_chain_valid": valid,
             "plan_count": len(plans),
+            "minimum_plan_count": self.MINIMUM_PLAN_COUNT,
+            "remaining_plan_count": max(
+                0,
+                self.MINIMUM_PLAN_COUNT - len(plans),
+            ),
+            "market_day_count": len(market_days),
+            "minimum_market_day_count": self.MINIMUM_MARKET_DAY_COUNT,
+            "remaining_market_day_count": max(
+                0,
+                self.MINIMUM_MARKET_DAY_COUNT - len(market_days),
+            ),
+            "plan_sample_complete": plan_sample_complete,
+            "performance_validated": False,
+            "simulation_activation_ready": False,
             "instruction_count": instruction_count,
             "entry_plan_count": decisions["ENTRIES_READY"],
             "close_plan_count": decisions["CLOSES_READY"],

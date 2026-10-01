@@ -747,6 +747,9 @@ class TradingControlAndRoutingTests(unittest.TestCase):
             snapshot["forex"]["v3_shadow_plans"].update({
                 "status": "COLLECTING_SHADOW_PLANS",
                 "plan_count": 3,
+                "minimum_plan_count": 20,
+                "market_day_count": 1,
+                "minimum_market_day_count": 3,
                 "entry_plan_count": 1,
                 "close_plan_count": 1,
                 "no_action_plan_count": 1,
@@ -771,7 +774,8 @@ class TradingControlAndRoutingTests(unittest.TestCase):
         )
         self.assertIn(
             "Dziennik planów V3 SHADOW: zapisane 3; plany wejścia 1, "
-            "zamknięcia 1, bez działania 1; wykonanie wyłączone",
+            "zamknięcia 1, bez działania 1; wykonanie wyłączone; próbka "
+            "planów 3/20, dni 1/3",
             rendered,
         )
         self.assertIn(
