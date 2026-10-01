@@ -873,9 +873,25 @@ class TradingControlCenter:
                 f"{v3_shadow_plans.get('plan_count', 0)}/"
                 f"{v3_shadow_plans.get('minimum_plan_count', 20)}, dni "
                 f"{v3_shadow_plans.get('market_day_count', 0)}/"
-                f"{v3_shadow_plans.get('minimum_market_day_count', 3)}"
+                f"{v3_shadow_plans.get('minimum_market_day_count', 3)}; "
+                "minimalna kontrola sygnałów wejścia "
+                f"{v3_shadow_plans.get('entry_plan_count', 0)}/"
+                f"{v3_shadow_plans.get('minimum_entry_plan_count', 3)}"
             )
-        elif v3_shadow_plans.get("status") == "SHADOW_PLAN_SAMPLE_COMPLETE":
+        elif (
+            v3_shadow_plans.get("status")
+            == "SHADOW_PLAN_SAMPLE_SIGNAL_SCARCE"
+        ):
+            v3_shadow_plans_text = (
+                "próbka planów kompletna, ale V3 generuje za mało planów "
+                f"wejścia: {v3_shadow_plans.get('entry_plan_count', 0)}/"
+                f"{v3_shadow_plans.get('minimum_entry_plan_count', 3)}; "
+                "przegląd symulacji jest zablokowany, wykonanie wyłączone"
+            )
+        elif (
+            v3_shadow_plans.get("status")
+            == "SHADOW_PLAN_SAMPLE_REVIEW_READY"
+        ):
             v3_shadow_plans_text = (
                 "próbka planów kompletna "
                 f"{v3_shadow_plans.get('plan_count', 0)}/"
@@ -885,7 +901,8 @@ class TradingControlCenter:
                 f"plany wejścia {v3_shadow_plans.get('entry_plan_count', 0)}, "
                 f"zamknięcia {v3_shadow_plans.get('close_plan_count', 0)}, "
                 f"bez działania {v3_shadow_plans.get('no_action_plan_count', 0)}; "
-                "to nie jest wynik finansowy i wykonanie pozostaje wyłączone"
+                "minimalna częstotliwość sygnałów przeszła kontrolę, ale to nie "
+                "jest wynik finansowy i wykonanie pozostaje wyłączone"
             )
         elif (
             v3_shadow_plans.get("status")
@@ -893,7 +910,8 @@ class TradingControlCenter:
         ):
             v3_shadow_plans_text = (
                 "oczekuje na bezpieczną inicjalizację i pierwszy plan; nie "
-                "utworzono żadnej pozycji; próbka planów 0/20, dni 0/3"
+                "utworzono żadnej pozycji; próbka planów 0/20, dni 0/3, "
+                "plany wejścia 0/3"
             )
         else:
             v3_shadow_plans_text = (

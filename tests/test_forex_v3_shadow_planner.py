@@ -49,13 +49,13 @@ class InitializedReadiness:
         }
 
 
-def _market(now: datetime = NOW):
+def _market(now: datetime = NOW, *, signal: bool = True):
     quotes = {}
     bars = {}
     contexts = {}
     for pair in MAJOR_FOREX_PAIRS:
         prices = [BASE[pair.symbol]] * 31
-        if pair.symbol == "EUR_USD":
+        if pair.symbol == "EUR_USD" and signal:
             prices[-1] += pair.pip_size * Decimal("20")
         bars[pair.symbol] = [
             ForexBar.create(
@@ -244,6 +244,11 @@ def test_plan_journal_records_once_without_touching_shadow_positions(
     assert summary["sample_fingerprint_sha256"] == ""
     assert summary["performance_validated"] is False
     assert summary["simulation_activation_ready"] is False
+    assert summary["minimum_entry_plan_count"] == 3
+    assert summary["remaining_entry_plan_count"] == 2
+    assert summary["signal_sample_sufficient"] is False
+    assert summary["signal_scarcity_detected"] is False
+    assert summary["simulation_review_ready"] is False
     assert summary["entry_plan_count"] == 1
     assert summary["instruction_count"] == 1
     assert summary["latest_cycle_id"] == "shadow-plan-journal-0001"
@@ -325,7 +330,7 @@ def test_plan_journal_requires_twenty_plans_across_three_days(tmp_path) -> None:
 
     summary = journal.summary()
 
-    assert summary["status"] == "SHADOW_PLAN_SAMPLE_COMPLETE"
+    assert summary["status"] == "SHADOW_PLAN_SAMPLE_REVIEW_READY"
     assert summary["plan_count"] == 20
     assert summary["remaining_plan_count"] == 0
     assert summary["market_day_count"] == 3
@@ -336,7 +341,60 @@ def test_plan_journal_requires_twenty_plans_across_three_days(tmp_path) -> None:
     assert len(summary["first_plan_sha256"]) == 64
     assert summary["performance_validated"] is False
     assert summary["simulation_activation_ready"] is False
+    assert summary["entry_plan_count"] >= 3
+    assert summary["remaining_entry_plan_count"] == 0
+    assert summary["signal_sample_sufficient"] is True
+    assert summary["signal_scarcity_detected"] is False
+    assert summary["simulation_review_ready"] is True
+    assert summary["review_cutoff_plan_count"] == 20
+    assert len(summary["review_fingerprint_sha256"]) == 64
     assert summary["shadow_execution_enabled"] is False
+    assert ledger.snapshot() == before
+
+
+def test_complete_plan_sample_blocks_review_when_signals_are_too_scarce(
+    tmp_path,
+) -> None:
+    ledger = _initialized_ledger(tmp_path)
+    planner = ForexV3ShadowPlanner(
+        tmp_path,
+        readiness=InitializedReadiness(),
+        ledger=ledger,
+    )
+    journal = ForexV3ShadowPlanJournal(tmp_path)
+    before = ledger.snapshot()
+
+    for index in range(20):
+        assessed_at = NOW + timedelta(
+            days=index // 7,
+            minutes=15 * (index % 7),
+        )
+        quotes, bars, contexts, conversions = _market(
+            assessed_at,
+            signal=False,
+        )
+        plan = planner.plan(
+            quotes=quotes,
+            bars=bars,
+            contexts=contexts,
+            conversion_quotes=conversions,
+            cycle_id=f"shadow-plan-scarce-{index:04d}",
+            now=assessed_at,
+        )
+        assert journal.record(plan)["status"] == "SHADOW_PLAN_RECORDED"
+
+    summary = journal.summary()
+
+    assert summary["status"] == "SHADOW_PLAN_SAMPLE_SIGNAL_SCARCE"
+    assert summary["plan_sample_complete"] is True
+    assert summary["entry_plan_count"] == 0
+    assert summary["remaining_entry_plan_count"] == 3
+    assert summary["signal_sample_sufficient"] is False
+    assert summary["signal_scarcity_detected"] is True
+    assert summary["simulation_review_ready"] is False
+    assert summary["review_cutoff_plan_count"] == 0
+    assert summary["review_fingerprint_sha256"] == ""
+    assert summary["simulation_activation_ready"] is False
     assert ledger.snapshot() == before
 
 

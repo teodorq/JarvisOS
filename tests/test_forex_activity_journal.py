@@ -275,7 +275,7 @@ def _v3_shadow_plan_observation(*, complete: bool = False) -> dict:
     market_days = 3 if complete else 1
     summary = {
         "status": (
-            "SHADOW_PLAN_SAMPLE_COMPLETE"
+            "SHADOW_PLAN_SAMPLE_SIGNAL_SCARCE"
             if complete
             else "COLLECTING_SHADOW_PLANS"
         ),
@@ -295,9 +295,16 @@ def _v3_shadow_plan_observation(*, complete: bool = False) -> dict:
         "sample_cutoff_plan_count": 20 if complete else 0,
         "sample_fingerprint_sha256": sample_fingerprint,
         "first_plan_sha256": first_fingerprint,
+        "minimum_entry_plan_count": 3,
+        "remaining_entry_plan_count": 1 if complete else 3,
+        "signal_sample_sufficient": False,
+        "signal_scarcity_detected": complete,
+        "review_cutoff_plan_count": 0,
+        "review_fingerprint_sha256": "",
         "latest_assessed_at": "2026-10-03T12:00:00+00:00",
         "latest_decision_status": "NO_ACTION",
         "performance_validated": False,
+        "simulation_review_ready": False,
         "simulation_activation_ready": False,
         "shadow_execution_enabled": False,
         "paper_orders_sent": False,
@@ -613,6 +620,7 @@ def test_v3_shadow_plan_sample_notification_is_durable_and_once_only() -> None:
             "FOREX_V3_SHADOW_PLAN_SAMPLE_READY",
         ]
         assert "20/20 planów i 3/3 dni" in events[-1]["message"]
+        assert "za mało planów wejścia" in events[-1]["message"]
         assert "To nie jest wynik finansowy" in events[-1]["message"]
         assert "LIVE pozostają wyłączone" in events[-1]["message"]
         assert len(state["v3_shadow_plan_sample_fingerprint"]) == 64

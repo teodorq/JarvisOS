@@ -58,6 +58,9 @@ def v3_shadow_plan_milestones(
         "no_action_plan_count",
         "instruction_count",
         "sample_cutoff_plan_count",
+        "minimum_entry_plan_count",
+        "remaining_entry_plan_count",
+        "review_cutoff_plan_count",
     )
     if any(
         type(summary.get(field)) is not int
@@ -69,15 +72,31 @@ def v3_shadow_plan_milestones(
     days = int(summary["market_day_count"])
     if (
         summary.get("status")
-        not in {"COLLECTING_SHADOW_PLANS", "SHADOW_PLAN_SAMPLE_COMPLETE"}
+        not in {
+            "COLLECTING_SHADOW_PLANS",
+            "SHADOW_PLAN_SAMPLE_SIGNAL_SCARCE",
+            "SHADOW_PLAN_SAMPLE_REVIEW_READY",
+        }
         or summary["minimum_plan_count"] != 20
         or summary["minimum_market_day_count"] != 3
+        or summary["minimum_entry_plan_count"] != 3
         or summary["remaining_plan_count"] != max(0, 20 - plan_count)
         or summary["remaining_market_day_count"] != max(0, 3 - days)
+        or summary["remaining_entry_plan_count"]
+        != max(0, 3 - summary["entry_plan_count"])
         or summary["entry_plan_count"]
         + summary["close_plan_count"]
         + summary["no_action_plan_count"]
         != plan_count
+    ):
+        return {}, []
+    signal_sufficient = summary["entry_plan_count"] >= 3
+    if (
+        summary.get("signal_sample_sufficient") is not signal_sufficient
+        or summary.get("signal_scarcity_detected")
+        is not bool(summary.get("plan_sample_complete") and not signal_sufficient)
+        or summary.get("simulation_review_ready")
+        is not bool(summary["review_cutoff_plan_count"])
     ):
         return {}, []
     first_fingerprint = str(summary.get("first_plan_sha256", ""))
@@ -104,7 +123,10 @@ def v3_shadow_plan_milestones(
         })
     sample_fingerprint = str(summary.get("sample_fingerprint_sha256", ""))
     sample_complete = bool(
-        summary.get("status") == "SHADOW_PLAN_SAMPLE_COMPLETE"
+        summary.get("status") in {
+            "SHADOW_PLAN_SAMPLE_SIGNAL_SCARCE",
+            "SHADOW_PLAN_SAMPLE_REVIEW_READY",
+        }
         and summary.get("plan_sample_complete") is True
         and summary["remaining_plan_count"] == 0
         and summary["remaining_market_day_count"] == 0
@@ -113,6 +135,15 @@ def v3_shadow_plan_milestones(
     )
     if sample_complete and sample_fingerprint != str(completed_sample_fingerprint):
         fingerprints["v3_shadow_plan_sample_fingerprint"] = sample_fingerprint
+        scarcity_text = (
+            " Filtr wygenerował za mało planów wejścia do przeglądu symulacji; "
+            "V3 pozostaje zablokowany."
+            if summary.get("signal_scarcity_detected") is True
+            else (
+                " Minimalna częstotliwość planów wejścia przeszła kontrolę, "
+                "ale nie ocenia to skuteczności."
+            )
+        )
         milestones.append({
             "kind": "FOREX_V3_SHADOW_PLAN_SAMPLE_READY",
             "state": "important",
@@ -121,7 +152,7 @@ def v3_shadow_plan_milestones(
                 f"planów i {days}/3 dni rynkowych. Plany wejścia: "
                 f"{summary['entry_plan_count']}; zamknięcia: "
                 f"{summary['close_plan_count']}; bez działania: "
-                f"{summary['no_action_plan_count']}. To nie jest wynik "
+                f"{summary['no_action_plan_count']}.{scarcity_text} To nie jest wynik "
                 "finansowy; symulacja pozycji, zmiana PAPER i LIVE pozostają "
                 "wyłączone."
             ),

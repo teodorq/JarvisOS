@@ -38,6 +38,7 @@ class ForexV3ShadowPlanJournal:
     MAX_BYTES = 20_000_000
     MINIMUM_PLAN_COUNT = 20
     MINIMUM_MARKET_DAY_COUNT = 3
+    MINIMUM_ENTRY_PLAN_COUNT = 3
 
     def __init__(self, project_root: str | Path | None = None) -> None:
         root = resolve_project_root(project_root)
@@ -72,10 +73,15 @@ class ForexV3ShadowPlanJournal:
         market_days: set[str] = set()
         sample_cutoff_plan_count = 0
         sample_fingerprint_sha256 = ""
+        review_cutoff_plan_count = 0
+        review_fingerprint_sha256 = ""
+        entry_plan_seen = 0
         for entry in plans:
             decision = str(entry.get("decision_status", ""))
             if decision in decisions:
                 decisions[decision] += 1
+            if decision == "ENTRIES_READY":
+                entry_plan_seen += 1
             count = entry.get("instruction_count")
             if type(count) is int and count >= 0:
                 instruction_count += count
@@ -108,14 +114,40 @@ class ForexV3ShadowPlanJournal:
                     separators=(",", ":"),
                 ).encode("utf-8")
                 sample_fingerprint_sha256 = hashlib.sha256(encoded).hexdigest()
+            if (
+                not review_cutoff_plan_count
+                and len(market_days) >= self.MINIMUM_MARKET_DAY_COUNT
+                and int(entry.get("sequence", 0)) >= self.MINIMUM_PLAN_COUNT
+                and entry_plan_seen >= self.MINIMUM_ENTRY_PLAN_COUNT
+            ):
+                review_cutoff_plan_count = int(entry["sequence"])
+                identity = {
+                    "mode": self.MODE,
+                    "purpose": "V3_SHADOW_SIMULATION_REVIEW",
+                    "cutoff_plan_count": review_cutoff_plan_count,
+                    "plan_sha256": [
+                        str(item.get("plan_sha256", ""))
+                        for item in plans[:review_cutoff_plan_count]
+                    ],
+                }
+                encoded = json.dumps(
+                    identity,
+                    ensure_ascii=True,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+                review_fingerprint_sha256 = hashlib.sha256(encoded).hexdigest()
         latest = dict(plans[-1]) if plans else {}
         first = dict(plans[0]) if plans else {}
         plan_sample_complete = bool(sample_cutoff_plan_count)
+        simulation_review_ready = bool(review_cutoff_plan_count)
         return {
             "status": (
                 "BLOCKED_SHADOW_PLAN_JOURNAL_INVALID"
                 if not valid
-                else "SHADOW_PLAN_SAMPLE_COMPLETE"
+                else "SHADOW_PLAN_SAMPLE_REVIEW_READY"
+                if simulation_review_ready
+                else "SHADOW_PLAN_SAMPLE_SIGNAL_SCARCE"
                 if plan_sample_complete
                 else "COLLECTING_SHADOW_PLANS"
                 if plans
@@ -140,7 +172,22 @@ class ForexV3ShadowPlanJournal:
             "sample_cutoff_plan_count": sample_cutoff_plan_count,
             "sample_fingerprint_sha256": sample_fingerprint_sha256,
             "first_plan_sha256": str(first.get("plan_sha256", "")),
+            "minimum_entry_plan_count": self.MINIMUM_ENTRY_PLAN_COUNT,
+            "remaining_entry_plan_count": max(
+                0,
+                self.MINIMUM_ENTRY_PLAN_COUNT - decisions["ENTRIES_READY"],
+            ),
+            "signal_sample_sufficient": (
+                decisions["ENTRIES_READY"] >= self.MINIMUM_ENTRY_PLAN_COUNT
+            ),
+            "signal_scarcity_detected": bool(
+                plan_sample_complete
+                and decisions["ENTRIES_READY"] < self.MINIMUM_ENTRY_PLAN_COUNT
+            ),
+            "review_cutoff_plan_count": review_cutoff_plan_count,
+            "review_fingerprint_sha256": review_fingerprint_sha256,
             "performance_validated": False,
+            "simulation_review_ready": simulation_review_ready,
             "simulation_activation_ready": False,
             "instruction_count": instruction_count,
             "entry_plan_count": decisions["ENTRIES_READY"],

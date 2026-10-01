@@ -847,6 +847,34 @@ class TradingControlAndRoutingTests(unittest.TestCase):
         self.assertIn("odrzucona przez kontrolę bezpieczeństwa", response)
         self.assertIn("Nie utworzono aktywnego portfela", response)
 
+    def test_v3_shadow_signal_scarcity_blocks_simulation_review(self) -> None:
+        with TemporaryDirectory() as directory:
+            center = TradingControlCenter(directory)
+            snapshot = center.status()
+            snapshot["forex"]["v3_shadow_plans"].update({
+                "status": "SHADOW_PLAN_SAMPLE_SIGNAL_SCARCE",
+                "plan_count": 20,
+                "minimum_plan_count": 20,
+                "market_day_count": 3,
+                "minimum_market_day_count": 3,
+                "entry_plan_count": 0,
+                "minimum_entry_plan_count": 3,
+                "signal_scarcity_detected": True,
+                "simulation_review_ready": False,
+                "simulation_activation_ready": False,
+                "shadow_execution_enabled": False,
+            })
+            with patch.object(center, "status", return_value=snapshot):
+                rendered = center.format_status()
+
+        self.assertIn(
+            "próbka planów kompletna, ale V3 generuje za mało planów "
+            "wejścia: 0/3",
+            rendered,
+        )
+        self.assertIn("przegląd symulacji jest zablokowany", rendered)
+        self.assertIn("wykonanie wyłączone", rendered)
+
     def test_observation_progress_phrases_are_owner_only_read_only_status(self) -> None:
         variants = (
             "Status obserwatora Forex",

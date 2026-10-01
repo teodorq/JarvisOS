@@ -386,6 +386,10 @@ The plan journal then requires at least 20 unique non-executable plans across
 3 market days before it marks the plan-observation sample complete. This gate
 measures only decision frequency and audit continuity: it does not validate
 profitability, enable shadow position simulation, change PAPER or enable LIVE.
+The completed plan sample must also contain at least 3 entry plans before it is
+ready even for a simulation review. Fewer entry plans mark the V3 candidate as
+signal-scarce and keep that review blocked; this is only a frequency sanity
+check, never performance validation or permission to execute.
 The durable PAPER activity history also records one deduplicated owner notice
 when the first verified V3 plan is archived and another when the 20-plan/3-day
 sample becomes complete. Both notices are derived from the audited journal,
