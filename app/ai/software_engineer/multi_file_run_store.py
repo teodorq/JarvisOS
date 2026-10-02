@@ -15,7 +15,7 @@ class MultiFileRunStore:
         self,
         project_root: str | Path,
         *,
-        max_records: int = 100,
+        max_records: int = 50,
         filename: str = "multi_file_feature_runs.json",
     ) -> None:
         self.paths = ProjectPaths.from_value(
@@ -87,12 +87,7 @@ class MultiFileRunStore:
 
         order.append(run_id)
 
-        while len(order) > self.max_records:
-            removed = order.pop(0)
-            runs.pop(
-                removed,
-                None,
-            )
+        self._trim(payload)
 
         payload["updated_at"] = (
             datetime.now(
@@ -104,6 +99,21 @@ class MultiFileRunStore:
         )
 
         return dict(stored)
+
+    def compact(self) -> dict[str, int]:
+        payload = self._normalized_payload(self._store.load())
+        before = len(payload["order"])
+        self._trim(payload)
+        removed = before - len(payload["order"])
+        if removed:
+            payload["updated_at"] = datetime.now(timezone.utc).isoformat()
+            self._store.save(payload)
+        return {"kept": len(payload["order"]), "removed": removed}
+
+    def _trim(self, payload: dict[str, Any]) -> None:
+        while len(payload["order"]) > self.max_records:
+            removed = payload["order"].pop(0)
+            payload["runs"].pop(removed, None)
 
     def get(
         self,

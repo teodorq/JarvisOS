@@ -112,8 +112,41 @@ class SafeDevelopmentStore:
                 "updated_at": session.updated_at,
             })
             self._save_registry(registry)
+            self._compact_terminal_workspace(session.session_id, session.status)
             self._prune_locked(registry)
         return session
+
+    def compact_terminal_workspaces(self) -> dict[str, int]:
+        """Remove disposable project copies while retaining audit artifacts."""
+        removed_directories = 0
+        reclaimed_bytes = 0
+        with self._lock:
+            registry = self._load_registry()
+            sessions = dict(registry.get("sessions", {}) or {})
+            for session_id, item in sessions.items():
+                result = self._compact_terminal_workspace(
+                    str(session_id), str(dict(item or {}).get("status", ""))
+                )
+                removed_directories += int(result["removed"])
+                reclaimed_bytes += int(result["reclaimed_bytes"])
+        return {
+            "removed_directories": removed_directories,
+            "reclaimed_bytes": reclaimed_bytes,
+        }
+
+    def _compact_terminal_workspace(
+        self, session_id: str, status: str
+    ) -> dict[str, int]:
+        if str(status).upper() not in TERMINAL_SESSION_STATES:
+            return {"removed": 0, "reclaimed_bytes": 0}
+        workspace = self.session_dir(session_id) / "workspace"
+        if not self._inside_store(workspace) or not workspace.is_dir():
+            return {"removed": 0, "reclaimed_bytes": 0}
+        reclaimed = sum(
+            path.stat().st_size for path in workspace.rglob("*") if path.is_file()
+        )
+        shutil.rmtree(workspace)
+        return {"removed": 1, "reclaimed_bytes": reclaimed}
 
     def load_session(self, session_id: str) -> SafeDevelopmentSession:
         safe_id = self._safe_session_id(session_id)
