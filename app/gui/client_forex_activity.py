@@ -6,6 +6,8 @@ from typing import Any
 
 from PySide6.QtCore import QTimer
 
+from app.gui.client_background_reads import submit_client_read
+
 
 class ClientForexActivityRuntime:
     """Poll the local feed and route new events through UI idle policy."""
@@ -29,10 +31,9 @@ class ClientForexActivityRuntime:
         poll = getattr(feed, "poll", None)
         if not callable(poll):
             return
-        try:
-            event = poll()
-        except Exception:
-            return
+        submit_client_read(self.window, poll, self._deliver, lambda _error: None)
+
+    def _deliver(self, event: object) -> None:
         if isinstance(event, dict):
             self.window._safe_proactivity_runtime().deliver(
                 event, priority=30, kind="forex_paper"

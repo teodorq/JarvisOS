@@ -30,6 +30,14 @@ class CinematicOrbRenderer:
 
     def __init__(self) -> None:
         self._particles = self._build_particles(self.PARTICLE_COUNT)
+        self._particle_cache_signature: (
+            tuple[float, float, float, int] | None
+        ) = None
+        self._particle_cache: (
+            tuple[tuple[QPolygonF, ...], QPolygonF] | None
+        ) = None
+        self._particle_cache_age = 0
+        self._particle_geometry_builds = 0
 
     def paint(
         self,
@@ -319,21 +327,93 @@ class CinematicOrbRenderer:
         intensity: float,
         particle_stride_multiplier: int,
     ) -> None:
+        stride = self._particle_stride(
+            size, state, particle_stride_multiplier
+        )
+        signature = (center.x(), center.y(), size, stride)
+        idle = state in {"idle", "brief", "success"}
+        reuse = (
+            idle
+            and self._particle_cache is not None
+            and self._particle_cache_signature == signature
+            and self._particle_cache_age < 1
+        )
+        if reuse:
+            batches, corona = self._particle_cache
+            self._particle_cache_age += 1
+        else:
+            batches, corona = self._particle_geometry(
+                center, size, angle, pulse_phase, stride
+            )
+            self._particle_geometry_builds += 1
+            self._particle_cache_age = 0
+            if idle:
+                self._particle_cache_signature = signature
+                self._particle_cache = (batches, corona)
+            else:
+                self._particle_cache_signature = None
+                self._particle_cache = None
+        energy = 1.12 if state in {"listening", "thinking", "acting"} else 1.0
+        base_width = max(0.65, min(1.45, size / 530.0))
+        alpha_values = (46, 82, 148, 238)
+        width_values = (0.72, 0.95, 1.28, 1.85)
+        hue_shifts = (34, 18, -8, -15)
+        saturation_scales = (1.18, 1.12, 0.92, 0.28)
+        value_scales = (0.62, 0.9, 1.18, 1.3)
+        for points, alpha, width_factor, shift, saturation, value in zip(
+            batches,
+            alpha_values,
+            width_values,
+            hue_shifts,
+            saturation_scales,
+            value_scales,
+            strict=True,
+        ):
+            if points.isEmpty():
+                continue
+            particle_color = self._spectral(
+                color,
+                shift,
+                saturation,
+                value,
+                min(255, int(alpha * intensity * energy)),
+            )
+            painter.setPen(
+                QPen(
+                    particle_color,
+                    base_width * width_factor,
+                    Qt.SolidLine,
+                    Qt.RoundCap,
+                )
+            )
+            painter.drawPoints(points)
+        if not corona.isEmpty():
+            spark = self._spectral(
+                color, -22, 0.42, 1.35, int(145 * intensity)
+            )
+            painter.setPen(
+                QPen(spark, max(0.7, size / 520.0), Qt.SolidLine, Qt.RoundCap)
+            )
+            painter.drawPoints(corona)
+
+    def _particle_geometry(
+        self,
+        center: QPointF,
+        size: float,
+        angle: float,
+        pulse_phase: float,
+        stride: int,
+    ) -> tuple[tuple[QPolygonF, ...], QPolygonF]:
         radius = size * (0.322 + 0.006 * math.sin(pulse_phase))
         yaw = math.radians(angle * 0.31)
         pitch = math.radians(-8.0 + math.sin(pulse_phase * 0.42) * 3.2)
         cy, sy = math.cos(yaw), math.sin(yaw)
         cp, sp = math.cos(pitch), math.sin(pitch)
-        stride = self._particle_stride(
-            size, state, particle_stride_multiplier
-        )
-        batches: list[list[QPointF]] = [[], [], [], []]
-        corona: list[QPointF] = []
-        energy = 1.12 if state in {"listening", "thinking", "acting"} else 1.0
         flow_phase = math.radians(angle * 0.045) + pulse_phase * 0.19
         spark_phase = flow_phase * 0.61
         spark_sin, spark_cos = math.sin(spark_phase), math.cos(spark_phase)
-
+        batches: list[list[QPointF]] = [[], [], [], []]
+        corona: list[QPointF] = []
         for index in range(0, len(self._particles), stride):
             particle = self._particles[index]
             x1 = particle.x * cy + particle.z * sy
@@ -359,48 +439,7 @@ class CinematicOrbRenderer:
                         center.y() + y2 * radius * perspective * halo_scale,
                     )
                 )
-
-        base_width = max(0.65, min(1.45, size / 530.0))
-        alpha_values = (46, 82, 148, 238)
-        width_values = (0.72, 0.95, 1.28, 1.85)
-        hue_shifts = (34, 18, -8, -15)
-        saturation_scales = (1.18, 1.12, 0.92, 0.28)
-        value_scales = (0.62, 0.9, 1.18, 1.3)
-        for points, alpha, width_factor, shift, saturation, value in zip(
-            batches,
-            alpha_values,
-            width_values,
-            hue_shifts,
-            saturation_scales,
-            value_scales,
-            strict=True,
-        ):
-            if not points:
-                continue
-            particle_color = self._spectral(
-                color,
-                shift,
-                saturation,
-                value,
-                min(255, int(alpha * intensity * energy)),
-            )
-            painter.setPen(
-                QPen(
-                    particle_color,
-                    base_width * width_factor,
-                    Qt.SolidLine,
-                    Qt.RoundCap,
-                )
-            )
-            painter.drawPoints(QPolygonF(points))
-        if corona:
-            spark = self._spectral(
-                color, -22, 0.42, 1.35, int(145 * intensity)
-            )
-            painter.setPen(
-                QPen(spark, max(0.7, size / 520.0), Qt.SolidLine, Qt.RoundCap)
-            )
-            painter.drawPoints(QPolygonF(corona))
+        return tuple(QPolygonF(points) for points in batches), QPolygonF(corona)
 
     @staticmethod
     def _particle_stride(

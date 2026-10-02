@@ -81,8 +81,7 @@ class ClientExperienceWindow(ClientVoiceMixin, ClientOnlineMixin, ClientV12Mixin
             client_signal.connect(self._on_client_event)
         self._load_profile()
         self._sync_timer = QTimer(self)
-        self._sync_timer.timeout.connect(self._sync_from_owner)
-        self._sync_timer.start(5000); QTimer.singleShot(0, self._schedule_proactive_brief)
+        QTimer.singleShot(0, self._schedule_proactive_brief)
     def _build(self) -> None:
         root = ClientHudBackdrop()
         root.setObjectName("ClientRoot")
@@ -366,9 +365,6 @@ class ClientExperienceWindow(ClientVoiceMixin, ClientOnlineMixin, ClientV12Mixin
             25,
             lambda command=value: self.owner_window.process_client_command(command),
         )
-    def _sync_from_owner(self) -> None:
-        # B136: klient nie odczytuje konsoli, logów ani historii właściciela.
-        return
     def _on_client_event(self, raw_event: object) -> None:
         event = self.presenter.apply_event(raw_event)
         self.controller.set_halo(

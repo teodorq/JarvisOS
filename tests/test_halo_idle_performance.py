@@ -76,6 +76,32 @@ class HaloIdlePerformanceTests(unittest.TestCase):
             halo.set_animation_active(False)
             halo.deleteLater()
 
+    def test_idle_orb_reuses_particle_geometry_every_other_frame(self) -> None:
+        halo = HaloWidget()
+        try:
+            renderer = halo._renderer  # noqa: SLF001 - focused render regression
+            renderer._particle_cache = None  # noqa: SLF001
+            renderer._particle_geometry_builds = 0  # noqa: SLF001
+            halo.resize(640, 640)
+            halo.show()
+            halo.repaint()
+            self.app.processEvents()
+            first = renderer._particle_geometry_builds  # noqa: SLF001
+
+            halo._tick()  # noqa: SLF001 - advance continuous outer animation
+            halo.repaint()
+            self.app.processEvents()
+            self.assertEqual(renderer._particle_geometry_builds, first)  # noqa: SLF001
+
+            halo._tick()  # noqa: SLF001
+            halo.repaint()
+            self.app.processEvents()
+            self.assertEqual(renderer._particle_geometry_builds, first + 1)  # noqa: SLF001
+        finally:
+            halo.set_animation_active(False)
+            halo.hide()
+            halo.deleteLater()
+
     def test_orb_reduces_detail_only_after_repeated_slow_frames(self) -> None:
         budget = OrbFrameBudget(degrade_after=3, recover_after=4)
 

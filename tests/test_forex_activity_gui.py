@@ -63,6 +63,36 @@ def test_client_runtime_arms_once_and_delivers_through_idle_policy() -> None:
     )
 
 
+def test_client_runtime_dispatches_file_poll_outside_gui_thread() -> None:
+    event = {"state": "important", "message": "Forex PAPER"}
+    feed = SimpleNamespace(poll=Mock(return_value=event))
+    safe = SimpleNamespace(deliver=Mock())
+    window = SimpleNamespace(
+        owner_window=SimpleNamespace(
+            assistant=SimpleNamespace(
+                trading=SimpleNamespace(forex_activity=feed)
+            )
+        ),
+        _safe_proactivity_runtime=Mock(return_value=safe),
+    )
+
+    with (
+        patch("app.gui.client_forex_activity.QTimer", _Timer),
+        patch("app.gui.client_forex_activity.submit_client_read") as submit,
+    ):
+        runtime = ClientForexActivityRuntime(window)
+        runtime.poll()
+
+    submitted_window, operation, done, failed = submit.call_args.args
+    assert submitted_window is window
+    assert operation is feed.poll
+    assert callable(failed)
+    done(operation())
+    safe.deliver.assert_called_once_with(
+        event, priority=30, kind="forex_paper"
+    )
+
+
 def test_owner_runtime_displays_and_forwards_activity() -> None:
     event = {"state": "brief", "message": "Dane Forex PAPER są gotowe."}
     window = SimpleNamespace(
