@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QSize, QTimer
-from PySide6.QtGui import QPainter
 from PySide6.QtWidgets import QWidget
 
 from app.gui.cinematic_orb_renderer import CinematicOrbRenderer
+from app.gui.orb_frame_budget import OrbFrameBudget
+from app.gui.orb_widget_painter import paint_orb_frame
 
 
 class HaloWidget(QWidget):
@@ -74,6 +75,7 @@ class HaloWidget(QWidget):
         self._intensity = self.INTENSITY["idle"]
         self._target_intensity = self._intensity
         self._renderer = CinematicOrbRenderer()
+        self._frame_budget = OrbFrameBudget()
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._tick)
         self._timer.start(self._frame_interval_ms())
@@ -94,6 +96,10 @@ class HaloWidget(QWidget):
     @property
     def animation_running(self) -> bool:
         return self._timer.isActive()
+
+    @property
+    def particle_stride_multiplier(self) -> int:
+        return self._frame_budget.stride_multiplier
 
     def set_animation_active(self, active: bool) -> None:
         """Pause work for a hidden orb and resume without rebuilding it."""
@@ -137,14 +143,11 @@ class HaloWidget(QWidget):
         ) * 0.08
         self.update()
 
-    def paintEvent(self, event) -> None:  # noqa: N802 - Qt API
-        del event
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing, True)
-        self._renderer.paint(
-            painter=painter,
-            width=self.width(),
-            height=self.height(),
+    def paintEvent(self, _event) -> None:  # noqa: N802 - Qt API
+        paint_orb_frame(
+            self,
+            renderer=self._renderer,
+            frame_budget=self._frame_budget,
             state=self._state,
             color_hex=self.COLORS[self._state],
             angle=self._angle,
@@ -152,4 +155,5 @@ class HaloWidget(QWidget):
             scan=self._scan,
             progress=self._progress,
             intensity=self._intensity,
+            active=self._state not in self.IDLE_STATES,
         )

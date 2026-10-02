@@ -44,6 +44,7 @@ class CinematicOrbRenderer:
         scan: float,
         progress: int,
         intensity: float,
+        particle_stride_multiplier: int = 1,
     ) -> None:
         size = float(min(width, height))
         if size <= 2:
@@ -73,6 +74,7 @@ class CinematicOrbRenderer:
             angle,
             pulse_phase,
             intensity,
+            particle_stride_multiplier,
         )
         self._draw_energy_filaments(
             painter, center, size, color, angle, pulse_phase, intensity
@@ -315,15 +317,16 @@ class CinematicOrbRenderer:
         angle: float,
         pulse_phase: float,
         intensity: float,
+        particle_stride_multiplier: int,
     ) -> None:
         radius = size * (0.322 + 0.006 * math.sin(pulse_phase))
         yaw = math.radians(angle * 0.31)
         pitch = math.radians(-8.0 + math.sin(pulse_phase * 0.42) * 3.2)
         cy, sy = math.cos(yaw), math.sin(yaw)
         cp, sp = math.cos(pitch), math.sin(pitch)
-        stride = 3 if size < 220 else (2 if size < 390 else 1)
-        if state in {"idle", "brief", "success"}:
-            stride = max(stride, 2)
+        stride = self._particle_stride(
+            size, state, particle_stride_multiplier
+        )
         batches: list[list[QPointF]] = [[], [], [], []]
         corona: list[QPointF] = []
         energy = 1.12 if state in {"listening", "thinking", "acting"} else 1.0
@@ -398,6 +401,18 @@ class CinematicOrbRenderer:
                 QPen(spark, max(0.7, size / 520.0), Qt.SolidLine, Qt.RoundCap)
             )
             painter.drawPoints(QPolygonF(corona))
+
+    @staticmethod
+    def _particle_stride(
+        size: float,
+        state: str,
+        multiplier: int = 1,
+    ) -> int:
+        base_stride = 3 if size < 220 else (2 if size < 390 else 1)
+        if state in {"idle", "brief", "success"}:
+            base_stride = max(base_stride, 2)
+        safe_multiplier = max(1, min(3, int(multiplier)))
+        return base_stride * safe_multiplier
 
     def _draw_energy_filaments(
         self,

@@ -10,11 +10,13 @@ try:
     from PySide6.QtWidgets import QApplication
 
     from app.gui.halo_widget import HaloWidget
+    from app.gui.orb_frame_budget import OrbFrameBudget
 
     HAS_QT = True
 except Exception:
     QApplication = None
     HaloWidget = None
+    OrbFrameBudget = None
     HAS_QT = False
 
 
@@ -68,6 +70,41 @@ class HaloIdlePerformanceTests(unittest.TestCase):
         try:
             self.assertEqual(halo._renderer.PARTICLE_COUNT, 10_000)  # noqa: SLF001
             self.assertEqual(len(halo._renderer._particles), 10_000)  # noqa: SLF001
+        finally:
+            halo.set_animation_active(False)
+            halo.deleteLater()
+
+    def test_orb_reduces_detail_only_after_repeated_slow_frames(self) -> None:
+        budget = OrbFrameBudget(degrade_after=3, recover_after=4)
+
+        self.assertEqual(budget.observe(30.0, active=True), 1)
+        self.assertEqual(budget.observe(30.0, active=True), 1)
+        self.assertEqual(budget.observe(30.0, active=True), 2)
+
+    def test_orb_restores_detail_only_after_sustained_fast_frames(self) -> None:
+        budget = OrbFrameBudget(degrade_after=1, recover_after=3)
+        self.assertEqual(budget.observe(30.0, active=True), 2)
+
+        self.assertEqual(budget.observe(5.0, active=True), 2)
+        self.assertEqual(budget.observe(5.0, active=True), 2)
+        self.assertEqual(budget.observe(5.0, active=True), 1)
+
+    def test_neutral_render_time_does_not_oscillate_quality(self) -> None:
+        budget = OrbFrameBudget(degrade_after=1, recover_after=2)
+        self.assertEqual(budget.observe(30.0, active=True), 2)
+
+        for _ in range(10):
+            self.assertEqual(budget.observe(15.0, active=True), 2)
+
+    def test_renderer_stride_preserves_state_and_size_detail_rules(self) -> None:
+        halo = HaloWidget()
+        try:
+            stride = halo._renderer._particle_stride  # noqa: SLF001
+            self.assertEqual(stride(640.0, "thinking", 1), 1)
+            self.assertEqual(stride(640.0, "thinking", 2), 2)
+            self.assertEqual(stride(640.0, "idle", 1), 2)
+            self.assertEqual(stride(150.0, "thinking", 3), 9)
+            self.assertEqual(stride(640.0, "thinking", 99), 3)
         finally:
             halo.set_animation_active(False)
             halo.deleteLater()
