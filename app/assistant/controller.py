@@ -1,5 +1,5 @@
 from __future__ import annotations
-from datetime import datetime
+from app.assistant.local_clock import format_local_clock
 from pathlib import Path
 import re
 from typing import Any
@@ -63,6 +63,7 @@ class PersonalAssistantController:
             "podaj godzine",
             "powiedz mi godzine",
             "aktualna godzina",
+            "jaka jest data", "podaj date", "podaj dzisiejsza date", "dzisiejsza data", "jaki mamy dzis dzien", "jaki mamy dzisiaj dzien", "jaki dzisiaj jest dzien", "jaki jest dzis dzien", "dzien tygodnia", "data i godzina", "date and time",
             "pogoda", "pogode", "pogody", "weather", "forecast",
             "co potrafisz",
             "co umiesz",
@@ -324,8 +325,7 @@ class PersonalAssistantController:
             },
         }
     def _dispatch(self, intent: str, command: str) -> str:
-        if intent == "current_time":
-            return f"Teraz jest {datetime.now().strftime('%H:%M')}."
+        if intent == "current_time": return format_local_clock(command)
         if intent == "weather":
             return self.weather.format_for_command(command)
         if intent == "capability_help":
