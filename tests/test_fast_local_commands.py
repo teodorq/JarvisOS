@@ -12,6 +12,7 @@ from app.assistant.fast_local_commands import (
 from app.gui.owner_background_commands import OwnerBackgroundCommandRuntime
 from app.gui.client_background_commands import ClientBackgroundCommandRuntime
 from app.gui.client_busy_feedback import publish_client_busy
+from app.gui.client_command_progress import ClientCommandProgress
 
 
 def _thought(**updates) -> dict:
@@ -231,3 +232,49 @@ def test_client_busy_feedback_reports_that_command_was_not_queued() -> None:
     assert "nie dodałem tego polecenia" in events[0]["message"]
     assert events[1]["progress"] == 60
     assert "Zatwierdzone działanie" in events[1]["message"]
+
+
+def test_client_command_progress_reports_liveness_without_finishing() -> None:
+    events: list[dict] = []
+    now = [100.0]
+    window = QObject()
+    window._publish_client_event = lambda **event: events.append(event)
+    progress = ClientCommandProgress(
+        window,
+        interval_ms=30_000,
+        clock=lambda: now[0],
+    )
+
+    progress.start("planning")
+    now[0] = 112.0
+    progress._tick()
+    progress.start("executing")
+    now[0] = 130.0
+    progress._tick()
+    progress.stop()
+    progress._tick()
+
+    assert events[0] == {
+        "state": "thinking",
+        "message": "Nadal analizuję polecenie — 12 s.",
+        "progress": 24,
+    }
+    assert events[1] == {
+        "state": "acting",
+        "message": "Nadal wykonuję i sprawdzam zadanie — 18 s.",
+        "progress": 64,
+    }
+    assert all(event["progress"] < 100 for event in events)
+    assert progress.active is False
+
+
+def test_client_command_progress_rejects_unknown_phase() -> None:
+    window = QObject()
+    progress = ClientCommandProgress(window)
+
+    try:
+        progress.start("unknown")
+    except ValueError as error:
+        assert "unsupported" in str(error)
+    else:
+        raise AssertionError("unknown progress phase must be rejected")

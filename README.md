@@ -11,6 +11,10 @@ keep the full planning and safety flow.
 The compact client interface also admits only one background command at a time.
 A second command receives an immediate busy message instead of being hidden in
 an unbounded queue and returning a stale answer minutes later.
+While an accepted command is still running, the compact interface publishes a
+bounded five-second activity heartbeat. It distinguishes planning from action,
+shows elapsed time, never claims 100% before the real result and stops on
+completion, failure or window shutdown.
 
 ## What stays local
 

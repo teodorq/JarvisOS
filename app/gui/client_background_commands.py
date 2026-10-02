@@ -11,6 +11,7 @@ from app.gui.client_capability_policy import (
     ClientCapabilityPolicy,
     enforce_client_outcome,
 )
+from app.gui.client_command_progress import ClientCommandProgress
 from app.gui.client_execution_scope import (
     client_execution_denial, executable_client_thought, scope_client_thought,
 )
@@ -52,6 +53,7 @@ class ClientBackgroundCommandRuntime(QObject):
         self._jobs: set[_Job] = set()
         self._callbacks: dict[_Job, Callable[[Any], None]] = {}
         self._closed = False
+        self.progress = ClientCommandProgress(window)
 
     @property
     def busy(self) -> bool:
@@ -60,18 +62,21 @@ class ClientBackgroundCommandRuntime(QObject):
     def plan(self, command: str) -> bool:
         if self._closed or self.busy:
             return False
+        self.progress.start("planning")
         self._submit(lambda: self._plan(command), self._after_plan)
         return True
 
     def execute(self, thought: dict[str, Any]) -> bool:
         if self._closed or self.busy:
             return False
+        self.progress.start("executing")
         planned = dict(thought)
         self._submit(lambda: self._execute(planned), self._after_execute)
         return True
 
     def shutdown(self) -> None:
         self._closed = True
+        self.progress.stop()
         self.pool.clear()
         self.pool.waitForDone(1500)
         self._jobs.clear()
@@ -188,6 +193,7 @@ class ClientBackgroundCommandRuntime(QObject):
     def _complete(self, job: _Job, result: Any) -> None:
         self._jobs.discard(job)
         callback = self._callbacks.pop(job, None)
+        self.progress.stop()
         if not self._closed and callable(callback):
             callback(result)
 
@@ -195,6 +201,7 @@ class ClientBackgroundCommandRuntime(QObject):
     def _failed(self, job: _Job, error: object) -> None:
         self._jobs.discard(job)
         self._callbacks.pop(job, None)
+        self.progress.stop()
         if self._closed:
             return
         message = str(error).strip()
