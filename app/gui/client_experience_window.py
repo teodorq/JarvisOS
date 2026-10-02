@@ -29,6 +29,7 @@ from app.gui.client_voice_mixin import ClientVoiceMixin
 from app.gui.client_input_policy import should_block_client_input
 from app.gui.client_experience_v2 import ClientExperienceV2
 from app.gui.client_window_mode import ClientWindowModeRuntime
+from app.gui.main_window_runtime import set_owner_metrics_active
 from app.gui.user_text_widgets import clean_user_visible_widgets, naturalize_user_text
 class ClientExperienceWindow(ClientVoiceMixin, ClientOnlineMixin, ClientV12Mixin, QMainWindow):
     """B116-B120 simplified client shell while owner tools remain separate."""
@@ -421,6 +422,7 @@ class ClientExperienceWindow(ClientVoiceMixin, ClientOnlineMixin, ClientV12Mixin
         if callable(prepare): prepare()
         self.controller.set_mode("OWNER")
         self.window_mode.leave(); self.hide()
+        set_owner_metrics_active(self.owner_window, True)
         self.owner_window.show()
         self.owner_window.raise_()
         self.owner_window.activateWindow()

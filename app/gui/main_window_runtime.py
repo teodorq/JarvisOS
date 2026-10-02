@@ -7,6 +7,8 @@ from PySide6.QtCore import QTimer
 from app.gui.user_text_widgets import clean_user_visible_widgets
 from app.gui.remote_command_runtime import connect_remote_command_runtime
 
+OWNER_METRICS_INTERVAL_MS = 1000
+
 
 def connect_main_runtime(window: Any) -> None:
     """Connect shared voice immediately and owner-only metrics on demand."""
@@ -23,7 +25,20 @@ def connect_main_runtime(window: Any) -> None:
         return
     window.timer = QTimer(window)
     window.timer.timeout.connect(window.update_system_status)
-    window.timer.start(1000)
+    window.timer.start(OWNER_METRICS_INTERVAL_MS)
+
+
+def set_owner_metrics_active(window: Any, active: bool) -> None:
+    """Avoid refreshing hidden owner widgets while shared runtimes stay alive."""
+    timer = getattr(window, "timer", None)
+    if timer is None:
+        return
+    if active:
+        if not timer.isActive():
+            timer.start(OWNER_METRICS_INTERVAL_MS)
+        window.update_system_status()
+        return
+    timer.stop()
 
 
 def _connect_forex_activity_runtime(window: Any) -> None:
@@ -62,4 +77,6 @@ def prepare_owner_interface(window: Any) -> None:
     window.update_system_status()
 
 
-__all__ = ["connect_main_runtime", "prepare_owner_interface"]
+__all__ = [
+    "connect_main_runtime", "prepare_owner_interface", "set_owner_metrics_active",
+]

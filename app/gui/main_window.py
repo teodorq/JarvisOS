@@ -17,7 +17,7 @@ from app.gui.business_display import display_environment, display_status, same_i
 from app.gui.business_theme import BusinessTheme
 from app.gui.business_widgets import MetricCard, NavigationButton, StatusPill
 from app.gui.business_status_snapshot import business_service_snapshot
-from app.gui.main_window_runtime import connect_main_runtime, prepare_owner_interface
+from app.gui.main_window_runtime import connect_main_runtime, prepare_owner_interface, set_owner_metrics_active
 from app.gui.owner_page_loader import ensure_owner_page
 from app.system.monitor import SystemMonitor
 from app.voice.voice_listener import VoiceListener
@@ -142,6 +142,7 @@ class MainWindow(BusinessCommandRuntimeMixin, QMainWindow):
         if not ensure_owner_pin(self, self.project_root): return
         if self.client_window is None: self.client_window = ClientExperienceWindow(ClientExperienceController(self.project_root), self)
         self.client_window.showMaximized(); self.client_window.window_mode.show_conversation(); self.client_window.raise_(); self.client_window.activateWindow()
+        set_owner_metrics_active(self, False)
         self.hide()
     def _build_metrics(self) -> QGridLayout:
         layout = QGridLayout()
