@@ -25,6 +25,9 @@ class ClientForexActivityRuntime:
         QTimer.singleShot(1200, self.poll)
 
     def poll(self) -> None:
+        visible = getattr(self.window, "isVisible", None)
+        if callable(visible) and not visible():
+            return
         assistant = getattr(self.window.owner_window, "assistant", None)
         trading = getattr(assistant, "trading", None)
         feed = getattr(trading, "forex_activity", None)

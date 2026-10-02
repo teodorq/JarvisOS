@@ -52,6 +52,10 @@ def _connect_forex_activity_runtime(window: Any) -> None:
 
 
 def _show_forex_paper_activity(window: Any) -> None:
+    client_window = getattr(window, "client_window", None)
+    client_visible = getattr(client_window, "isVisible", None)
+    if callable(client_visible) and client_visible():
+        return
     try:
         event = window.assistant.trading.forex_activity.poll()
     except Exception:

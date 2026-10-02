@@ -93,6 +93,23 @@ def test_client_runtime_dispatches_file_poll_outside_gui_thread() -> None:
     )
 
 
+def test_hidden_client_does_not_consume_owner_forex_activity() -> None:
+    feed = SimpleNamespace(poll=Mock())
+    window = SimpleNamespace(
+        isVisible=Mock(return_value=False),
+        owner_window=SimpleNamespace(
+            assistant=SimpleNamespace(
+                trading=SimpleNamespace(forex_activity=feed)
+            )
+        ),
+    )
+
+    with patch("app.gui.client_forex_activity.QTimer", _Timer):
+        ClientForexActivityRuntime(window).poll()
+
+    feed.poll.assert_not_called()
+
+
 def test_owner_runtime_displays_and_forwards_activity() -> None:
     event = {"state": "brief", "message": "Dane Forex PAPER są gotowe."}
     window = SimpleNamespace(
@@ -112,3 +129,17 @@ def test_owner_runtime_displays_and_forwards_activity() -> None:
         "Jarvis: Dane Forex PAPER są gotowe."
     )
     window.client_event_signal.emit.assert_called_once_with(event)
+
+
+def test_owner_runtime_leaves_forex_feed_for_visible_client() -> None:
+    feed = SimpleNamespace(poll=Mock())
+    window = SimpleNamespace(
+        client_window=SimpleNamespace(isVisible=Mock(return_value=True)),
+        assistant=SimpleNamespace(
+            trading=SimpleNamespace(forex_activity=feed)
+        ),
+    )
+
+    _show_forex_paper_activity(window)
+
+    feed.poll.assert_not_called()
