@@ -6,6 +6,7 @@ from app.gui.client_live_conflict_refresh import ClientLiveConflictRefreshRuntim
 from app.gui.client_safe_proactivity import ClientSafeProactivityRuntime
 from app.gui.client_startup_conflict_runtime import ClientStartupConflictRuntime
 from app.gui.client_forex_activity import arm_client_forex_activity
+from app.gui.client_background_reads import submit_client_read
 from app.jarvis_experience.isolation import ClientIsolationPolicy
 
 class ClientOnlineMixin:
@@ -36,7 +37,6 @@ class ClientOnlineMixin:
         else:
             self.online_text.setText("Google Workspace nie jest połączony. Połącz konto w trybie właściciela.")
         self._schedule_proactive_brief()
-
     def _schedule_proactive_brief(self) -> None:
         if not getattr(self, "_proactive_brief_scheduled", False):
             self._proactive_brief_scheduled = True
@@ -47,67 +47,66 @@ class ClientOnlineMixin:
         arm_client_forex_activity(self)
         self._startup_conflict_runtime().arm()
         self._live_conflict_refresh_runtime().arm()
-
     def _startup_conflict_runtime(self) -> ClientStartupConflictRuntime:
         runtime = getattr(self, "_startup_conflict_runtime_service", None)
         if runtime is None:
             runtime = ClientStartupConflictRuntime(self)
             self._startup_conflict_runtime_service = runtime
         return runtime
-
     def _live_conflict_refresh_runtime(self) -> ClientLiveConflictRefreshRuntime:
         runtime = getattr(self, "_live_conflict_refresh_service", None)
         if runtime is None:
             runtime = ClientLiveConflictRefreshRuntime(self)
             self._live_conflict_refresh_service = runtime
         return runtime
-
     def _safe_proactivity_runtime(self) -> ClientSafeProactivityRuntime:
         runtime = getattr(self, "_safe_proactivity_service", None)
         if runtime is None:
             runtime = ClientSafeProactivityRuntime(self)
             self._safe_proactivity_service = runtime
         return runtime
-
     def _show_startup_conflict_scan(self) -> None:
         self._startup_conflict_runtime().run()
-
     def _show_proactive_brief(self) -> None:
         runtime = self._safe_proactivity_runtime()  # pending_thought ends in _on_client_event
         if not runtime.request(self._show_proactive_brief_now, priority=10, kind="daily_brief"):
             return
-
     def _show_proactive_brief_now(self) -> None:
-        try:
-            profile = self.controller.status()["profile"]
-            assistant = getattr(self.owner_window, "assistant", None)
-            natural = getattr(assistant, "natural_actions", None)
-            if natural is None:
-                return
+        profile = self.controller.status()["profile"]
+        assistant = getattr(self.owner_window, "assistant", None)
+        natural = getattr(assistant, "natural_actions", None)
+        if natural is None or not profile.get("setup_completed"):
+            return
+        def load():
             guard = getattr(natural, "proactive_brief_guard", None)
             decision = dict(guard() or {}) if callable(guard) else {}
             if decision.get("suppress"):
-                return
+                return {}
             result = natural.startup_brief()
-        except Exception:
-            return
-        if not profile.get("setup_completed") or not result.get("should_show"):
-            return
-        level = str(result.get("level", "quiet")).lower()
-        state = "important" if level in {"high", "critical"} else "brief"
-        payload = {"state": state, "message": str(result.get("message", "")), "progress": 0, "requires_confirmation": False}
-        self._safe_proactivity_runtime().deliver(
-            payload, priority=10, kind="daily_brief"
+            if not result.get("should_show"):
+                return {}
+            level = str(result.get("level", "quiet")).lower()
+            state = "important" if level in {"high", "critical"} else "brief"
+            return {
+                "state": state,
+                "message": str(result.get("message", "")), "progress": 0,
+                "requires_confirmation": False,
+            }
+        submit_client_read(
+            self, load, self._deliver_proactive_brief, lambda _error: None,
         )
-        if result.get("speak") and False:
-            self.owner_window.say_safe(str(result.get("message", "")))
-
+    def _deliver_proactive_brief(self, payload: object) -> None:
+        event = dict(payload or {})
+        if not event:
+            return
+        self._safe_proactivity_runtime().deliver(
+            event, priority=10, kind="daily_brief"
+        )
     def showEvent(self, event) -> None:  # noqa: N802 - Qt API
         super().showEvent(event)
         if hasattr(self, "presenter"):
             self._startup_conflict_runtime().arm()
             self._live_conflict_refresh_runtime().arm()
-
     def _run_or_confirm_online_rc(self) -> None:
         controller = getattr(getattr(self.owner_window, "assistant", None), "online", None)
         if controller is None:

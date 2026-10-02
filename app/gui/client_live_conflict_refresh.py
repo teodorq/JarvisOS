@@ -4,6 +4,8 @@ from typing import Any
 
 from PySide6.QtCore import QTimer
 
+from app.gui.client_background_reads import submit_client_read
+
 
 class ClientLiveConflictRefreshRuntime:
     """Read-only periodic refresh for new or changed calendar conflicts."""
@@ -33,39 +35,36 @@ class ClientLiveConflictRefreshRuntime:
                     kind="live_conflict_refresh",
                 )
             return
-        self.running = True
-        try:
-            profile = dict(
-                self.window.controller.status().get("profile", {}) or {}
-            )
-            if not profile.get("setup_completed"):
-                return
-            assistant = getattr(self.window.owner_window, "assistant", None)
-            natural = getattr(assistant, "natural_actions", None)
-            if natural is None:
-                return
-            result = dict(natural.startup_conflict_scan() or {})
-            if not result.get("should_show"):
-                return
-            event = {
-                "state": "important",
-                "message": str(result.get("message", "")),
-                "progress": 0,
-                "requires_confirmation": False,
-            }
-            runtime = self._safe_runtime()
-            if runtime is None:
-                self.window._on_client_event(event)
-            else:
-                runtime.deliver(
-                    event,
-                    priority=30,
-                    kind="calendar_conflict",
-                )
-        except Exception:
+        profile = dict(self.window.controller.status().get("profile", {}) or {})
+        assistant = getattr(self.window.owner_window, "assistant", None)
+        natural = getattr(assistant, "natural_actions", None)
+        if not profile.get("setup_completed") or natural is None:
             return
-        finally:
+        self.running = True
+        accepted = submit_client_read(
+            self.window, natural.startup_conflict_scan,
+            self._scan_finished, self._scan_failed,
+        )
+        if not accepted:
             self.running = False
+
+    def _scan_finished(self, raw_result: object) -> None:
+        self.running = False
+        result = dict(raw_result or {})
+        if not result.get("should_show"):
+            return
+        event = {
+            "state": "important", "message": str(result.get("message", "")),
+            "progress": 0, "requires_confirmation": False,
+        }
+        runtime = self._safe_runtime()
+        if runtime is None:
+            self.window._on_client_event(event)
+        else:
+            runtime.deliver(event, priority=30, kind="calendar_conflict")
+
+    def _scan_failed(self, _error: object) -> None:
+        self.running = False
 
     def _safe_runtime(self):
         getter = getattr(self.window, "_safe_proactivity_runtime", None)

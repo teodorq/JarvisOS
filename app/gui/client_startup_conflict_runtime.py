@@ -1,15 +1,10 @@
 from __future__ import annotations
-
 from typing import Any
-
 from PySide6.QtCore import QTimer
-
-
+from app.gui.client_background_reads import submit_client_read
 class ClientStartupConflictRuntime:
     """Reliable, read-only startup scan with bounded delayed retries."""
-
     DELAYS_MS = (1200, 1800, 2800, 4200, 6000)
-
     def __init__(self, window: Any) -> None:
         self.window = window
         self.attempt = 0
@@ -17,12 +12,10 @@ class ClientStartupConflictRuntime:
         self.timer = QTimer(window)
         self.timer.setSingleShot(True)
         self.timer.timeout.connect(self.run)
-
     def arm(self) -> None:
         if self.done or self.timer.isActive():
             return
         self.timer.start(self.DELAYS_MS[min(self.attempt, len(self.DELAYS_MS) - 1)])
-
     def run(self) -> None:
         if self.done:
             return
@@ -35,21 +28,28 @@ class ClientStartupConflictRuntime:
             else:
                 self._retry()
             return
-        self.attempt += 1
-        try:
-            profile = dict(self.window.controller.status().get("profile", {}) or {})
-            assistant = getattr(self.window.owner_window, "assistant", None)
-            natural = getattr(assistant, "natural_actions", None)
-            if natural is None:
-                self._retry()
-                return
-            result = dict(natural.startup_conflict_scan() or {})
-        except Exception:
+        profile = dict(self.window.controller.status().get("profile", {}) or {})
+        assistant = getattr(self.window.owner_window, "assistant", None)
+        natural = getattr(assistant, "natural_actions", None)
+        if not profile.get("setup_completed"): self._finish(); return
+        if natural is None:
             self._retry()
             return
-        if not profile.get("setup_completed"):
-            self._finish()
+        self.attempt += 1
+        accepted = submit_client_read(
+            self.window,
+            natural.startup_conflict_scan,
+            self._scan_finished,
+            self._scan_failed,
+        )
+        if not accepted:
+            self.attempt -= 1
+            self.timer.start(
+                self.DELAYS_MS[min(self.attempt, len(self.DELAYS_MS) - 1)]
+            )
             return
+    def _scan_finished(self, raw_result: object) -> None:
+        result = dict(raw_result or {})
         if not result.get("should_show"):
             reason = str(result.get("notification_reason", ""))
             if (
@@ -74,7 +74,8 @@ class ClientStartupConflictRuntime:
             runtime.deliver(
                 event, priority=30, kind="calendar_conflict"
             )
-
+    def _scan_failed(self, _error: object) -> None:
+        self._retry()
     def _safe_runtime(self):
         getter = getattr(self.window, "_safe_proactivity_runtime", None)
         return getter() if callable(getter) else None
@@ -83,14 +84,12 @@ class ClientStartupConflictRuntime:
             bool(getattr(self.window.presenter, "busy", False))
             or getattr(self.window.owner_window, "pending_thought", None) is not None
         )
-
     def _retry(self) -> None:
         if self.attempt >= len(self.DELAYS_MS):
             self._finish()
             QTimer.singleShot(150, self.window._show_proactive_brief)
             return
         self.timer.start(self.DELAYS_MS[self.attempt])
-
     def _finish(self) -> None:
         self.done = True
         self.timer.stop()

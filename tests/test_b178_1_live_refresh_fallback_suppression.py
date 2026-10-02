@@ -84,14 +84,11 @@ class B1781LiveRefreshFallbackSuppressionTests(unittest.TestCase):
         )
         self.assertIn("def proactive_brief_guard", service)
         self.assertIn("ProactiveConflictBriefGuard.evaluate", service)
-        self.assertLess(
-            mixin.index('result = natural.startup_brief()'),
-            mixin.index('if result.get("speak")'),
-        )
         guard_index = mixin.index('guard = getattr(natural, "proactive_brief_guard"')
         brief_index = mixin.index("result = natural.startup_brief()")
         self.assertLess(guard_index, brief_index)
         self.assertIn('if decision.get("suppress"):', mixin)
+        self.assertIn("submit_client_read(", mixin)
 
     def test_fix_is_read_only_and_sources_are_bounded(self):
         root = Path(__file__).resolve().parents[1]

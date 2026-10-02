@@ -141,7 +141,6 @@ class BusinessCommandRuntimeMixin(ClientCommandRuntimeMixin):
         )
         self.say_safe("Potwierdź wykonanie.")
 
-
     def _execute_repeated_calendar_confirmation(
         self, command: str, thought: dict
     ) -> None:

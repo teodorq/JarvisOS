@@ -30,7 +30,7 @@ class NaturalActionRuntime:
             getattr(online, "project_root", None), self.daily._snapshot
         )
         self.startup_conflicts = StartupConflictScanService(
-            self.daily._snapshot
+            self.daily._calendar_snapshot
         )
         self.startup_notifications = StartupConflictNotificationPolicy(getattr(online, "project_root", None))
         self.advanced = AdvancedNaturalActionRuntime(online, self)

@@ -375,7 +375,6 @@ class ClientExperienceWindow(ClientVoiceMixin, ClientOnlineMixin, ClientV12Mixin
             event.get("state", "idle"),
             self.message_label.text(),
         )
-
     def _map_state(self, value: str) -> tuple[str, str]:
         upper = value.upper()
         for marker, result in self.STATE_MAP.items():
@@ -433,7 +432,8 @@ class ClientExperienceWindow(ClientVoiceMixin, ClientOnlineMixin, ClientV12Mixin
         self.window_mode.close(); mode = "CLIENT" if self.controller.status()["profile"]["setup_completed"] else "OWNER"
         self.controller.set_mode(mode)
         if self.owner_window is not None:
-            runtime = getattr(self.owner_window, "_client_background_commands", None)
-            runtime.shutdown() if runtime is not None else None
+            commands = getattr(self.owner_window, "_client_background_commands", None)
+            reads = getattr(self, "_client_background_reads", None)
+            for runtime in (commands, reads): runtime.shutdown() if runtime is not None else None
             self.owner_window.close()
         event.accept()

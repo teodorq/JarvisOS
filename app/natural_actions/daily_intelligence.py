@@ -77,6 +77,20 @@ class DailyIntelligenceService:
         }
 
     def _snapshot(self, day_offset: int) -> dict[str, Any]:
+        snapshot = self._calendar_snapshot(day_offset)
+        day = snapshot["day"]
+        mail = self._safe(lambda: self.online.gmail.priority(5), [])
+        reminder_status = self._safe(lambda: self.online.reminders.status(), {})
+        return {
+            **snapshot,
+            "mail": IntelligentDayQuality.rank_mail(
+                [dict(item) for item in list(mail or [])]
+            ),
+            "reminders": dict(reminder_status or {}),
+            "completed": self._completed_for(day),
+        }
+
+    def _calendar_snapshot(self, day_offset: int) -> dict[str, Any]:
         now = datetime.now().astimezone()
         day = now.date() + timedelta(days=day_offset)
         start = datetime.combine(day, time.min, tzinfo=now.tzinfo)
@@ -87,8 +101,6 @@ class DailyIntelligenceService:
             ),
             [],
         )
-        mail = self._safe(lambda: self.online.gmail.priority(5), [])
-        reminder_status = self._safe(lambda: self.online.reminders.status(), {})
         events = sorted(
             [dict(item) for item in list(events or [])],
             key=lambda item: str(item.get("start_at", "")),
@@ -98,11 +110,6 @@ class DailyIntelligenceService:
             "day": day,
             "now": now,
             "events": events,
-            "mail": IntelligentDayQuality.rank_mail(
-                [dict(item) for item in list(mail or [])]
-            ),
-            "reminders": dict(reminder_status or {}),
-            "completed": self._completed_for(day),
         }
 
     def _overview(self, snapshot: dict[str, Any]) -> str:

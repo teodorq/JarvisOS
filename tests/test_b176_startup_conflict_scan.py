@@ -16,18 +16,28 @@ class FakeProvider:
 class FakeCalendar:
     def __init__(self, events_by_day=None):
         self.events_by_day = dict(events_by_day or {})
+        self.calls = 0
 
     def find_events(self, _query, *, start_at, end_at, max_results=20):
+        self.calls += 1
         return list(self.events_by_day.get(start_at.date().isoformat(), []))
 
 
 class FakeGmail:
+    def __init__(self):
+        self.calls = 0
+
     def priority(self, _limit=5):
+        self.calls += 1
         return []
 
 
 class FakeReminders:
+    def __init__(self):
+        self.calls = 0
+
     def status(self):
+        self.calls += 1
         return {"due_count": 0, "pending_count": 0}
 
 
@@ -126,6 +136,15 @@ class B176StartupConflictScanTests(unittest.TestCase):
             "STARTUP_CONFLICT_SCAN_READY",
         )
         self.assertFalse(status["startup_conflicts"]["automatic_writes"])
+
+    def test_runtime_conflict_scan_reads_only_calendar(self):
+        with TemporaryDirectory() as directory:
+            online = FakeOnline(directory)
+            service = NaturalActionService(directory, online=online)
+            service.runtime.startup_conflicts.scan()
+        self.assertEqual(online.calendar.calls, 2)
+        self.assertEqual(online.gmail.calls, 0)
+        self.assertEqual(online.reminders.calls, 0)
 
     def test_b176_client_runs_scan_before_daily_brief_once(self):
         root = Path(__file__).resolve().parents[1]
