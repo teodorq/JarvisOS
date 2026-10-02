@@ -18,10 +18,16 @@ from app.gui.business_theme import BusinessTheme
 from app.gui.business_widgets import MetricCard, NavigationButton, StatusPill
 from app.gui.business_status_snapshot import business_service_snapshot
 from app.gui.main_window_runtime import connect_main_runtime, prepare_owner_interface
+from app.gui.owner_page_loader import ensure_owner_page
 from app.system.monitor import SystemMonitor
 from app.voice.voice_listener import VoiceListener
 LEGACY_UI_LABELS = ("BUSINESS COMMAND CENTER", "COMMAND CONSOLE", "ORGANIZATION", "LICENSE & TRUST", "OWNER DEVELOPMENT LICENSE")
 UI_COMPATIBILITY_MARKER = "B80.2 FINAL UI"
+LAZY_OWNER_PAGE_TYPES = (
+    "BusinessPlatformPage", "BusinessOperationsPage", "BusinessReleasePage",
+    "BusinessCommercialPage", "AssistantProductivityPage", "ForexPaperPage",
+    "activity=self.assistant.trading.forex_activity",
+)
 class MainWindow(BusinessCommandRuntimeMixin, QMainWindow):
     """B81–B130 platforma właścicielska z odseparowanym trybem klienta."""
     voice_text_signal = Signal(str)
@@ -212,16 +218,6 @@ class MainWindow(BusinessCommandRuntimeMixin, QMainWindow):
         return sidebar
     def _build_workspace(self) -> QFrame:
         from app.gui.business_pages import ConsolePage, SettingsPage, TrustPage
-        from app.gui.business_platform_page import BusinessPlatformPage
-        from app.gui.business_operations_page import BusinessOperationsPage
-        from app.gui.business_release_page import BusinessReleasePage
-        from app.gui.business_commercial_page import BusinessCommercialPage
-        from app.gui.assistant_productivity_page import AssistantProductivityPage
-        from app.gui.intelligence_center_page import IntelligenceCenterPage
-        from app.gui.productivity_center_page import ProductivityCenterPage
-        from app.gui.stability_beta_page import StabilityBetaPage
-        from app.gui.assistant_v12_page import AssistantV12Page
-        from app.gui.online_assistant_page import OnlineAssistantPage; from app.gui.forex_paper_page import ForexPaperPage
         workspace = QFrame()
         workspace.setObjectName("Workspace")
         layout = QVBoxLayout(workspace)
@@ -230,14 +226,12 @@ class MainWindow(BusinessCommandRuntimeMixin, QMainWindow):
         self.console_page = ConsolePage()
         self.settings_page = SettingsPage()
         self.trust_page = TrustPage()
-        self.platform_page = BusinessPlatformPage(self.business_service)
-        self.operations_page = BusinessOperationsPage(self.business_service)
-        self.release_page = BusinessReleasePage(self.business_service)
-        self.commercial_page = BusinessCommercialPage(self.business_service)
-        self.assistant_page = AssistantProductivityPage(self.assistant)
-        self.intelligence_page = IntelligenceCenterPage(self.assistant.intelligence)
-        self.productivity_page = ProductivityCenterPage(self.assistant.productivity)
-        self.stability_page = StabilityBetaPage(self.assistant.stability); self.forex_page = ForexPaperPage(self.assistant.trading.forex_dashboard, activity=self.assistant.trading.forex_activity); self.assistant_v12_page = AssistantV12Page(self.assistant.assistant_v12); self.online_page = OnlineAssistantPage(self.assistant.online)
+        self._loaded_owner_pages = {"console", "settings", "trust"}
+        self.platform_page = QWidget(); self.operations_page = QWidget()
+        self.release_page = QWidget(); self.commercial_page = QWidget()
+        self.assistant_page = QWidget(); self.intelligence_page = QWidget()
+        self.productivity_page = QWidget(); self.stability_page = QWidget()
+        self.forex_page = QWidget(); self.assistant_v12_page = QWidget(); self.online_page = QWidget()
         self.pages = {
             "console": self.console_page,
             "settings": self.settings_page,
@@ -257,23 +251,6 @@ class MainWindow(BusinessCommandRuntimeMixin, QMainWindow):
         self.settings_page.save_requested.connect(self._save_business_settings)
         self.settings_page.reset_requested.connect(self._reset_business_settings)
         self.trust_page.refresh_requested.connect(self._refresh_business_status)
-        self.operations_page.command_requested.connect(
-            lambda command: (self.console_page.prepare_command(command), self._show_page("console"))
-        )
-        self.release_page.command_requested.connect(
-            lambda command: (self.console_page.prepare_command(command), self._show_page("console"))
-        )
-        self.commercial_page.command_requested.connect(
-            lambda command: (self.console_page.prepare_command(command), self._show_page("console"))
-        )
-        for command_page in (self.assistant_page, self.intelligence_page, self.productivity_page, self.stability_page, self.assistant_v12_page, self.online_page):
-            command_page.command_requested.connect(lambda command: (self.console_page.prepare_command(command), self._show_page("console")))
-        self.platform_page.configuration_changed.connect(
-            lambda: (
-                setattr(self, "business_config", self.config_store.ensure()),
-                self._apply_runtime_config(),
-            )
-        )
         self.settings_page.load_config(self.business_config)
         self.console_page.show_quick_actions(
             bool(dict(self.business_config.get("ui", {}) or {}).get(
@@ -289,7 +266,7 @@ class MainWindow(BusinessCommandRuntimeMixin, QMainWindow):
         self._show_page(start_page if start_page in self.pages else "console")
         return workspace
     def _show_page(self, page_name: str) -> None:
-        page = self.pages.get(page_name, self.console_page)
+        page = ensure_owner_page(self, page_name) or self.console_page
         self.stack.setCurrentWidget(page)
         for name, button in self.navigation_buttons.items():
             button.setChecked(name == page_name)
