@@ -4,9 +4,13 @@ from typing import Any, Callable
 
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal, Slot
 
+from app.assistant.fast_local_commands import FastLocalCommandService
 from app.gui.active_resolution_priority import active_resolution_priority_thought
 from app.gui.confirmed_calendar_execution import execute_confirmed_calendar_plan
-from app.gui.client_capability_policy import enforce_client_outcome
+from app.gui.client_capability_policy import (
+    ClientCapabilityPolicy,
+    enforce_client_outcome,
+)
 from app.gui.client_execution_scope import (
     client_execution_denial, executable_client_thought, scope_client_thought,
 )
@@ -60,8 +64,30 @@ class ClientBackgroundCommandRuntime(QObject):
         self.pool.waitForDone(1500)
 
     def _plan(self, command: str) -> TaskOutcome:
+        if denial := ClientCapabilityPolicy.denial_message(command):
+            return TaskOutcome("DENIED", denial)
         if advice := self_improvement_advice(self.window, command):
             return TaskOutcome("COMPLETED", advice)
+        assistant = getattr(self.window, "assistant", None)
+        access_control = getattr(
+            getattr(self.window, "business_service", None),
+            "access_control",
+            None,
+        )
+        authorize = getattr(access_control, "authorize", None)
+        if assistant is not None and callable(authorize):
+            fast = FastLocalCommandService.try_execute(
+                assistant,
+                command,
+                authorize=authorize,
+            )
+            if fast is not None:
+                status = (
+                    "COMPLETED"
+                    if fast.get("handler") == "fast_local_response"
+                    else "DENIED"
+                )
+                return TaskOutcome(status, str(fast.get("message", "")))
         priority = active_resolution_priority_thought(self.window, command)
         if priority is None:
             return self.window._client_task_loop().plan(command)

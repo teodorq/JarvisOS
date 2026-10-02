@@ -10,6 +10,7 @@ from app.assistant.fast_local_commands import (
     is_fast_local_read,
 )
 from app.gui.owner_background_commands import OwnerBackgroundCommandRuntime
+from app.gui.client_background_commands import ClientBackgroundCommandRuntime
 
 
 def _thought(**updates) -> dict:
@@ -150,3 +151,42 @@ def test_owner_runtime_skips_general_brain_for_fast_local_read() -> None:
     assert result["handler"] == "fast_local_response"
     assert result["message"] == "Teraz jest 12:34."
     assert window.assistant.handled == ["Która jest godzina?"]
+
+
+def test_client_runtime_skips_task_loop_for_fast_local_read() -> None:
+    window = QObject()
+    window.assistant = FakeAssistant(_thought())
+    window.business_service = SimpleNamespace(
+        access_control=SimpleNamespace(
+            authorize=lambda *_args, **_kwargs: {"allowed": True},
+        )
+    )
+    window._client_task_loop = lambda: (_ for _ in ()).throw(
+        AssertionError("client task loop must not run")
+    )
+    runtime = ClientBackgroundCommandRuntime(window)
+
+    outcome = runtime._plan("Która jest godzina?")
+    runtime.shutdown()
+
+    assert outcome.status == "COMPLETED"
+    assert outcome.message == "Teraz jest 12:34."
+    assert window.assistant.handled == ["Która jest godzina?"]
+
+
+def test_client_runtime_blocks_owner_command_before_fast_execution() -> None:
+    window = QObject()
+    window.assistant = FakeAssistant(_thought())
+    window.business_service = SimpleNamespace(
+        access_control=SimpleNamespace(
+            authorize=lambda *_args, **_kwargs: {"allowed": True},
+        )
+    )
+    runtime = ClientBackgroundCommandRuntime(window)
+
+    outcome = runtime._plan("Status Forex")
+    runtime.shutdown()
+
+    assert outcome.status == "DENIED"
+    assert "tylko w trybie właściciela" in outcome.message
+    assert window.assistant.handled == []
