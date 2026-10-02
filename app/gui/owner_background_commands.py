@@ -4,6 +4,7 @@ from typing import Any, Callable
 
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal, Slot
 
+from app.assistant.fast_local_commands import FastLocalCommandService
 from app.gui.active_resolution_priority import active_resolution_priority_thought
 from app.gui.command_safety import (
     is_safe_read_only_thought,
@@ -102,12 +103,41 @@ class OwnerBackgroundCommandRuntime(QObject):
             return command, {
                 "handler": "self_improvement_advice", "message": advice,
             }
+        assistant = getattr(self.window, "assistant", None)
+        access_control = getattr(
+            getattr(self.window, "business_service", None),
+            "access_control",
+            None,
+        )
+        authorize = getattr(access_control, "authorize", None)
+        if assistant is not None and callable(authorize):
+            fast = FastLocalCommandService.try_execute(
+                assistant,
+                command,
+                authorize=authorize,
+            )
+            if fast is not None:
+                return command, fast
         priority = active_resolution_priority_thought(self.window, command)
         thought = priority if priority is not None else self.window.brain.think(command)
         return command, dict(thought or {})
 
     def _after_plan(self, result: tuple[str, dict[str, Any]]) -> None:
         command, thought = result
+        if thought.get("handler") in {
+            "fast_local_response",
+            "fast_local_denied",
+        }:
+            message = str(thought.get("message", "")).strip()
+            self.window.console_page.append(f"Jarvis: {message}")
+            denied = thought.get("handler") == "fast_local_denied"
+            self.window.console_page.set_state(
+                "ODMOWA UPRAWNIEŃ" if denied else "GOTOWY NA POLECENIE",
+                "danger" if denied else "healthy",
+            )
+            if not denied:
+                self.window.say_safe(message)
+            return
         if thought.get("handler") == "self_improvement_advice":
             message = str(thought.get("message", ""))
             self.window.console_page.append(f"Jarvis: {message}")

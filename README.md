@@ -2,6 +2,12 @@
 
 JARVIS OS is a Windows desktop assistant with a local-first runtime and an optional Azure cloud planner.
 
+Owner-mode local reads such as the current time, help and system/integration
+status use a strict one-pass fast path. They still pass owner authorization,
+but skip the general planner and never admit network, desktop-action, write or
+confirmation-required commands. All other commands keep the full planning and
+safety flow.
+
 ## What stays local
 
 User memory, command history, Google tokens, voice models, logs, generated backups and commercial release artifacts are runtime data. They are intentionally excluded from Git and are created locally when needed.
