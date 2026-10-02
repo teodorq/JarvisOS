@@ -1,6 +1,7 @@
 param(
     [string]$ProjectRoot = (Split-Path -Parent $PSScriptRoot),
     [string]$Mt5Path = (Join-Path $env:ProgramFiles "OANDA TMS MT5 Terminal\terminal64.exe"),
+    [switch]$NoStart,
     [switch]$Remove
 )
 
@@ -11,6 +12,7 @@ $taskName = "JARVIS OS Forex Observer"
 $projectPath = [IO.Path]::GetFullPath($ProjectRoot)
 $terminalPath = [IO.Path]::GetFullPath($Mt5Path)
 $watchdogPath = Join-Path $projectPath "tools\forex_observer_watchdog.ps1"
+$hiddenRunnerPath = Join-Path $projectPath "tools\run_hidden_powershell.vbs"
 
 if ($Remove) {
     Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
@@ -22,7 +24,7 @@ if ($Remove) {
     exit 0
 }
 
-foreach ($requiredPath in @($terminalPath, $watchdogPath)) {
+foreach ($requiredPath in @($terminalPath, $watchdogPath, $hiddenRunnerPath)) {
     if (-not (Test-Path -LiteralPath $requiredPath -PathType Leaf)) {
         throw "Required Forex observation component is missing."
     }
@@ -48,15 +50,13 @@ if ($null -ne $existingTask -and $existingTask.State -eq "Running") {
 }
 
 $userId = [Security.Principal.WindowsIdentity]::GetCurrent().Name
-$powershellPath = Join-Path $env:SystemRoot (
-    "System32\WindowsPowerShell\v1.0\powershell.exe"
-)
+$wscriptPath = Join-Path $env:SystemRoot "System32\wscript.exe"
 $arguments = (
-    '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' +
-    $watchdogPath + '" -Mt5Path "' + $terminalPath + '"'
+    '//B //NoLogo "' + $hiddenRunnerPath + '" "' + $watchdogPath +
+    '" "-Mt5Path" "' + $terminalPath + '"'
 )
 $action = New-ScheduledTaskAction `
-    -Execute $powershellPath `
+    -Execute $wscriptPath `
     -Argument $arguments `
     -WorkingDirectory $projectPath
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $userId
@@ -71,6 +71,7 @@ $principal = New-ScheduledTaskPrincipal `
     -LogonType Interactive `
     -RunLevel Limited
 $settings = New-ScheduledTaskSettingsSet `
+    -Hidden `
     -AllowStartIfOnBatteries `
     -DontStopIfGoingOnBatteries `
     -StartWhenAvailable `
@@ -94,5 +95,10 @@ Register-ScheduledTask `
     -TaskName $taskName `
     -InputObject $definition `
     -Force | Out-Null
-Start-ScheduledTask -TaskName $taskName
-Write-Output "JARVIS OS Forex local PAPER autostart installed and started."
+if (-not $NoStart) {
+    Start-ScheduledTask -TaskName $taskName
+    Write-Output "JARVIS OS Forex local PAPER autostart installed and started."
+}
+else {
+    Write-Output "JARVIS OS Forex local PAPER autostart installed."
+}

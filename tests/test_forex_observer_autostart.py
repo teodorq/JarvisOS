@@ -22,7 +22,11 @@ PAPER_RUNNER = (
 def test_installer_uses_hidden_limited_interactive_logon_task() -> None:
     assert '$taskName = "JARVIS OS Forex Observer"' in INSTALLER
     assert "New-ScheduledTaskTrigger -AtLogOn" in INSTALLER
-    assert "-WindowStyle Hidden" in INSTALLER
+    assert "System32\\wscript.exe" in INSTALLER
+    assert "//B //NoLogo" in INSTALLER
+    assert "-Hidden" in INSTALLER
+    assert "[switch]$NoStart" in INSTALLER
+    assert "if (-not $NoStart)" in INSTALLER
     assert "-LogonType Interactive" in INSTALLER
     assert "-RunLevel Limited" in INSTALLER
     assert "-MultipleInstances IgnoreNew" in INSTALLER

@@ -12,7 +12,17 @@ def test_autostart_runs_only_at_sign_in() -> None:
     assert "New-ScheduledTaskTrigger -AtLogOn" in installer
     assert "RepetitionInterval" not in installer
     assert "-Trigger $trigger" in installer
-    assert "-WindowStyle Hidden" in installer
+    assert "System32\\wscript.exe" in installer
+    assert "//B //NoLogo" in installer
+    assert "-Hidden" in installer
+    assert "[switch]$NoStart" in installer
+    assert "if (-not $NoStart)" in installer
+
+    hidden_runner = (ROOT / "tools" / "run_hidden_powershell.vbs").read_text(
+        encoding="utf-8"
+    )
+    assert "shell.Run(command, 0, True)" in hidden_runner
+    assert "-WindowStyle Hidden" in hidden_runner
 
 
 def test_manual_launcher_and_shortcut_do_not_open_a_console() -> None:

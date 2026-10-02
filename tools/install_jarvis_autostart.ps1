@@ -1,5 +1,6 @@
 param(
     [string]$ProjectRoot = (Split-Path -Parent $PSScriptRoot),
+    [switch]$NoStart,
     [switch]$Remove
 )
 
@@ -9,6 +10,7 @@ $ErrorActionPreference = "Stop"
 $taskName = "JARVIS OS Autostart"
 $projectPath = [IO.Path]::GetFullPath($ProjectRoot)
 $watchdogPath = Join-Path $projectPath "tools\jarvis_watchdog.ps1"
+$hiddenRunnerPath = Join-Path $projectPath "tools\run_hidden_powershell.vbs"
 $runtimePath = Join-Path $projectPath "runtime"
 $stopPath = Join-Path $runtimePath "jarvis_watchdog.stop"
 
@@ -21,22 +23,21 @@ if ($Remove) {
     exit 0
 }
 
-if (-not (Test-Path -LiteralPath $watchdogPath -PathType Leaf)) {
-    throw "JARVIS OS watchdog script is missing."
+foreach ($requiredPath in @($watchdogPath, $hiddenRunnerPath)) {
+    if (-not (Test-Path -LiteralPath $requiredPath -PathType Leaf)) {
+        throw "JARVIS OS autostart component is missing."
+    }
 }
 
 Remove-Item -LiteralPath $stopPath -Force -ErrorAction SilentlyContinue
 
 $userId = [Security.Principal.WindowsIdentity]::GetCurrent().Name
-$powershellPath = Join-Path $env:SystemRoot (
-    "System32\WindowsPowerShell\v1.0\powershell.exe"
-)
+$wscriptPath = Join-Path $env:SystemRoot "System32\wscript.exe"
 $arguments = (
-    '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' +
-    $watchdogPath + '"'
+    '//B //NoLogo "' + $hiddenRunnerPath + '" "' + $watchdogPath + '"'
 )
 $action = New-ScheduledTaskAction `
-    -Execute $powershellPath `
+    -Execute $wscriptPath `
     -Argument $arguments `
     -WorkingDirectory $projectPath
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $userId
@@ -46,6 +47,7 @@ $principal = New-ScheduledTaskPrincipal `
     -LogonType Interactive `
     -RunLevel Limited
 $settings = New-ScheduledTaskSettingsSet `
+    -Hidden `
     -AllowStartIfOnBatteries `
     -DontStopIfGoingOnBatteries `
     -StartWhenAvailable `
@@ -67,5 +69,10 @@ Register-ScheduledTask `
     -TaskName $taskName `
     -InputObject $definition `
     -Force | Out-Null
-Start-ScheduledTask -TaskName $taskName
-Write-Output "JARVIS OS autostart installed and started."
+if (-not $NoStart) {
+    Start-ScheduledTask -TaskName $taskName
+    Write-Output "JARVIS OS autostart installed and started."
+}
+else {
+    Write-Output "JARVIS OS autostart installed."
+}

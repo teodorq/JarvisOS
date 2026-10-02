@@ -49,7 +49,11 @@ def test_audit_is_local_weekly_and_hidden() -> None:
     assert "New-ScheduledTaskTrigger -Weekly" in INSTALLER
     assert "-DaysOfWeek Monday" in INSTALLER
     assert '-At "09:00"' in INSTALLER
-    assert "-WindowStyle Hidden" in INSTALLER
+    assert "System32\\wscript.exe" in INSTALLER
+    assert "//B //NoLogo" in INSTALLER
+    assert "-Hidden" in INSTALLER
+    assert "[switch]$NoStart" in INSTALLER
+    assert "if (-not $NoStart)" in INSTALLER
     assert "StartWhenAvailable" in INSTALLER
     assert "Start-ScheduledTask -TaskName $taskName" in INSTALLER
     assert "Local Azure guardrail audit" in README
