@@ -14,17 +14,6 @@ from app.gui.confirmation_revision_runtime import handle_owner_confirmation, rem
 from app.gui.client_experience_window import ClientExperienceWindow
 from app.gui.owner_access_setup import ensure_owner_pin
 from app.gui.business_display import display_environment, display_status, same_identity
-from app.gui.business_pages import ConsolePage, SettingsPage, TrustPage
-from app.gui.business_platform_page import BusinessPlatformPage
-from app.gui.business_operations_page import BusinessOperationsPage
-from app.gui.business_release_page import BusinessReleasePage
-from app.gui.business_commercial_page import BusinessCommercialPage
-from app.gui.assistant_productivity_page import AssistantProductivityPage
-from app.gui.intelligence_center_page import IntelligenceCenterPage
-from app.gui.productivity_center_page import ProductivityCenterPage
-from app.gui.stability_beta_page import StabilityBetaPage
-from app.gui.assistant_v12_page import AssistantV12Page
-from app.gui.online_assistant_page import OnlineAssistantPage; from app.gui.forex_paper_page import ForexPaperPage
 from app.gui.business_theme import BusinessTheme
 from app.gui.business_widgets import MetricCard, NavigationButton, StatusPill
 from app.gui.business_status_snapshot import business_service_snapshot
@@ -222,6 +211,17 @@ class MainWindow(BusinessCommandRuntimeMixin, QMainWindow):
         layout.addWidget(security)
         return sidebar
     def _build_workspace(self) -> QFrame:
+        from app.gui.business_pages import ConsolePage, SettingsPage, TrustPage
+        from app.gui.business_platform_page import BusinessPlatformPage
+        from app.gui.business_operations_page import BusinessOperationsPage
+        from app.gui.business_release_page import BusinessReleasePage
+        from app.gui.business_commercial_page import BusinessCommercialPage
+        from app.gui.assistant_productivity_page import AssistantProductivityPage
+        from app.gui.intelligence_center_page import IntelligenceCenterPage
+        from app.gui.productivity_center_page import ProductivityCenterPage
+        from app.gui.stability_beta_page import StabilityBetaPage
+        from app.gui.assistant_v12_page import AssistantV12Page
+        from app.gui.online_assistant_page import OnlineAssistantPage; from app.gui.forex_paper_page import ForexPaperPage
         workspace = QFrame()
         workspace.setObjectName("Workspace")
         layout = QVBoxLayout(workspace)

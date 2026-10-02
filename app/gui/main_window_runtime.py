@@ -12,7 +12,9 @@ def connect_main_runtime(window: Any) -> None:
     """Connect shared voice immediately and owner-only metrics on demand."""
     if not window._voice_runtime_connected:
         window.voice_text_signal.connect(window.handle_voice_text)
-        if window.voice is not None:
+        if window.voice is not None and bool(
+            getattr(window.voice, "continuous_mode", False)
+        ):
             window.voice.start()
         window._voice_runtime_connected = True
     connect_remote_command_runtime(window)

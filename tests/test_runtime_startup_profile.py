@@ -38,6 +38,23 @@ class RuntimeStartupProfileTests(unittest.TestCase):
         self.assertIsNone(listener.microphone)
         microphone_factory.assert_not_called()
 
+    def test_shared_runtime_keeps_non_continuous_voice_dormant(self) -> None:
+        from app.gui.main_window_runtime import connect_main_runtime
+
+        window = Mock()
+        window._voice_runtime_connected = False
+        window._interface_ready = False
+        window.voice = Mock(continuous_mode=False)
+        window.voice_text_signal = Mock()
+        window.handle_voice_text = Mock()
+        with patch(
+            "app.gui.main_window_runtime.connect_remote_command_runtime"
+        ), patch(
+            "app.gui.main_window_runtime._connect_forex_activity_runtime"
+        ):
+            connect_main_runtime(window)
+        window.voice.start.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()
