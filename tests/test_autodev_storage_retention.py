@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -48,3 +49,67 @@ def test_terminal_session_drops_workspace_but_keeps_artifacts() -> None:
         store.save_session(session)
         assert not workspace.exists()
         assert evidence.read_text(encoding="utf-8") == "evidence"
+
+
+def test_changed_source_expires_pending_session_and_drops_workspace() -> None:
+    with TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        target = root / "app" / "example.py"
+        target.parent.mkdir(parents=True)
+        original = "VALUE = 1\n"
+        target.write_text(original, encoding="utf-8")
+        store = SafeDevelopmentStore(root)
+        session = store.new_session(
+            target="app/example.py",
+            transform="replace",
+            title="Test",
+            rationale="Test stale reconciliation",
+            risk_score=1.0,
+            confidence=1.0,
+        )
+        workspace = Path(session.workspace_path)
+        workspace.mkdir(parents=True)
+        (workspace / "copy.py").write_text(original, encoding="utf-8")
+        artifacts = store.session_dir(session.session_id) / "artifacts"
+        artifacts.mkdir()
+        evidence = artifacts / "change.diff"
+        evidence.write_text("evidence", encoding="utf-8")
+        session.source_hash = hashlib.sha256(original.encode()).hexdigest()
+        session.status = "READY_FOR_APPROVAL"
+        store.save_session(session)
+        target.write_text("VALUE = 2\n", encoding="utf-8")
+
+        refreshed = SafeDevelopmentStore(root)
+        saved = refreshed.load_session(session.session_id)
+
+        assert saved.status == "STALE"
+        assert not workspace.exists()
+        assert evidence.read_text(encoding="utf-8") == "evidence"
+
+
+def test_line_ending_difference_does_not_expire_pending_session() -> None:
+    with TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        target = root / "app" / "example.py"
+        target.parent.mkdir(parents=True)
+        normalized = "VALUE = 1\n"
+        target.write_bytes(b"VALUE = 1\r\n")
+        store = SafeDevelopmentStore(root)
+        session = store.new_session(
+            target="app/example.py",
+            transform="replace",
+            title="Test",
+            rationale="Test newline normalization",
+            risk_score=1.0,
+            confidence=1.0,
+        )
+        workspace = Path(session.workspace_path)
+        workspace.mkdir(parents=True)
+        session.source_hash = hashlib.sha256(normalized.encode()).hexdigest()
+        session.status = "READY_FOR_APPROVAL"
+        store.save_session(session)
+
+        refreshed = SafeDevelopmentStore(root)
+
+        assert refreshed.load_session(session.session_id).status == "READY_FOR_APPROVAL"
+        assert workspace.exists()

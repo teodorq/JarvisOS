@@ -38,6 +38,7 @@ class SafeDevelopmentStore:
         self.backups_root = self.root / "backups"
         self.receipt_ledger = DeploymentReceiptLedger(self.project_root)
         self._lock = threading.RLock()
+        self.reconcile_stale_ready_sessions()
 
     def record_preview(self, selected: dict[str, Any]) -> dict[str, Any]:
         preview = dict(selected or {})
@@ -133,6 +134,46 @@ class SafeDevelopmentStore:
             "removed_directories": removed_directories,
             "reclaimed_bytes": reclaimed_bytes,
         }
+
+    def reconcile_stale_ready_sessions(self) -> dict[str, int]:
+        """Expire proposals whose live source no longer matches their snapshot."""
+        reconciled = 0
+        reclaimed_bytes = 0
+        with self._lock:
+            registry = self._load_registry()
+            for session_id, item in dict(registry.get("sessions", {})).items():
+                if str(dict(item or {}).get("status", "")) != "READY_FOR_APPROVAL":
+                    continue
+                try:
+                    session = self.load_session(str(session_id))
+                except (OSError, TypeError, ValueError):
+                    continue
+                if not session.source_hash or self._source_matches(session):
+                    continue
+                workspace = self.session_dir(session.session_id) / "workspace"
+                before = sum(
+                    path.stat().st_size
+                    for path in workspace.rglob("*")
+                    if path.is_file()
+                ) if workspace.is_dir() else 0
+                session.status = "STALE"
+                message = "Plik źródłowy zmienił się po przygotowaniu poprawki."
+                if message not in session.errors:
+                    session.errors.append(message)
+                self.save_session(session)
+                reconciled += 1
+                reclaimed_bytes += before
+        return {"reconciled": reconciled, "reclaimed_bytes": reclaimed_bytes}
+
+    def _source_matches(self, session: SafeDevelopmentSession) -> bool:
+        target = (self.project_root / session.target).resolve(strict=False)
+        try:
+            target.relative_to(self.project_root)
+            current = target.read_text(encoding="utf-8")
+        except (OSError, UnicodeError, ValueError):
+            return False
+        digest = hashlib.sha256(current.encode("utf-8")).hexdigest()
+        return digest == session.source_hash
 
     def _compact_terminal_workspace(
         self, session_id: str, status: str
