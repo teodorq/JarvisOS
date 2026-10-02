@@ -10,7 +10,10 @@ from app.assistant.fast_local_commands import (
     is_fast_local_read,
 )
 from app.gui.owner_background_commands import OwnerBackgroundCommandRuntime
-from app.gui.client_background_commands import ClientBackgroundCommandRuntime
+from app.gui.client_background_commands import (
+    ClientBackgroundCommandRuntime,
+    _Job,
+)
 from app.gui.client_busy_feedback import publish_client_busy
 from app.gui.client_command_progress import ClientCommandProgress
 
@@ -278,3 +281,20 @@ def test_client_command_progress_rejects_unknown_phase() -> None:
         assert "unsupported" in str(error)
     else:
         raise AssertionError("unknown progress phase must be rejected")
+
+
+def test_client_runtime_stops_progress_before_completion_callback() -> None:
+    completed: list[str] = []
+    window = QObject()
+    runtime = ClientBackgroundCommandRuntime(window)
+    job = _Job(lambda: "done")
+    runtime._jobs.add(job)
+    runtime._callbacks[job] = lambda result: completed.append(result)
+    runtime.progress.start("planning")
+
+    runtime._complete(job, "done")
+
+    assert runtime.progress.active is False
+    assert runtime.busy is False
+    assert completed == ["done"]
+    runtime.shutdown()

@@ -11,6 +11,7 @@ from app.gui.command_safety import (
     is_safe_workspace_preparation_thought,
 )
 from app.gui.confirmed_calendar_execution import execute_confirmed_calendar_plan
+from app.gui.owner_command_progress import OwnerCommandProgress
 from app.gui.self_improvement_advisor import self_improvement_advice
 from app.gui.self_development_console import SelfDevelopmentConsoleSession
 
@@ -45,6 +46,7 @@ class OwnerBackgroundCommandRuntime(QObject):
         self._job: _OwnerJob | None = None
         self._callback: Callable[[Any], None] | None = None
         self._closed = False
+        self.progress = OwnerCommandProgress(window)
 
     @property
     def busy(self) -> bool:
@@ -55,6 +57,7 @@ class OwnerBackgroundCommandRuntime(QObject):
             self._show_busy()
             return
         self.window.console_page.set_state("ANALIZUJĘ POLECENIE", "accent")
+        self.progress.start("planning")
         self._submit(lambda: self._plan(command), self._after_plan)
 
     def execute(self, thought: dict[str, Any]) -> None:
@@ -63,6 +66,7 @@ class OwnerBackgroundCommandRuntime(QObject):
             return
         planned = dict(thought)
         self.window.console_page.set_state("WYKONUJĘ I SPRAWDZAM", "accent")
+        self.progress.start("executing")
         development = SelfDevelopmentConsoleSession.start(
             getattr(self.window, "project_root", None), planned
         )
@@ -94,6 +98,7 @@ class OwnerBackgroundCommandRuntime(QObject):
 
     def shutdown(self) -> None:
         self._closed = True
+        self.progress.stop()
         self._callback = None
         self.pool.clear()
         self.pool.waitForDone(800)
@@ -207,6 +212,7 @@ class OwnerBackgroundCommandRuntime(QObject):
         callback = self._callback
         self._job = None
         self._callback = None
+        self.progress.stop()
         if not self._closed and callable(callback):
             callback(result)
 
@@ -216,6 +222,7 @@ class OwnerBackgroundCommandRuntime(QObject):
             return
         self._job = None
         self._callback = None
+        self.progress.stop()
         if self._closed:
             return
         print("Owner command error:", repr(error))

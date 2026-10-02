@@ -15,6 +15,9 @@ While an accepted command is still running, the compact interface publishes a
 bounded five-second activity heartbeat. It distinguishes planning from action,
 shows elapsed time, never claims 100% before the real result and stops on
 completion, failure or window shutdown.
+The owner console uses the same five-second liveness rule in its status bar,
+showing elapsed planning or execution time without appending repetitive chat
+lines or changing the command's authorization and confirmation flow.
 
 ## What stays local
 
