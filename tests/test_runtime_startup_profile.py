@@ -4,10 +4,21 @@ import unittest
 from unittest.mock import Mock, patch
 
 from app.ai.brain import Brain
+from app.ai.client_brain import ClientBrain
 from app.voice.voice_listener import VoiceListener
 
 
 class RuntimeStartupProfileTests(unittest.TestCase):
+    def test_lightweight_core_is_available_for_every_gui_start_mode(self) -> None:
+        with patch(
+            "app.client_experience.controller.ClientExperienceController.should_start_client",
+            return_value=False,
+        ):
+            source = __import__("app.gui.main_window", fromlist=["MainWindow"])
+        self.assertIn("ClientBrain(self.project_root)",
+            __import__("inspect").getsource(source.MainWindow.__init__))
+        self.assertIsNotNone(ClientBrain)
+
     def test_client_profile_defers_owner_autonomy(self) -> None:
         brain = Brain(runtime_profile="client")
         try:

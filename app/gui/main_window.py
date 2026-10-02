@@ -3,7 +3,7 @@ import re
 from typing import Any
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import QButtonGroup, QFrame, QGridLayout, QHBoxLayout, QLabel, QMainWindow, QPushButton, QSizePolicy, QStackedWidget, QVBoxLayout, QWidget
-from app.ai.client_brain import ClientBrain, ensure_owner_brain
+from app.ai.client_brain import ClientBrain
 from app.assistant.controller import PersonalAssistantController
 from app.business.business_config import BusinessConfigStore
 from app.business.business_edition_service import BusinessEditionService
@@ -36,7 +36,7 @@ class MainWindow(BusinessCommandRuntimeMixin, QMainWindow):
         self.config_store = BusinessConfigStore(self.project_root)
         self.business_config = self.config_store.ensure()
         self.business_service = BusinessEditionService(self.project_root)
-        self.brain = ClientBrain(self.project_root) if self._client_start_requested else ensure_owner_brain(None, project_root=self.project_root)
+        self.brain = ClientBrain(self.project_root)
         self.assistant = PersonalAssistantController(self.project_root, memory=self.brain.memory)
         self.brain.personal_assistant_controller = self.assistant
         self.monitor = SystemMonitor()
@@ -68,7 +68,7 @@ class MainWindow(BusinessCommandRuntimeMixin, QMainWindow):
         self.resize(1460, 900)
         self._apply_theme()
     def _ensure_owner_interface(self) -> None:
-        self.brain = ensure_owner_brain(self.brain, self.assistant, self.project_root); prepare_owner_interface(self)
+        prepare_owner_interface(self)
     def _apply_theme(self) -> None:
         self.setStyleSheet(
             BusinessTheme.stylesheet(str(self.business_config["accent_color"]))

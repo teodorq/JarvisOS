@@ -9,6 +9,7 @@ from app.gui.confirmed_calendar_execution import execute_confirmed_calendar_plan
 from app.gui.client_command_runtime import ClientCommandRuntimeMixin
 from app.gui.confirmation_revision_runtime import handle_owner_confirmation
 from app.gui.owner_background_commands import execute_owner_thought, shutdown_owner_commands, start_owner_command
+from app.gui.owner_brain_runtime import activate_owner_brain
 from app.gui.remote_command_runtime import shutdown_remote_command_runtime
 from app.gui.repeated_confirmation import repeated_calendar_confirmation
 class BusinessCommandRuntimeMixin(ClientCommandRuntimeMixin):
@@ -99,6 +100,7 @@ class BusinessCommandRuntimeMixin(ClientCommandRuntimeMixin):
             self.console_page.append("Jarvis: Słucham.")
             self.say_safe("Słucham")
             return
+        activate_owner_brain(self)
         if start_owner_command(self, text): return
         self.console_page.set_state("ANALIZA POLECENIA", "accent")
         priority = active_resolution_priority_thought(self, text)
