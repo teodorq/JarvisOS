@@ -114,6 +114,9 @@ from app.trading.forex_v3_shadow_plan_journal import (
 from app.trading.forex_v3_shadow_plan_observer import (
     ForexV3ShadowPlanObserver,
 )
+from app.trading.forex_v3_shadow_simulation import (
+    ForexV3ShadowSimulationReadiness,
+)
 from app.trading.forex_risk_diagnostics import build_forex_risk_diagnostics
 from app.trading.ledger import PaperTradingLedger
 from app.trading.models import (
@@ -179,6 +182,7 @@ __all__ = [
     "ForexV3ShadowPlanner",
     "ForexV3ShadowPlanJournal",
     "ForexV3ShadowPlanObserver",
+    "ForexV3ShadowSimulationReadiness",
     "verify_forex_v3_shadow_plan",
     "ForexRiskDecision",
     "ForexPaperPerformanceReviewPacket",

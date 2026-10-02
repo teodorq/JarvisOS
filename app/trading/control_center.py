@@ -40,6 +40,9 @@ from app.trading.forex_v3_shadow import (
 from app.trading.forex_v3_shadow_plan_journal import (
     ForexV3ShadowPlanJournal,
 )
+from app.trading.forex_v3_shadow_simulation import (
+    ForexV3ShadowSimulationReadiness,
+)
 from app.trading.paper_broker import PaperTradingEngine
 from app.trading.policy import PaperTradingPolicy
 from app.trading.risk import PreTradeRiskEngine
@@ -89,6 +92,11 @@ class TradingControlCenter:
         self.forex_v3_shadow_plans = ForexV3ShadowPlanJournal(
             self.project_root
         )
+        self.forex_v3_shadow_simulation = ForexV3ShadowSimulationReadiness(
+            self.project_root,
+            shadow_readiness=self.forex_v3_shadow,
+            plan_journal=self.forex_v3_shadow_plans,
+        )
         self.forex_forward_review = ForexV2OwnerReviewPacket(self.project_root)
         self.forex_strategy_cohorts = ForexStrategyCohortReview(
             self.project_root
@@ -116,6 +124,7 @@ class TradingControlCenter:
         v3_forward_evidence = self.forex_v3_forward_evidence.review()
         v3_shadow = self.forex_v3_shadow.status()
         v3_shadow_plans = self.forex_v3_shadow_plans.summary()
+        v3_shadow_simulation = self.forex_v3_shadow_simulation.status()
         forward_review = self.forex_forward_review.review(forward_evidence)
         forex_account = self.forex_executor.status()
         performance_review = self.forex_performance_review.review(
@@ -186,6 +195,19 @@ class TradingControlCenter:
                     and v3_shadow_plans.get("shadow_execution_enabled")
                     is False
                 ),
+                "forex_v3_shadow_simulation_gate": bool(
+                    v3_shadow_simulation.get("status")
+                    in {
+                        "BLOCKED_SHADOW_NOT_INITIALIZED",
+                        "WAITING_FOR_PLAN_SAMPLE",
+                        "BLOCKED_SIGNAL_SCARCITY",
+                        "READY_FOR_MANUAL_SIMULATION_INITIALIZATION",
+                    }
+                    and v3_shadow_simulation.get("shadow_simulation_enabled")
+                    is False
+                    and v3_shadow_simulation.get("shadow_execution_enabled")
+                    is False
+                ),
                 "forex_v2_owner_review_packet": bool(
                     forward_review.get("status") == "READY_FOR_OWNER_REVIEW"
                     and forward_review.get("packet_persisted") is True
@@ -227,6 +249,7 @@ class TradingControlCenter:
                 "v3_forward_evidence": v3_forward_evidence,
                 "v3_shadow": v3_shadow,
                 "v3_shadow_plans": v3_shadow_plans,
+                "v3_shadow_simulation": v3_shadow_simulation,
                 "v2_owner_review": forward_review,
                 "paper_account": forex_account,
                 "paper_performance_review": performance_review,
@@ -541,6 +564,7 @@ class TradingControlCenter:
         v3_forward_evidence = snapshot["forex"]["v3_forward_evidence"]
         v3_shadow = snapshot["forex"]["v3_shadow"]
         v3_shadow_plans = snapshot["forex"]["v3_shadow_plans"]
+        v3_shadow_simulation = snapshot["forex"]["v3_shadow_simulation"]
         forward_review = snapshot["forex"]["v2_owner_review"]
         strategy_cohorts = snapshot["forex"]["strategy_cohort_review"]
         cohort_values = dict(strategy_cohorts.get("cohorts", {}) or {})
@@ -917,6 +941,44 @@ class TradingControlCenter:
             v3_shadow_plans_text = (
                 "ZABLOKOWANY — dziennik planów nie przeszedł kontroli audytu"
             )
+        if v3_shadow_simulation.get("status") == "WAITING_FOR_PLAN_SAMPLE":
+            v3_shadow_simulation_text = (
+                "oczekuje — plany "
+                f"{v3_shadow_simulation.get('plan_count', 0)}/"
+                f"{v3_shadow_simulation.get('minimum_plan_count', 20)}, dni "
+                f"{v3_shadow_simulation.get('market_day_count', 0)}/"
+                f"{v3_shadow_simulation.get('minimum_market_day_count', 3)}, "
+                "plany wejścia "
+                f"{v3_shadow_simulation.get('entry_plan_count', 0)}/"
+                f"{v3_shadow_simulation.get('minimum_entry_plan_count', 3)}; "
+                "symulacja wyłączona"
+            )
+        elif v3_shadow_simulation.get("status") == "BLOCKED_SIGNAL_SCARCITY":
+            v3_shadow_simulation_text = (
+                "ZABLOKOWANA — kompletna próbka zawiera za mało planów wejścia "
+                f"{v3_shadow_simulation.get('entry_plan_count', 0)}/"
+                f"{v3_shadow_simulation.get('minimum_entry_plan_count', 3)}; "
+                "strategia wymaga dalszego przeglądu"
+            )
+        elif (
+            v3_shadow_simulation.get("status")
+            == "READY_FOR_MANUAL_SIMULATION_INITIALIZATION"
+        ):
+            v3_shadow_simulation_text = (
+                "gotowa wyłącznie do ręcznego przygotowania lokalnej symulacji; "
+                "nie utworzono pozycji i wykonanie pozostaje wyłączone"
+            )
+        elif (
+            v3_shadow_simulation.get("status")
+            == "BLOCKED_SHADOW_NOT_INITIALIZED"
+        ):
+            v3_shadow_simulation_text = (
+                "oczekuje na bezpieczną inicjalizację portfela V3 SHADOW"
+            )
+        else:
+            v3_shadow_simulation_text = (
+                "ZABLOKOWANA — dane bramki symulacji są niespójne"
+            )
         if not observation["audit_chain_valid"]:
             gate = (
                 "ZABLOKOWANA — łańcuch audytu obserwacji jest uszkodzony; "
@@ -1041,6 +1103,7 @@ class TradingControlCenter:
             "bez automatycznej zmiany PAPER/LIVE.\n"
             f"• Portfel V3 SHADOW: {v3_shadow_text}.\n"
             f"• Dziennik planów V3 SHADOW: {v3_shadow_plans_text}.\n"
+            f"• Bramka symulacji V3 SHADOW: {v3_shadow_simulation_text}.\n"
             f"• Bramka PAPER: {gate}.\n"
             "• Dane Forex: lokalny adapter MT5 DEMO, opcjonalny OANDA Practice, "
             "Twelve Data, NBP i publiczny kalendarz Forex Factory oraz kontrola "

@@ -391,6 +391,9 @@ class TradingControlAndRoutingTests(unittest.TestCase):
         self.assertTrue(
             status["components"]["forex_v3_shadow_plan_journal"]
         )
+        self.assertTrue(
+            status["components"]["forex_v3_shadow_simulation_gate"]
+        )
         self.assertEqual(
             status["forex"]["v2_owner_review"]["status"],
             "WAITING_FOR_FORWARD_SAMPLE",
@@ -411,6 +414,11 @@ class TradingControlAndRoutingTests(unittest.TestCase):
         self.assertIn("Portfel V3 SHADOW: ZABLOKOWANY", rendered)
         self.assertIn(
             "Dziennik planów V3 SHADOW: oczekuje na bezpieczną inicjalizację",
+            rendered,
+        )
+        self.assertIn(
+            "Bramka symulacji V3 SHADOW: oczekuje na bezpieczną "
+            "inicjalizację portfela V3 SHADOW",
             rendered,
         )
         self.assertIn("brak sygnałów do porównania", rendered)
@@ -755,6 +763,17 @@ class TradingControlAndRoutingTests(unittest.TestCase):
                 "no_action_plan_count": 1,
                 "shadow_execution_enabled": False,
             })
+            snapshot["forex"]["v3_shadow_simulation"].update({
+                "status": "WAITING_FOR_PLAN_SAMPLE",
+                "plan_count": 3,
+                "minimum_plan_count": 20,
+                "market_day_count": 1,
+                "minimum_market_day_count": 3,
+                "entry_plan_count": 1,
+                "minimum_entry_plan_count": 3,
+                "shadow_simulation_enabled": False,
+                "shadow_execution_enabled": False,
+            })
             snapshot["forex"]["last_runtime_cycle"].update({
                 "available": True,
                 "v3_shadow_observation_available": True,
@@ -781,6 +800,11 @@ class TradingControlAndRoutingTests(unittest.TestCase):
         self.assertIn(
             "Ostatni cykl V3 SHADOW: zapisano niewykonywalny plan "
             "PLAN_READY; instrukcje 1; wykonanie wyłączone",
+            rendered,
+        )
+        self.assertIn(
+            "Bramka symulacji V3 SHADOW: oczekuje — plany 3/20, "
+            "dni 1/3, plany wejścia 1/3",
             rendered,
         )
 
@@ -864,6 +888,17 @@ class TradingControlAndRoutingTests(unittest.TestCase):
                 "simulation_activation_ready": False,
                 "shadow_execution_enabled": False,
             })
+            snapshot["forex"]["v3_shadow_simulation"].update({
+                "status": "BLOCKED_SIGNAL_SCARCITY",
+                "plan_count": 20,
+                "minimum_plan_count": 20,
+                "market_day_count": 3,
+                "minimum_market_day_count": 3,
+                "entry_plan_count": 0,
+                "minimum_entry_plan_count": 3,
+                "shadow_simulation_enabled": False,
+                "shadow_execution_enabled": False,
+            })
             with patch.object(center, "status", return_value=snapshot):
                 rendered = center.format_status()
 
@@ -874,6 +909,11 @@ class TradingControlAndRoutingTests(unittest.TestCase):
         )
         self.assertIn("przegląd symulacji jest zablokowany", rendered)
         self.assertIn("wykonanie wyłączone", rendered)
+        self.assertIn(
+            "Bramka symulacji V3 SHADOW: ZABLOKOWANA — kompletna próbka "
+            "zawiera za mało planów wejścia 0/3",
+            rendered,
+        )
 
     def test_observation_progress_phrases_are_owner_only_read_only_status(self) -> None:
         variants = (
