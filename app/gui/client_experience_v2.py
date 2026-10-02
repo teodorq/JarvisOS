@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.gui.client_exit_intent import request_jarvis_shutdown
+from app.gui.client_conversation_history import ClientConversationHistory
 from app.gui.client_result_formatter import ClientResultCard, ClientResultFormatter
 from app.gui.client_tool_drawer import ClientToolDrawer
 from app.gui.client_hud_panels import mount_client_command_input, mount_client_status
@@ -30,11 +31,21 @@ class ClientExperienceV2:
         self._messages: deque[tuple[str, str, ClientResultCard | None]] = deque(
             maxlen=8
         )
+        self._history = ClientConversationHistory(
+            window.controller.project_root
+        )
+        self._messages.extend(self._history.load())
         self._last_assistant = ""
+        for _author, _text, last_card in reversed(self._messages):
+            if last_card is not None:
+                self._last_assistant = f"{last_card.title}\n{last_card.body}"
+                break
         self._install_panel()
         self.tools = ClientToolDrawer(window)
         self._wrap_runtime()
         self._polish_layout()
+        if self._messages:
+            self._show_history()
 
     def toggle_tools(self) -> None:
         self.tools.toggle()
@@ -146,6 +157,7 @@ class ClientExperienceV2:
 
     def clear(self) -> None:
         self._messages.clear()
+        self._history.clear()
         self._last_assistant = ""
         self.frame.hide()
         placeholder = getattr(self.window, "conversation_placeholder", None)
@@ -160,6 +172,14 @@ class ClientExperienceV2:
         card: ClientResultCard | None,
     ) -> None:
         self._messages.append((author, text, card))
+        placeholder = getattr(self.window, "conversation_placeholder", None)
+        if placeholder is not None:
+            placeholder.hide()
+        self.frame.show()
+        self._history.save(self._messages)
+        self._render()
+
+    def _show_history(self) -> None:
         placeholder = getattr(self.window, "conversation_placeholder", None)
         if placeholder is not None:
             placeholder.hide()
