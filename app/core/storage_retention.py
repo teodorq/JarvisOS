@@ -7,9 +7,9 @@ from pathlib import Path
 
 @dataclass(frozen=True, slots=True)
 class ScreenshotRetentionPolicy:
-    max_files: int = 30
-    max_total_bytes: int = 150 * 1024 * 1024
-    max_age_days: int = 90
+    max_files: int = 12
+    max_total_bytes: int = 32 * 1024 * 1024
+    max_age_days: int = 14
 
     def __post_init__(self) -> None:
         if self.max_files < 1:

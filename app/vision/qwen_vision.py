@@ -1,8 +1,8 @@
 import base64
+from io import BytesIO
 import json
 import urllib.request
 import urllib.error
-from pathlib import Path
 from PIL import Image
 
 
@@ -20,8 +20,7 @@ class QwenVision:
 
     def _chat_with_image(self, image_path: str, prompt: str) -> str:
         try:
-            optimized_path = self._optimize_image(image_path)
-            image_base64 = self._encode_image(optimized_path)
+            image_base64 = self._encode_optimized_image(image_path)
 
             payload = {
                 "model": self.model,
@@ -72,24 +71,16 @@ class QwenVision:
         except Exception as error:
             return f"BŁĄD Qwen Vision: {error}"
 
-    def _optimize_image(self, image_path: str) -> str:
-        path = Path(image_path)
-        output_path = str(path.with_name(path.stem + "_optimized.jpg"))
-
-        image = Image.open(image_path).convert("RGB")
-
+    @staticmethod
+    def _encode_optimized_image(image_path: str) -> str:
+        with Image.open(image_path) as source:
+            image = source.convert("RGB")
         max_width = 960
         width, height = image.size
-
         if width > max_width:
             ratio = max_width / width
             new_height = int(height * ratio)
             image = image.resize((max_width, new_height))
-
-        image.save(output_path, "JPEG", quality=60, optimize=True)
-
-        return output_path
-
-    def _encode_image(self, image_path: str) -> str:
-        with open(image_path, "rb") as image_file:
-            return base64.b64encode(image_file.read()).decode("utf-8")
+        output = BytesIO()
+        image.save(output, "JPEG", quality=60, optimize=True)
+        return base64.b64encode(output.getvalue()).decode("utf-8")

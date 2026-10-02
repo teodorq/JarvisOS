@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import pyautogui
 
@@ -12,22 +15,21 @@ except ImportError:
 
 
 class ScreenVision:
+    """Capture bounded, compact screen evidence for local vision tasks."""
 
-    def __init__(self):
-        self.screenshot_dir = Path("data/screenshots")
+    def __init__(self, screenshot_dir: str | Path = "data/screenshots") -> None:
+        self.screenshot_dir = Path(screenshot_dir)
         self.screenshot_dir.mkdir(parents=True, exist_ok=True)
+        enforce_screenshot_retention(self.screenshot_dir)
 
     def take_screenshot(self) -> str:
         filename = datetime.now().strftime(
-            "screen_%Y-%m-%d_%H-%M-%S.png"
+            "screen_%Y-%m-%d_%H-%M-%S.webp"
         )
-
         path = self.screenshot_dir / filename
-
         screenshot = pyautogui.screenshot()
-        screenshot.save(path)
+        path = self._save_compact(screenshot, path)
         enforce_screenshot_retention(self.screenshot_dir)
-
         return str(path)
 
     def take_region_screenshot(
@@ -39,18 +41,25 @@ class ScreenVision:
         prefix: str = "region"
     ) -> str:
         filename = datetime.now().strftime(
-            f"{prefix}_%Y-%m-%d_%H-%M-%S.png"
+            f"{prefix}_%Y-%m-%d_%H-%M-%S.webp"
         )
-
         path = self.screenshot_dir / filename
-
         screenshot = pyautogui.screenshot(
             region=(left, top, width, height)
         )
-        screenshot.save(path)
+        path = self._save_compact(screenshot, path)
         enforce_screenshot_retention(self.screenshot_dir)
-
         return str(path)
+
+    @staticmethod
+    def _save_compact(screenshot: Any, path: Path) -> Path:
+        try:
+            screenshot.save(path, format="WEBP", quality=82, method=1)
+            return path
+        except (OSError, ValueError):
+            fallback = path.with_suffix(".png")
+            screenshot.save(fallback, format="PNG")
+            return fallback
 
     def get_screen_size(self):
         width, height = pyautogui.size()

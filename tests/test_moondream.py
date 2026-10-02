@@ -1,20 +1,31 @@
-from app.vision.screen import ScreenVision
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
+from PIL import Image
+
 from app.vision.moondream import MoondreamVision
 
-print("=== START ===")
 
-screen = ScreenVision()
-vision = MoondreamVision()
+def test_moondream_reports_missing_image_without_network_call() -> None:
+    with TemporaryDirectory() as directory:
+        missing = Path(directory) / "missing.webp"
 
-print("Robię screenshot...")
-image = screen.take_screenshot()
+        result = MoondreamVision().analyze(str(missing))
 
-print("Screenshot:", image)
+    assert "Nie znaleziono obrazu" in result
 
-print("Analizuję obraz...")
-result = vision.analyze(image)
 
-print("\n===== WYNIK =====")
-print(result)
+def test_qwen_optimization_stays_in_memory() -> None:
+    from app.vision.qwen_vision import QwenVision
 
-print("=== KONIEC ===")
+    with TemporaryDirectory() as directory:
+        root = Path(directory)
+        source = root / "screen.webp"
+        Image.new("RGB", (1200, 600), color=(12, 36, 60)).save(
+            source, format="WEBP"
+        )
+
+        encoded = QwenVision._encode_optimized_image(str(source))
+
+        assert encoded
+        assert sorted(path.name for path in root.iterdir()) == ["screen.webp"]

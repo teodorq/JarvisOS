@@ -5,11 +5,15 @@ import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
+
+from PIL import Image
 
 from app.core.storage_retention import (
     ScreenshotRetentionPolicy,
     enforce_screenshot_retention,
 )
+from app.vision.screen import ScreenVision
 
 
 class ScreenshotRetentionTests(unittest.TestCase):
@@ -77,6 +81,34 @@ class ScreenshotRetentionTests(unittest.TestCase):
             self.assertTrue(note.exists())
             self.assertEqual(result["removed_files"], 0)
             self.assertEqual(missing["kept_files"], 0)
+
+    def test_default_policy_bounds_capture_history_to_twelve_files(self) -> None:
+        now = datetime.now()
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            for index in range(14):
+                self._file(
+                    root,
+                    f"screen_{index}.png",
+                    10,
+                    now - timedelta(minutes=index),
+                )
+
+            ScreenVision(root)
+
+            self.assertEqual(len(list(root.glob("*.png"))), 12)
+
+    def test_screen_capture_uses_compact_webp(self) -> None:
+        image = Image.new("RGB", (320, 180), color=(8, 24, 42))
+        with TemporaryDirectory() as directory:
+            with patch("app.vision.screen.pyautogui.screenshot", return_value=image):
+                path = Path(ScreenVision(directory).take_screenshot())
+
+            self.assertEqual(path.suffix, ".webp")
+            self.assertTrue(path.exists())
+            with Image.open(path) as saved:
+                self.assertEqual(saved.format, "WEBP")
+                self.assertEqual(saved.size, (320, 180))
 
 
 if __name__ == "__main__":
