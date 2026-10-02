@@ -1,12 +1,11 @@
 from __future__ import annotations
-
 from PySide6.QtCore import QSize, QTimer
 from PySide6.QtWidgets import QWidget
 
+from app.core.performance_profile import PerformanceProfile, load_performance_profile
 from app.gui.cinematic_orb_renderer import CinematicOrbRenderer
 from app.gui.orb_frame_budget import OrbFrameBudget
 from app.gui.orb_widget_painter import paint_orb_frame
-
 
 class HaloWidget(QWidget):
     """Filmowa kula cząsteczkowa JARVISA z czytelnymi stanami pracy."""
@@ -63,8 +62,9 @@ class HaloWidget(QWidget):
     IDLE_FRAME_INTERVAL_MS = 50
     IDLE_STATES = frozenset({"idle", "brief", "success"})
 
-    def __init__(self) -> None:
+    def __init__(self, performance_profile: PerformanceProfile | None = None) -> None:
         super().__init__()
+        self.performance_profile = performance_profile or load_performance_profile()
         self.setMinimumSize(400, 400)
         self.setMaximumSize(860, 860)
         self._state = "idle"
@@ -75,7 +75,7 @@ class HaloWidget(QWidget):
         self._intensity = self.INTENSITY["idle"]
         self._target_intensity = self._intensity
         self._renderer = CinematicOrbRenderer()
-        self._frame_budget = OrbFrameBudget()
+        self._frame_budget = OrbFrameBudget(initial_stride_multiplier=self.performance_profile.orb_stride_multiplier)
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._tick)
         self._timer.start(self._frame_interval_ms())
@@ -130,8 +130,8 @@ class HaloWidget(QWidget):
 
     def _frame_interval_ms(self) -> int:
         if self._state in self.IDLE_STATES:
-            return self.IDLE_FRAME_INTERVAL_MS
-        return self.ACTIVE_FRAME_INTERVAL_MS
+            return self.performance_profile.idle_frame_interval_ms
+        return self.performance_profile.active_frame_interval_ms
 
     def _tick(self) -> None:
         speed = self.SPEEDS[self._state]

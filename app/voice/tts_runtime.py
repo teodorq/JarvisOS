@@ -74,6 +74,7 @@ class SerializedTTS:
         engine_name: str = "",
         engine_factory: Callable[[], Any] | None = None,
         on_error: Callable[[Exception], None] | None = None,
+        auto_start: bool = True,
     ) -> None:
         self.rate = int(rate)
         self.volume = max(0.25, min(float(volume), 1.0))
@@ -103,7 +104,8 @@ class SerializedTTS:
         self._failed_count = 0
         self._last_error = ""
         self._thread: threading.Thread | None = None
-        self._start_worker()
+        if auto_start:
+            self._start_worker()
 
     @property
     def speaking(self) -> bool:

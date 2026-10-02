@@ -102,6 +102,32 @@ class B99Voice2Tests(unittest.TestCase):
         self.assertNotIn("voice", names)
         self.assertNotIn("pitch", names)
 
+    def test_tts_worker_can_start_only_when_first_message_arrives(self) -> None:
+        class Engine:
+            def setProperty(self, _name, _value) -> None:  # noqa: N802
+                pass
+
+            def say(self, _text) -> None:
+                pass
+
+            def runAndWait(self) -> None:  # noqa: N802
+                pass
+
+            def stop(self) -> None:
+                pass
+
+        runtime = SerializedTTS(
+            engine_factory=Engine,
+            auto_start=False,
+        )
+        try:
+            self.assertFalse(runtime.worker_alive)
+            self.assertTrue(runtime.say("Test"))
+            self.assertTrue(runtime.wait_until_idle(timeout=1.0))
+            self.assertTrue(runtime.worker_alive)
+        finally:
+            runtime.close()
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -71,7 +71,7 @@ class TestB341B350CinematicSoundTheme(unittest.TestCase):
         theme.startup()
         theme.play("success")
 
-    def test_theme_uses_qt_channel_instead_of_speech_channel(self) -> None:
+    def test_theme_uses_lightweight_system_channel_instead_of_speech(self) -> None:
         source = (self.root / "app/gui/client_sound_theme.py").read_text(
             encoding="utf-8"
         )
@@ -81,8 +81,8 @@ class TestB341B350CinematicSoundTheme(unittest.TestCase):
         generator = (
             self.root / "tools/audio/generate_jarvis_sound_theme.py"
         ).read_text(encoding="utf-8")
-        self.assertIn("QSoundEffect", source)
-        self.assertNotIn("winsound", source)
+        self.assertIn("winsound.PlaySound", source)
+        self.assertNotIn("QtMultimedia", source)
         self.assertIn("self.sound_theme.play(value)", presenter)
         self.assertNotIn("http://", generator)
         self.assertNotIn("https://", generator)

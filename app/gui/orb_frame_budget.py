@@ -13,12 +13,16 @@ class OrbFrameBudget:
         idle_render_budget_ms: float = 40.0,
         degrade_after: int = 3,
         recover_after: int = 90,
+        initial_stride_multiplier: int = 1,
     ) -> None:
         self._active_render_budget_ms = max(1.0, active_render_budget_ms)
         self._idle_render_budget_ms = max(1.0, idle_render_budget_ms)
         self._degrade_after = max(1, degrade_after)
         self._recover_after = max(1, recover_after)
-        self._stride_multiplier = 1
+        self._stride_multiplier = max(
+            1,
+            min(self.MAX_STRIDE_MULTIPLIER, int(initial_stride_multiplier)),
+        )
         self._slow_frames = 0
         self._fast_frames = 0
 

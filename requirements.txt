@@ -1,14 +1,10 @@
-PySide6
+PySide6-Essentials
 pyautogui
 Pillow
 psutil
 SpeechRecognition
 pyttsx3
-opencv-python
-numpy
 requests
-keyboard
-mouse
 pytweening
 pyscreeze
 PyMsgBox

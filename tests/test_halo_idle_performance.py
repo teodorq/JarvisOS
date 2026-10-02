@@ -11,12 +11,14 @@ try:
 
     from app.gui.halo_widget import HaloWidget
     from app.gui.orb_frame_budget import OrbFrameBudget
+    from app.core.performance_profile import LOW_RESOURCE
 
     HAS_QT = True
 except Exception:
     QApplication = None
     HaloWidget = None
     OrbFrameBudget = None
+    LOW_RESOURCE = None
     HAS_QT = False
 
 
@@ -105,6 +107,17 @@ class HaloIdlePerformanceTests(unittest.TestCase):
             self.assertEqual(stride(640.0, "idle", 1), 2)
             self.assertEqual(stride(150.0, "thinking", 3), 9)
             self.assertEqual(stride(640.0, "thinking", 99), 3)
+        finally:
+            halo.set_animation_active(False)
+            halo.deleteLater()
+
+    def test_low_resource_profile_starts_with_lighter_rendering(self) -> None:
+        halo = HaloWidget(performance_profile=LOW_RESOURCE)
+        try:
+            self.assertEqual(halo.particle_stride_multiplier, 2)
+            self.assertEqual(halo._timer.interval(), 80)  # noqa: SLF001
+            halo.set_state("thinking")
+            self.assertEqual(halo._timer.interval(), 50)  # noqa: SLF001
         finally:
             halo.set_animation_active(False)
             halo.deleteLater()

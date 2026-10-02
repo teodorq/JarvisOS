@@ -5,9 +5,11 @@ import os
 from pathlib import Path
 import time
 from typing import Any
+import winsound
 
-from PySide6.QtCore import QObject, QUrl
-from PySide6.QtMultimedia import QSoundEffect
+from PySide6.QtCore import QObject
+
+from app.core.performance_profile import load_performance_profile
 
 
 class ClientSoundTheme(QObject):
@@ -30,13 +32,14 @@ class ClientSoundTheme(QObject):
             project_root or Path(__file__).resolve().parents[2]
         ).resolve()
         self.config = self._load_config()
+        performance = load_performance_profile(self.root)
         self.enabled = bool(self.config.get("enabled", True)) and (
             os.environ.get("QT_QPA_PLATFORM", "").casefold() != "offscreen"
-        )
+        ) and performance.sound_theme_enabled
         self.cooldown = max(0.1, float(self.config.get("cooldown_seconds", 0.32)))
         self._last_name = ""
         self._last_played = 0.0
-        self.effects: dict[str, QSoundEffect] = {}
+        self.effects: dict[str, Path] = {}
         if self.enabled:
             self._prepare()
 
@@ -54,27 +57,23 @@ class ClientSoundTheme(QObject):
         now = time.monotonic()
         if not force and name == self._last_name and now - self._last_played < self.cooldown:
             return
-        effect = self.effects.get(name)
-        if effect is None:
+        path = self.effects.get(name)
+        if path is None:
             return
-        effect.stop()
-        effect.play()
+        winsound.PlaySound(
+            str(path),
+            winsound.SND_FILENAME | winsound.SND_ASYNC | winsound.SND_NODEFAULT,
+        )
         self._last_name = name
         self._last_played = now
 
     def _prepare(self) -> None:
         sound_root = self.root / "assets" / "sound_theme"
-        volume = max(0.0, min(1.0, float(self.config.get("volume", 0.24))))
-        levels = dict(self.config.get("levels", {}) or {})
         for name in {"startup", *self.STATE_SOUNDS.values()}:
             path = sound_root / f"{name}.wav"
             if not path.is_file():
                 continue
-            effect = QSoundEffect(self)
-            effect.setSource(QUrl.fromLocalFile(str(path)))
-            effect.setLoopCount(1)
-            effect.setVolume(max(0.0, min(1.0, volume * float(levels.get(name, 1.0)))))
-            self.effects[name] = effect
+            self.effects[name] = path
 
     def _load_config(self) -> dict[str, Any]:
         defaults: dict[str, Any] = {

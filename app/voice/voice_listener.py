@@ -56,6 +56,7 @@ class VoiceListener:
             neural_enabled=bool(runtime.get("neural_enabled", True)),
             engine_name=str(runtime.get("voice_engine", "")),
             on_error=self._handle_tts_error,
+            auto_start=auto_start,
         )
         self.running = False
         self.thread: threading.Thread | None = None

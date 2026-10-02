@@ -39,8 +39,7 @@ class MainWindow(BusinessCommandRuntimeMixin, QMainWindow):
     client_event_signal = Signal(object)
     def __init__(self) -> None:
         super().__init__()
-        self.project_root = resolve_project_root()
-        self._interface_ready = False
+        self.project_root = resolve_project_root(); self._interface_ready = False
         self._voice_runtime_connected = False
         self._client_start_requested = ClientExperienceController(
             self.project_root
@@ -67,7 +66,8 @@ class MainWindow(BusinessCommandRuntimeMixin, QMainWindow):
         self._connect_runtime()
     def _initialize_voice(self) -> None:
         try:
-            self.voice = VoiceListener(on_text=self.handle_voice_text_safe, settings=self.assistant.voice.settings())
+            self.voice = VoiceListener(on_text=self.handle_voice_text_safe,
+                settings=self.assistant.voice.settings(), auto_start=False)
             self.voice_online = True
         except Exception as error:
             self.voice = None

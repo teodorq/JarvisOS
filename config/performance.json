@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "profile": "auto",
+  "available_profiles": [
+    "balanced",
+    "low_resource"
+  ],
+  "environment_override": "JARVIS_OS_PERFORMANCE_PROFILE"
+}
