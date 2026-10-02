@@ -3,6 +3,8 @@ from pathlib import Path
 
 import pyautogui
 
+from app.core.storage_retention import enforce_screenshot_retention
+
 try:
     import win32gui
 except ImportError:
@@ -24,6 +26,7 @@ class ScreenVision:
 
         screenshot = pyautogui.screenshot()
         screenshot.save(path)
+        enforce_screenshot_retention(self.screenshot_dir)
 
         return str(path)
 
@@ -45,6 +48,7 @@ class ScreenVision:
             region=(left, top, width, height)
         )
         screenshot.save(path)
+        enforce_screenshot_retention(self.screenshot_dir)
 
         return str(path)
 
