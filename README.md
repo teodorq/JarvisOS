@@ -54,6 +54,19 @@ For a quick source check:
 .\.venv\Scripts\python.exe -m compileall -q app cloud_service software_engineer tools
 ```
 
+For the fast daily regression tier (startup, client UI, storage and integrity):
+
+```powershell
+.\.venv\Scripts\python.exe .\tools\run_quality_checks.py --tier quick
+```
+
+Use `--tier full` before a release. To inspect the selected performance profile,
+fresh main-window import time and the largest runtime storage groups, run:
+
+```powershell
+.\.venv\Scripts\python.exe .\tools\check_runtime_health.py
+```
+
 ## Local paper-trading foundation
 
 JARVIS OS includes an owner-only, broker-neutral trading foundation for safe
