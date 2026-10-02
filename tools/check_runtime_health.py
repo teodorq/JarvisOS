@@ -48,17 +48,39 @@ def measure_main_window_import(root: Path, timeout: float = 30.0) -> float:
     return float(result.stdout.strip().splitlines()[-1])
 
 
+def measure_main_window_construction(root: Path, timeout: float = 30.0) -> float:
+    code = (
+        "import time; from PySide6.QtWidgets import QApplication; "
+        "app=QApplication.instance() or QApplication([]); "
+        "from app.gui.main_window import MainWindow; "
+        "started=time.perf_counter(); window=MainWindow(); "
+        "elapsed=time.perf_counter()-started; window.close(); print(elapsed)"
+    )
+    environment = dict(os.environ)
+    environment["QT_QPA_PLATFORM"] = "offscreen"
+    result = subprocess.run(
+        [sys.executable, "-c", code], cwd=root, env=environment,
+        capture_output=True, text=True, timeout=max(1.0, float(timeout)),
+        check=True,
+    )
+    return float(result.stdout.strip().splitlines()[-1])
+
+
 def collect_runtime_health(project_root: str | Path | None = None) -> dict[str, Any]:
     root = Path(project_root or PROJECT_ROOT).resolve()
     screenshots = root / "data" / "screenshots"
     screenshot_files = [path for path in screenshots.glob("*") if path.is_file()]
     startup_seconds = measure_main_window_import(root)
+    construction_seconds = measure_main_window_construction(root)
     profile = load_performance_profile(root)
     return {
         "profile": profile.name,
         "main_window_import_seconds": round(startup_seconds, 3),
         "startup_target_seconds": 1.5,
         "startup_within_target": startup_seconds <= 1.5,
+        "main_window_construct_seconds": round(construction_seconds, 3),
+        "construction_target_seconds": 1.0,
+        "construction_within_target": construction_seconds <= 1.0,
         "active_environment_bytes": directory_size(root / ".venv"),
         "runtime_bytes": directory_size(root / "runtime"),
         "autodev_bytes": directory_size(root / "data" / "autodev"),
@@ -78,6 +100,7 @@ def main() -> int:
         print(
             "JARVIS OS: "
             f"profil {report['profile']}, start {report['main_window_import_seconds']} s, "
+            f"okno {report['main_window_construct_seconds']} s, "
             f"środowisko {report['active_environment_bytes'] / 1024**2:.1f} MiB, "
             f"zrzuty {report['screenshot_count']}."
         )

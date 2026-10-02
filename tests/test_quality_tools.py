@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
-from tools.check_runtime_health import directory_size
+from tools.check_runtime_health import collect_runtime_health, directory_size
 from tools.run_quality_checks import QUICK_TESTS, build_commands
 
 
@@ -28,3 +29,17 @@ def test_directory_size_is_bounded_to_selected_directory() -> None:
         (root / "one.bin").write_bytes(b"123")
         (root / "nested" / "two.bin").write_bytes(b"4567")
         assert directory_size(root) == 7
+
+
+def test_runtime_health_tracks_real_window_construction() -> None:
+    with TemporaryDirectory() as temporary, patch(
+        "tools.check_runtime_health.measure_main_window_import",
+        return_value=0.7,
+    ), patch(
+        "tools.check_runtime_health.measure_main_window_construction",
+        return_value=0.4,
+    ):
+        report = collect_runtime_health(temporary)
+    assert report["main_window_import_seconds"] == 0.7
+    assert report["main_window_construct_seconds"] == 0.4
+    assert report["construction_within_target"] is True
