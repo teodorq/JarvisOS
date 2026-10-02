@@ -8,6 +8,7 @@ from typing import Any
 
 _FAST_LOCAL_INTENTS = frozenset({
     "current_time",
+    "device_status",
     "capability_help",
     "assistant_status",
     "conversation_status",

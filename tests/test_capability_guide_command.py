@@ -77,6 +77,7 @@ class CapabilityGuideCommandTests(unittest.TestCase):
 
         self.assertIn("JARVIS OS — w czym mogę Ci pomóc", response)
         self.assertIn("Co jest teraz najważniejsze?", response)
+        self.assertIn("Jaki jest stan komputera?", response)
         self.assertIn("Pokaż status integracji", response)
         self.assertIn("wymagają potwierdzenia", response)
 

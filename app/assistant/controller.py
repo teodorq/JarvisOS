@@ -1,5 +1,6 @@
 from __future__ import annotations
 from app.assistant.local_clock import format_local_clock
+from app.assistant.local_device_status import format_local_device_status
 from pathlib import Path
 import re
 from typing import Any
@@ -64,6 +65,7 @@ class PersonalAssistantController:
             "powiedz mi godzine",
             "aktualna godzina",
             "jaka jest data", "podaj date", "podaj dzisiejsza date", "dzisiejsza data", "jaki mamy dzis dzien", "jaki mamy dzisiaj dzien", "jaki dzisiaj jest dzien", "jaki jest dzis dzien", "dzien tygodnia", "data i godzina", "date and time",
+            "status komputera", "stan komputera", "obciazenie komputera", "ile mam baterii", "stan baterii", "poziom baterii", "jak dlugo dziala komputer", "czas pracy komputera", "uzycie procesora", "uzycie pamieci ram",
             "pogoda", "pogode", "pogody", "weather", "forecast",
             "co potrafisz",
             "co umiesz",
@@ -204,6 +206,7 @@ class PersonalAssistantController:
             return thought
         read_only = resolved.intent in {
             "current_time",
+            "device_status",
             "weather",
             "capability_help",
             "assistant_status",
@@ -326,6 +329,7 @@ class PersonalAssistantController:
         }
     def _dispatch(self, intent: str, command: str) -> str:
         if intent == "current_time": return format_local_clock(command)
+        if intent == "device_status": return format_local_device_status()
         if intent == "weather":
             return self.weather.format_for_command(command)
         if intent == "capability_help":
@@ -453,14 +457,10 @@ class PersonalAssistantController:
         }
     def _format_full_status(self) -> str:
         return AssistantStatusFormatter.full(self.status())
-    def _format_conversation_status(self) -> str:
-        return AssistantStatusFormatter.conversation(self._conversation_status())
-    def _format_desktop_status(self) -> str:
-        return AssistantStatusFormatter.desktop(self.desktop.status())
-    def _format_memory_status(self) -> str:
-        return AssistantStatusFormatter.memory(self.projects.status())
-    def _format_voice_status(self) -> str:
-        return AssistantStatusFormatter.voice(self.voice.status())
+    def _format_conversation_status(self) -> str: return AssistantStatusFormatter.conversation(self._conversation_status())
+    def _format_desktop_status(self) -> str: return AssistantStatusFormatter.desktop(self.desktop.status())
+    def _format_memory_status(self) -> str: return AssistantStatusFormatter.memory(self.projects.status())
+    def _format_voice_status(self) -> str: return AssistantStatusFormatter.voice(self.voice.status())
     def _format_daily_status(self) -> str:
         return AssistantStatusFormatter.daily(
             self.daily.status(), self.productivity.reminders.status(),

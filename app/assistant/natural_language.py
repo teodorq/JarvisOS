@@ -220,6 +220,7 @@ class NaturalLanguageService:
             ("clear_context", ("wyczysc kontekst rozmowy",)),
             ("capability_help", ("co potrafisz", "co umiesz", "co mozesz zrobic", "jakie masz funkcje", "pokaz pomoc", "pomoc jarvis", "jak z ciebie korzystac", "przyklady polecen", "lista polecen", "centrum mozliwosci")),
             ("current_time", ("ktora jest godzina", "jaka jest godzina", "podaj godzine", "powiedz mi godzine", "aktualna godzina", "jaka jest data", "podaj date", "podaj dzisiejsza date", "dzisiejsza data", "jaki mamy dzis dzien", "jaki mamy dzisiaj dzien", "jaki dzisiaj jest dzien", "jaki jest dzis dzien", "dzien tygodnia", "data i godzina", "date and time")),
+            ("device_status", ("status komputera", "stan komputera", "obciazenie komputera", "ile mam baterii", "stan baterii", "poziom baterii", "jak dlugo dziala komputer", "czas pracy komputera", "uzycie procesora", "uzycie pamieci ram")),
             ("weather", ("pogoda", "pogode", "pogody", "prognoza pogody", "weather", "forecast")),
             ("forex_observation_review", ("raport obserwacji forex", "przejrzyj obserwacje forex", "audyt obserwacji forex", "jakosc obserwacji forex")),
             ("initialize_forex_v3_shadow", ("przygotuj portfel v3 shadow", "zainicjalizuj portfel v3 shadow", "utworz pusty portfel v3 shadow", "przygotuj v3 shadow")),

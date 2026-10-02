@@ -42,7 +42,7 @@ CAPABILITY_CATEGORIES: tuple[CapabilityCategory, ...] = (
         "Komputer i głos",
         "sterowanie pulpitem, programami i ustawieniami głosu",
         (
-            "Status sterowania pulpitem",
+            "Jaki jest stan komputera?",
             "Status głosu",
         ),
     ),
