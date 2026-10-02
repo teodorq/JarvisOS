@@ -11,6 +11,7 @@ from app.assistant.fast_local_commands import (
 )
 from app.gui.owner_background_commands import OwnerBackgroundCommandRuntime
 from app.gui.client_background_commands import ClientBackgroundCommandRuntime
+from app.gui.client_busy_feedback import publish_client_busy
 
 
 def _thought(**updates) -> dict:
@@ -190,3 +191,43 @@ def test_client_runtime_blocks_owner_command_before_fast_execution() -> None:
     assert outcome.status == "DENIED"
     assert "tylko w trybie właściciela" in outcome.message
     assert window.assistant.handled == []
+
+
+def test_client_runtime_never_queues_a_second_command() -> None:
+    window = QObject()
+    runtime = ClientBackgroundCommandRuntime(window)
+    occupied = object()
+    runtime._jobs.add(occupied)  # type: ignore[arg-type]
+
+    accepted = runtime.plan("Która jest godzina?")
+
+    assert accepted is False
+    assert runtime.busy is True
+    assert runtime._jobs == {occupied}
+    runtime.shutdown()
+
+
+def test_closed_client_runtime_rejects_new_work() -> None:
+    window = QObject()
+    runtime = ClientBackgroundCommandRuntime(window)
+    runtime.shutdown()
+
+    assert runtime.plan("Która jest godzina?") is False
+    assert runtime.execute({"handler": "personal_assistant"}) is False
+    assert runtime.busy is False
+
+
+def test_client_busy_feedback_reports_that_command_was_not_queued() -> None:
+    events: list[dict] = []
+    window = SimpleNamespace(
+        _publish_client_event=lambda **event: events.append(event)
+    )
+
+    publish_client_busy(window)
+    publish_client_busy(window, confirmed=True)
+
+    assert events[0]["state"] == "warning"
+    assert events[0]["progress"] == 18
+    assert "nie dodałem tego polecenia" in events[0]["message"]
+    assert events[1]["progress"] == 60
+    assert "Zatwierdzone działanie" in events[1]["message"]

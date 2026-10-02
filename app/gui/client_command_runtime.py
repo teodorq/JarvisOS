@@ -1,7 +1,5 @@
 from __future__ import annotations
-
 from PySide6.QtCore import QTimer
-
 from app.gui.client_capability_policy import ClientCapabilityPolicy, enforce_client_outcome
 from app.gui.client_execution_scope import approve_client_thought, executable_client_thought, scope_client_thought
 from app.jarvis_experience.isolation import ClientIsolationPolicy
@@ -11,6 +9,7 @@ from app.gui.client_external_activity import (
     open_external_companion, open_result_companion, view_mode_for_thought,
 )
 from app.gui.confirmed_calendar_execution import execute_confirmed_calendar_plan
+from app.gui.client_busy_feedback import publish_client_busy
 from app.gui.client_result_formatter import ClientResultFormatter
 from app.natural_actions.revisions import rebuild_command
 from app.natural_actions.validation import classify_confirmation
@@ -74,7 +73,8 @@ class ClientCommandRuntimeMixin:
             progress=18,
         )
         if getattr(self, "_client_async_enabled", False):
-            self._client_background().plan(value)
+            if not self._client_background().plan(value):
+                publish_client_busy(self)
             return
         priority = active_resolution_priority_thought(self, value)
         if priority is None:
@@ -119,7 +119,8 @@ class ClientCommandRuntimeMixin:
         if not approve_client_thought(self, thought):
             return
         if getattr(self, "_client_async_enabled", False):
-            self._client_background().execute(thought)
+            if not self._client_background().execute(thought):
+                publish_client_busy(self, confirmed=True)
             return
         open_external_companion(self, thought)
         outcome = self._client_task_loop(confirmed=True).execute(

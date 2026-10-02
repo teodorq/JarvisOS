@@ -8,6 +8,9 @@ They still pass role authorization, while the client policy rejects owner-only
 commands first. The path skips the general planner and never admits network,
 desktop-action, write or confirmation-required commands. All other commands
 keep the full planning and safety flow.
+The compact client interface also admits only one background command at a time.
+A second command receives an immediate busy message instead of being hidden in
+an unbounded queue and returning a stale answer minutes later.
 
 ## What stays local
 

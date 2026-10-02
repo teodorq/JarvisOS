@@ -51,17 +51,31 @@ class ClientBackgroundCommandRuntime(QObject):
         self.pool.setMaxThreadCount(1)
         self._jobs: set[_Job] = set()
         self._callbacks: dict[_Job, Callable[[Any], None]] = {}
+        self._closed = False
 
-    def plan(self, command: str) -> None:
+    @property
+    def busy(self) -> bool:
+        return bool(self._jobs)
+
+    def plan(self, command: str) -> bool:
+        if self._closed or self.busy:
+            return False
         self._submit(lambda: self._plan(command), self._after_plan)
+        return True
 
-    def execute(self, thought: dict[str, Any]) -> None:
+    def execute(self, thought: dict[str, Any]) -> bool:
+        if self._closed or self.busy:
+            return False
         planned = dict(thought)
         self._submit(lambda: self._execute(planned), self._after_execute)
+        return True
 
     def shutdown(self) -> None:
+        self._closed = True
         self.pool.clear()
         self.pool.waitForDone(1500)
+        self._jobs.clear()
+        self._callbacks.clear()
 
     def _plan(self, command: str) -> TaskOutcome:
         if denial := ClientCapabilityPolicy.denial_message(command):
@@ -145,7 +159,14 @@ class ClientBackgroundCommandRuntime(QObject):
             progress=58,
             view_mode=view_mode_for_thought(outcome.thought),
         )
-        self.execute(scope_client_thought(self.window, outcome.thought))
+        if not self.execute(
+            scope_client_thought(self.window, outcome.thought)
+        ):
+            self.window._publish_client_event(
+                state="warning",
+                message="Kończę poprzednie zadanie. Spróbuj ponownie za chwilę.",
+                progress=18,
+            )
 
     def _after_execute(self, outcome: TaskOutcome) -> None:
         if outcome.status == "COMPLETED" and outcome.thought is not None:
@@ -167,13 +188,15 @@ class ClientBackgroundCommandRuntime(QObject):
     def _complete(self, job: _Job, result: Any) -> None:
         self._jobs.discard(job)
         callback = self._callbacks.pop(job, None)
-        if callable(callback):
+        if not self._closed and callable(callback):
             callback(result)
 
     @Slot(object, object)
     def _failed(self, job: _Job, error: object) -> None:
         self._jobs.discard(job)
         self._callbacks.pop(job, None)
+        if self._closed:
+            return
         message = str(error).strip()
         if not message or any(marker in message.casefold() for marker in (
             "traceback", "exception", "c:" + "\\jarvisai", "/app/",
