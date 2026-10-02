@@ -28,6 +28,11 @@ echo Instalowanie zweryfikowanych bibliotek JARVIS OS...
 if errorlevel 1 goto :error
 ".venv\Scripts\python.exe" -m pip install -r "%REQUIREMENTS%"
 if errorlevel 1 goto :error
+if exist "tools\optimize_runtime_dependencies.py" (
+    echo Optymalizowanie rozmiaru bibliotek JARVIS OS...
+    ".venv\Scripts\python.exe" "tools\optimize_runtime_dependencies.py" --apply
+    if errorlevel 1 goto :error
+)
 
 echo.
 echo Instalacja zakonczona.

@@ -120,6 +120,9 @@ shell.Run command, 0, False
     if($LASTEXITCODE -ne 0){throw 'Aktualizacja pip nie powiodla sie.'}
     & $venvPython -m pip install -r (Join-Path $target 'requirements.txt')
     if($LASTEXITCODE -ne 0){throw 'Instalacja bibliotek nie powiodla sie.'}
+    $optimizer=Join-Path $target 'tools\optimize_runtime_dependencies.py'
+    if(Test-Path -LiteralPath $optimizer){& $venvPython $optimizer --apply}
+    if($LASTEXITCODE -ne 0){throw 'Optymalizacja bibliotek nie powiodla sie.'}
   }
   Push-Location $target
   & $venvPython -m compileall -q app tests
