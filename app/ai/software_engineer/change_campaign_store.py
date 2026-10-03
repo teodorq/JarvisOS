@@ -48,41 +48,27 @@ class ChangeCampaignStore:
         campaign: ChangeCampaign,
     ) -> dict[str, Any]:
         campaign.touch()
-        payload = self._payload(
-            self._store.load()
-        )
-        campaigns = payload[
-            "campaigns"
-        ]
-        order = payload["order"]
         campaign_id = (
             campaign.campaign_id
         )
         stored = campaign.to_dict()
-        campaigns[
-            campaign_id
-        ] = stored
+        updated_at = datetime.now(timezone.utc).isoformat()
 
-        if campaign_id in order:
-            order.remove(
-                campaign_id
-            )
+        def persist(raw: object) -> dict[str, Any]:
+            payload = self._payload(raw)
+            campaigns = payload["campaigns"]
+            order = payload["order"]
+            campaigns[campaign_id] = stored
+            if campaign_id in order:
+                order.remove(campaign_id)
+            order.append(campaign_id)
+            while len(order) > self.max_records:
+                removed = order.pop(0)
+                campaigns.pop(removed, None)
+            payload["updated_at"] = updated_at
+            return payload
 
-        order.append(campaign_id)
-
-        while len(order) > self.max_records:
-            removed = order.pop(0)
-            campaigns.pop(
-                removed,
-                None,
-            )
-
-        payload["updated_at"] = (
-            datetime.now(
-                timezone.utc
-            ).isoformat()
-        )
-        self._store.save(payload)
+        self._store.update(persist)
 
         return dict(stored)
 

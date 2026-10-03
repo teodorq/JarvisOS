@@ -74,30 +74,23 @@ class MultiFileRunStore:
                 "run_id nie może być pusty."
             )
 
-        payload = self._normalized_payload(
-            self._store.load()
-        )
-        runs = payload["runs"]
-        order = payload["order"]
         stored = dict(run)
         stored["run_id"] = run_id
-        runs[run_id] = stored
+        updated_at = datetime.now(timezone.utc).isoformat()
 
-        if run_id in order:
-            order.remove(run_id)
+        def persist(raw: object) -> dict[str, Any]:
+            payload = self._normalized_payload(raw)
+            runs = payload["runs"]
+            order = payload["order"]
+            runs[run_id] = stored
+            if run_id in order:
+                order.remove(run_id)
+            order.append(run_id)
+            self._trim(payload)
+            payload["updated_at"] = updated_at
+            return payload
 
-        order.append(run_id)
-
-        self._trim(payload)
-
-        payload["updated_at"] = (
-            datetime.now(
-                timezone.utc
-            ).isoformat()
-        )
-        self._store.save(
-            payload
-        )
+        self._store.update(persist)
 
         return dict(stored)
 

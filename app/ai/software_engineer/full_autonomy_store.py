@@ -39,16 +39,20 @@ class FullAutonomyStore:
         run_id = str(value.get("run_id", "")).strip()
         if not run_id:
             raise ValueError("Przebieg pełnej autonomii wymaga run_id.")
-        payload = self._payload(self._store.load())
         value["updated_at"] = self._now()
-        payload["runs"][run_id] = value
-        order = payload["order"]
-        if run_id in order:
-            order.remove(run_id)
-        order.append(run_id)
-        self._trim(payload)
-        payload["updated_at"] = value["updated_at"]
-        self._store.save(payload)
+
+        def persist(raw: object) -> dict[str, Any]:
+            payload = self._payload(raw)
+            payload["runs"][run_id] = value
+            order = payload["order"]
+            if run_id in order:
+                order.remove(run_id)
+            order.append(run_id)
+            self._trim(payload)
+            payload["updated_at"] = value["updated_at"]
+            return payload
+
+        self._store.update(persist)
         return dict(value)
 
     def compact(self) -> dict[str, int]:
