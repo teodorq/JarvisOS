@@ -178,12 +178,26 @@ class WindowsPowerController:
         ][-128:]
 
     def _remember(self, request_id: str) -> bool:
-        values = self._processed_ids()
-        try:
-            self.processed.save({
+        normalized_id = request_id.lower()
+
+        def append(value: object) -> dict[str, Any]:
+            raw_values = (
+                value.get("request_ids", [])
+                if isinstance(value, dict)
+                else []
+            )
+            values = [
+                str(item).lower()
+                for item in raw_values
+                if self._valid_request_id(item)
+            ][-127:]
+            return {
                 "schema_version": 1,
-                "request_ids": (values + [request_id.lower()])[-128:],
-            })
+                "request_ids": (values + [normalized_id])[-128:],
+            }
+
+        try:
+            self.processed.update(append)
         except (OSError, RuntimeError, ValueError):
             return False
         return True

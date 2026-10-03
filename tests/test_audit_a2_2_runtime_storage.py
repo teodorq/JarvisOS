@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 import json
 from pathlib import Path
 import tempfile
@@ -109,6 +110,36 @@ class AuditA22RuntimeStorageTests(unittest.TestCase):
                     "safe": True,
                 },
             )
+
+    def test_json_store_update_does_not_lose_concurrent_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            store = JsonStore(
+                Path(temp) / "state.json",
+                lambda: {"count": 0},
+            )
+
+            def increment() -> None:
+                store.update(
+                    lambda value: {"count": int(value["count"]) + 1}
+                )
+
+            with ThreadPoolExecutor(max_workers=8) as executor:
+                list(executor.map(lambda _index: increment(), range(80)))
+
+            self.assertEqual(store.load(), {"count": 80})
+
+    def test_json_store_update_keeps_file_when_transform_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            store = JsonStore(Path(temp) / "state.json", dict)
+            store.save({"value": "safe"})
+
+            def fail(_value: object) -> object:
+                raise ValueError("stop")
+
+            with self.assertRaises(ValueError):
+                store.update(fail)
+
+            self.assertEqual(store.load(), {"value": "safe"})
 
     def test_memory_uses_resolved_project_root(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -233,6 +264,27 @@ class AuditA22RuntimeStorageTests(unittest.TestCase):
                     data["history"]
                 ),
                 20,
+            )
+
+    def test_memory_keeps_all_concurrent_history_entries(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            memory_file = Path(temp) / "data" / "memory.json"
+            memories = [Memory(memory_file=memory_file) for _index in range(8)]
+
+            def add(index: int) -> None:
+                memories[index % len(memories)].add_history(
+                    f"user-{index}",
+                    f"jarvis-{index}",
+                )
+
+            with ThreadPoolExecutor(max_workers=8) as executor:
+                list(executor.map(add, range(80)))
+
+            restored = Memory(memory_file=memory_file)._load()
+            self.assertEqual(len(restored["history"]), 80)
+            self.assertEqual(
+                {item["user"] for item in restored["history"]},
+                {f"user-{index}" for index in range(80)},
             )
 
 

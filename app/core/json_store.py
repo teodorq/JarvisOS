@@ -126,3 +126,20 @@ class JsonStore:
 
                 raise
 
+    def update(
+        self,
+        transform: Callable[[Any], Any],
+    ) -> Any:
+        """Read, transform, and atomically save while holding one path lock.
+
+        Returning ``None`` keeps a value mutated in place. Any other return
+        value replaces it. If the transform raises, the existing file is left
+        untouched.
+        """
+        with self._lock:
+            current = self.load()
+            replacement = transform(current)
+            updated = current if replacement is None else replacement
+            self.save(updated)
+            return updated
+

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -74,6 +75,17 @@ class Memory:
             data
         )
 
+    def _update(
+        self,
+        transform: Callable[[dict[str, Any]], None],
+    ) -> dict[str, Any]:
+        def apply(value: object) -> dict[str, Any]:
+            data = value if isinstance(value, dict) else self._default_memory()
+            transform(data)
+            return data
+
+        return self._store.update(apply)
+
     def _migrate(
         self,
     ) -> None:
@@ -99,15 +111,12 @@ class Memory:
         self,
         text,
     ):
-        data = self._load()
-        data["notes"].append(
-            {
-                "text": text,
-                "created_at": datetime.now().isoformat(),
-            }
-        )
-        self._save(
-            data
+        note = {
+            "text": text,
+            "created_at": datetime.now().isoformat(),
+        }
+        self._update(
+            lambda data: data["notes"].append(note)
         )
         return "Zapamiętałem notatkę."
 
@@ -115,16 +124,13 @@ class Memory:
         self,
         text,
     ):
-        data = self._load()
-        data["tasks"].append(
-            {
-                "text": text,
-                "status": "active",
-                "created_at": datetime.now().isoformat(),
-            }
-        )
-        self._save(
-            data
+        task = {
+            "text": text,
+            "status": "active",
+            "created_at": datetime.now().isoformat(),
+        }
+        self._update(
+            lambda data: data["tasks"].append(task)
         )
         return "Dodałem zadanie."
 
@@ -133,37 +139,31 @@ class Memory:
         user_text,
         jarvis_text,
     ):
-        data = self._load()
-        data["history"].append(
-            {
-                "user": user_text,
-                "jarvis": jarvis_text,
-                "created_at": datetime.now().isoformat(),
-            }
-        )
+        item = {
+            "user": user_text,
+            "jarvis": jarvis_text,
+            "created_at": datetime.now().isoformat(),
+        }
 
-        if len(data["history"]) > 1000:
-            data["history"] = data["history"][-1000:]
+        def append(data: dict[str, Any]) -> None:
+            data["history"].append(item)
+            if len(data["history"]) > 1000:
+                data["history"] = data["history"][-1000:]
 
-        self._save(
-            data
-        )
+        self._update(append)
 
     def remember_knowledge(
         self,
         title,
         content,
     ):
-        data = self._load()
-        data["knowledge"].append(
-            {
-                "title": title,
-                "content": content,
-                "created_at": datetime.now().isoformat(),
-            }
-        )
-        self._save(
-            data
+        item = {
+            "title": title,
+            "content": content,
+            "created_at": datetime.now().isoformat(),
+        }
+        self._update(
+            lambda data: data["knowledge"].append(item)
         )
 
     def remember_experience(
@@ -172,17 +172,14 @@ class Memory:
         success,
         summary,
     ):
-        data = self._load()
-        data["experiences"].append(
-            {
-                "goal": goal,
-                "success": success,
-                "summary": summary,
-                "created_at": datetime.now().isoformat(),
-            }
-        )
-        self._save(
-            data
+        item = {
+            "goal": goal,
+            "success": success,
+            "summary": summary,
+            "created_at": datetime.now().isoformat(),
+        }
+        self._update(
+            lambda data: data["experiences"].append(item)
         )
 
     def remember_application(
@@ -190,10 +187,8 @@ class Memory:
         app_name,
         info,
     ):
-        data = self._load()
-        data["applications"][app_name] = info
-        self._save(
-            data
+        self._update(
+            lambda data: data["applications"].__setitem__(app_name, info)
         )
 
     def set_preference(
@@ -201,10 +196,8 @@ class Memory:
         key,
         value,
     ):
-        data = self._load()
-        data["preferences"][key] = value
-        self._save(
-            data
+        self._update(
+            lambda data: data["preferences"].__setitem__(key, value)
         )
 
     def get_preference(
