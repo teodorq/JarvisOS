@@ -11,6 +11,7 @@ QUICK_TESTS = (
     "tests/test_autodev_batch_storage.py",
     "tests/test_autodev_concurrent_storage.py",
     "tests/test_client_brain.py",
+    "tests/test_client_ui_responsiveness.py",
     "tests/test_performance_profile.py",
     "tests/test_halo_idle_performance.py",
     "tests/test_runtime_startup_profile.py",

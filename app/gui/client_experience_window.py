@@ -362,17 +362,12 @@ class ClientExperienceWindow(ClientVoiceMixin, ClientOnlineMixin, ClientV12Mixin
             self.activity_label.setText("Najpierw zakończę bieżące zadanie.")
             return
         self.presenter.begin_command()
-        self.controller.set_halo("thinking", "Analizuję polecenie")
         QTimer.singleShot(
             25,
             lambda command=value: self.owner_window.process_client_command(command),
         )
     def _on_client_event(self, raw_event: object) -> None:
-        event = self.presenter.apply_event(raw_event)
-        self.controller.set_halo(
-            event.get("state", "idle"),
-            self.message_label.text(),
-        )
+        self.presenter.apply_event(raw_event)
     def _map_state(self, value: str) -> tuple[str, str]:
         upper = value.upper()
         for marker, result in self.STATE_MAP.items():

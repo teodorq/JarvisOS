@@ -17,7 +17,6 @@ class ClientVoiceMixin:
             "Po sygnale powiedz od razu całe polecenie.",
             progress=0,
         )
-        self.controller.set_halo("listening", "Przygotowuję mikrofon")
         self.listen_button.setText("ANULUJ")
         if not voice.listen_once():
             self.handle_voice_state("busy")
@@ -39,7 +38,6 @@ class ClientVoiceMixin:
         self.listen_button.setText("MÓW")
         if value in {"recognized", "completed"}:
             self.presenter.begin_command()
-            self.controller.set_halo("thinking", "Rozpoznano polecenie")
             self.state_label.setText("ANALIZUJĘ")
             self.activity_label.setText("Rozumiem i przygotowuję działanie…")
         elif value == "timeout":
