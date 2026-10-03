@@ -1,0 +1,140 @@
+from __future__ import annotations
+
+from typing import Any
+
+from PySide6.QtWidgets import (
+    QComboBox,
+    QFormLayout,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+)
+
+from app.gui.business_widgets import SectionCard
+
+
+STARTUP_MODES = (
+    ("Ostatnio używany ekran", "remember"),
+    ("Rozmowa z JARVIS", "client"),
+    ("Panel właściciela", "owner"),
+)
+START_PAGES = (
+    ("Konsola", "console"),
+    ("Asystent i codzienna praca", "assistant"),
+    ("Produktywność", "productivity"),
+    ("Forex PAPER", "forex"),
+    ("Stabilność", "stability"),
+    ("Ustawienia", "settings"),
+)
+PERFORMANCE_PROFILES = (
+    ("Automatyczna — zalecana", "auto"),
+    ("Oszczędna — słabsze urządzenia", "low_resource"),
+    ("Pełna jakość", "balanced"),
+)
+
+
+def install_settings_extensions(page: Any, content: Any) -> None:
+    runtime = SectionCard(
+        "Uruchamianie i wydajność",
+        "Wybierz ekran startowy i dopasuj obciążenie do komputera.",
+    )
+    form = QFormLayout()
+    form.setHorizontalSpacing(18)
+    page.startup_mode = _combo(STARTUP_MODES)
+    page.start_page = _combo(START_PAGES)
+    page.performance_profile = _combo(PERFORMANCE_PROFILES)
+    page.sound_effects = _combo((
+        ("Włączone", True),
+        ("Wyłączone", False),
+    ))
+    form.addRow("Ekran po uruchomieniu", page.startup_mode)
+    form.addRow("Start panelu właściciela", page.start_page)
+    form.addRow("Tryb wydajności", page.performance_profile)
+    form.addRow("Dźwięki interfejsu", page.sound_effects)
+    runtime.content_layout.addLayout(form)
+    note = QLabel(
+        "Zmiana wydajności i dźwięków zacznie w pełni działać po ponownym "
+        "uruchomieniu JARVIS OS."
+    )
+    note.setObjectName("Muted")
+    note.setWordWrap(True)
+    runtime.content_layout.addWidget(note)
+    content.addWidget(runtime)
+
+    maintenance = SectionCard(
+        "Stan systemu i miejsce na dysku",
+        "Kontrola jest tylko do odczytu. Porządkowanie zachowuje ustawienia, "
+        "pamięć, rozmowy i dane tradingowe.",
+    )
+    row = QHBoxLayout()
+    page.health_button = QPushButton("SPRAWDŹ STAN JARVIS")
+    page.health_button.setObjectName("SecondaryButton")
+    page.health_button.clicked.connect(page.health_requested.emit)
+    page.cleanup_button = QPushButton("UPORZĄDKUJ DANE")
+    page.cleanup_button.setObjectName("SecondaryButton")
+    page.cleanup_button.clicked.connect(page.cleanup_requested.emit)
+    row.addWidget(page.health_button)
+    row.addWidget(page.cleanup_button)
+    row.addStretch(1)
+    maintenance.content_layout.addLayout(row)
+    page.maintenance_feedback = QLabel("Gotowy do sprawdzenia.")
+    page.maintenance_feedback.setObjectName("Muted")
+    page.maintenance_feedback.setWordWrap(True)
+    maintenance.content_layout.addWidget(page.maintenance_feedback)
+    content.addWidget(maintenance)
+
+
+def load_settings_extensions(page: Any, config: dict[str, Any]) -> None:
+    ui = dict(config.get("ui", {}) or {})
+    _select(page.startup_mode, ui.get("startup_mode", "remember"))
+    _select(page.start_page, ui.get("start_page", "console"))
+    performance = dict(config.get("performance", {}) or {})
+    _select(page.performance_profile, performance.get("profile", "auto"))
+    sound = dict(config.get("sound", {}) or {})
+    _select(page.sound_effects, bool(sound.get("effects_enabled", True)))
+
+
+def settings_extension_updates(page: Any) -> dict[str, Any]:
+    return {
+        "ui": {
+            "startup_mode": page.startup_mode.currentData(),
+            "start_page": page.start_page.currentData(),
+            "show_quick_actions": bool(page.quick_actions.currentData()),
+        },
+        "performance": {"profile": page.performance_profile.currentData()},
+        "sound": {"effects_enabled": bool(page.sound_effects.currentData())},
+    }
+
+
+def set_settings_action_busy(page: Any, busy: bool) -> None:
+    page.health_button.setDisabled(bool(busy))
+    page.cleanup_button.setDisabled(bool(busy))
+    if busy:
+        page.maintenance_feedback.setText("Sprawdzam — możesz dalej używać JARVIS.")
+
+
+def set_settings_action_feedback(page: Any, text: str, healthy: bool) -> None:
+    set_settings_action_busy(page, False)
+    page.maintenance_feedback.setText(str(text))
+    page.maintenance_feedback.setObjectName("Healthy" if healthy else "Danger")
+    page.maintenance_feedback.style().unpolish(page.maintenance_feedback)
+    page.maintenance_feedback.style().polish(page.maintenance_feedback)
+
+
+def _combo(items: tuple[tuple[str, Any], ...]) -> QComboBox:
+    combo = QComboBox()
+    for label, value in items:
+        combo.addItem(label, value)
+    return combo
+
+
+def _select(combo: QComboBox, value: object) -> None:
+    index = combo.findData(value)
+    combo.setCurrentIndex(max(0, index))
+
+
+__all__ = [
+    "install_settings_extensions", "load_settings_extensions",
+    "set_settings_action_busy", "set_settings_action_feedback",
+    "settings_extension_updates",
+]

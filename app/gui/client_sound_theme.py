@@ -90,4 +90,16 @@ class ClientSoundTheme(QObject):
                 defaults.update(settings)
         except (OSError, ValueError, TypeError):
             pass
+        try:
+            business = json.loads(
+                (self.root / "config" / "business_edition.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            sound = dict(business.get("sound", {}) or {})
+            defaults["enabled"] = bool(
+                sound.get("effects_enabled", defaults["enabled"])
+            )
+        except (OSError, ValueError, TypeError):
+            pass
         return defaults

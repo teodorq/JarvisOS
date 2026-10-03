@@ -72,6 +72,17 @@ def load_performance_profile(
     except (OSError, ValueError, TypeError):
         pass
 
+    try:
+        business = json.loads(
+            (root / "config" / "business_edition.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        preferences = dict(business.get("performance", {}) or {})
+        selected = str(preferences.get("profile", selected)).strip().casefold()
+    except (OSError, ValueError, TypeError):
+        pass
+
     source = os.environ if environment is None else environment
     selected = str(
         source.get("JARVIS_OS_PERFORMANCE_PROFILE", selected)

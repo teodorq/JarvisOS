@@ -8,6 +8,8 @@ from typing import Any
 from app.core.json_store import JsonStore
 from app.core.project_paths import ProjectPaths
 
+from .business_preferences import harden_user_preferences
+
 
 DEFAULT_BUSINESS_CONFIG: dict[str, Any] = {
     "schema_version": 2,
@@ -29,8 +31,15 @@ DEFAULT_BUSINESS_CONFIG: dict[str, Any] = {
     },
     "ui": {
         "start_page": "console",
+        "startup_mode": "remember",
         "show_quick_actions": True,
         "density": "comfortable",
+    },
+    "performance": {
+        "profile": "auto",
+    },
+    "sound": {
+        "effects_enabled": True,
     },
     "features": {
         "business_dashboard": True,
@@ -121,15 +130,7 @@ class BusinessConfigStore:
         safety["allow_remote_code_execution"] = False
         result["safety"] = safety
 
-        ui = dict(result.get("ui", {}) or {})
-        start_page = cls._text(ui.get("start_page"), "console", 20).lower()
-        ui["start_page"] = (
-            start_page if start_page in {"console", "settings", "trust", "platform", "operations", "release", "commercial"}
-            else "console"
-        )
-        ui["show_quick_actions"] = bool(ui.get("show_quick_actions", True))
-        ui["density"] = "comfortable"
-        result["ui"] = ui
+        harden_user_preferences(result)
 
         defaults = DEFAULT_BUSINESS_CONFIG["features"]
         features = dict(result.get("features", {}) or {})

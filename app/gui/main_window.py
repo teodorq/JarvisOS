@@ -19,6 +19,8 @@ from app.gui.business_widgets import MetricCard, NavigationButton, StatusPill
 from app.gui.business_status_snapshot import business_service_snapshot
 from app.gui.main_window_runtime import connect_main_runtime, prepare_owner_interface, set_owner_metrics_active
 from app.gui.owner_page_loader import ensure_owner_page
+from app.gui.startup_mode import should_start_client
+from app.gui.settings_action_runtime import connect_settings_actions
 from app.system.monitor import SystemMonitor
 from app.voice.lazy_listener import LazyVoiceListener
 LEGACY_UI_LABELS = ("BUSINESS COMMAND CENTER", "COMMAND CONSOLE", "ORGANIZATION", "LICENSE & TRUST", "OWNER DEVELOPMENT LICENSE")
@@ -37,11 +39,11 @@ class MainWindow(BusinessCommandRuntimeMixin, QMainWindow):
         self.project_root = resolve_project_root(); self._interface_ready = False
         self.performance_profile = load_performance_profile(self.project_root)
         self._voice_runtime_connected = False
-        self._client_start_requested = ClientExperienceController(
-            self.project_root
-        ).should_start_client()
         self.config_store = BusinessConfigStore(self.project_root)
         self.business_config = self.config_store.ensure()
+        self._client_start_requested = should_start_client(
+            ClientExperienceController(self.project_root), self.business_config
+        )
         self.business_service = BusinessEditionService(self.project_root)
         self.brain = ClientBrain(self.project_root)
         self.assistant = PersonalAssistantController(self.project_root, memory=self.brain.memory)
@@ -255,6 +257,7 @@ class MainWindow(BusinessCommandRuntimeMixin, QMainWindow):
         )
         self.settings_page.save_requested.connect(self._save_business_settings)
         self.settings_page.reset_requested.connect(self._reset_business_settings)
+        connect_settings_actions(self)
         self.trust_page.refresh_requested.connect(self._refresh_business_status)
         self.settings_page.load_config(self.business_config)
         self.console_page.show_quick_actions(

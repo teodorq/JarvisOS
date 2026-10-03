@@ -27,6 +27,11 @@ from app.gui.business_widgets import (
     SectionCard,
     StatusPill,
 )
+from app.gui.settings_page_extensions import (
+    install_settings_extensions,
+    load_settings_extensions,
+    settings_extension_updates,
+)
 
 
 class ConsolePage(QWidget):
@@ -139,6 +144,8 @@ class SettingsPage(QWidget):
 
     save_requested = Signal(dict)
     reset_requested = Signal()
+    health_requested = Signal()
+    cleanup_requested = Signal()
 
     ACCENTS = (
         ("Błękit Jarvisa", "#4DA3FF"),
@@ -220,6 +227,7 @@ class SettingsPage(QWidget):
         appearance_form.addRow("Skróty poleceń", self.quick_actions)
         appearance.content_layout.addLayout(appearance_form)
         content.addWidget(appearance)
+        install_settings_extensions(self, content)
 
         safety = SectionCard(
             "Bezpieczeństwo wymuszone",
@@ -271,6 +279,7 @@ class SettingsPage(QWidget):
         visible = bool(dict(config.get("ui", {}) or {}).get("show_quick_actions", True))
         quick_index = self.quick_actions.findData(visible)
         self.quick_actions.setCurrentIndex(max(0, quick_index))
+        load_settings_extensions(self, config)
         self.feedback.setText("Konfiguracja wczytana.")
 
     def _save(self) -> None:
@@ -283,7 +292,7 @@ class SettingsPage(QWidget):
             "environment": environment,
             "support_contact": self.support_contact.text(),
             "accent_color": self.accent.currentData(),
-            "ui": {"show_quick_actions": bool(self.quick_actions.currentData())},
+            **settings_extension_updates(self),
         })
 
     def set_feedback(self, text: str, healthy: bool = True) -> None:

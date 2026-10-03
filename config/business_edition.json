@@ -18,8 +18,15 @@
     },
     "ui": {
         "start_page": "console",
+        "startup_mode": "remember",
         "show_quick_actions": true,
         "density": "comfortable"
+    },
+    "performance": {
+        "profile": "auto"
+    },
+    "sound": {
+        "effects_enabled": true
     },
     "features": {
         "business_dashboard": true,
