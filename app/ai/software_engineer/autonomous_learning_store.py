@@ -103,14 +103,29 @@ class AutonomousLearningStore:
         self,
         episode: dict[str, Any],
     ) -> tuple[dict[str, Any], bool]:
+        payload = self._payload(self._store.load())
+        value, created = self._merge_episode(
+            payload,
+            episode,
+            updated_at=self._now(),
+        )
+        self._store.save(payload)
+        return value, created
+
+    def _merge_episode(
+        self,
+        payload: dict[str, Any],
+        episode: dict[str, Any],
+        *,
+        updated_at: str,
+    ) -> tuple[dict[str, Any], bool]:
         value = dict(episode)
         episode_id = str(value.get("episode_id", "")).strip()
         if not episode_id:
             raise ValueError("Episode uczenia wymaga episode_id.")
 
-        payload = self._payload(self._store.load())
         created = episode_id not in payload["episodes"]
-        value["updated_at"] = self._now()
+        value["updated_at"] = updated_at
         payload["episodes"][episode_id] = value
         order = payload["episode_order"]
         if episode_id in order:
@@ -121,22 +136,30 @@ class AutonomousLearningStore:
             removed = order.pop(0)
             payload["episodes"].pop(removed, None)
 
-        payload["updated_at"] = value["updated_at"]
-        self._store.save(payload)
+        payload["updated_at"] = updated_at
         return dict(value), created
 
     def save_episodes(
         self,
         episodes: list[dict[str, Any]],
     ) -> dict[str, Any]:
+        if not episodes:
+            return {"created": 0, "updated": 0, "total": 0}
+        payload = self._payload(self._store.load())
+        updated_at = self._now()
         created = 0
         updated = 0
         for item in episodes:
-            _, was_created = self.save_episode(item)
+            _, was_created = self._merge_episode(
+                payload,
+                item,
+                updated_at=updated_at,
+            )
             if was_created:
                 created += 1
             else:
                 updated += 1
+        self._store.save(payload)
         return {
             "created": created,
             "updated": updated,

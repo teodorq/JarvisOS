@@ -8,6 +8,7 @@ import sys
 
 QUICK_TESTS = (
     "tests/test_dependency_manifests.py",
+    "tests/test_autodev_batch_storage.py",
     "tests/test_client_brain.py",
     "tests/test_performance_profile.py",
     "tests/test_halo_idle_performance.py",

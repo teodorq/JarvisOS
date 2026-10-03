@@ -34,6 +34,18 @@ class StrategicPortfolioStore:
         self,
         entry: StrategicPortfolioEntry | dict[str, Any],
     ) -> dict[str, Any]:
+        payload = self.load()
+        value = self._merge_entry(payload, entry, updated_at=self._now())
+        self._store.save(payload)
+        return value
+
+    def _merge_entry(
+        self,
+        payload: dict[str, Any],
+        entry: StrategicPortfolioEntry | dict[str, Any],
+        *,
+        updated_at: str,
+    ) -> dict[str, Any]:
         item = (
             entry
             if isinstance(entry, StrategicPortfolioEntry)
@@ -43,11 +55,10 @@ class StrategicPortfolioStore:
         goal_id = str(value.get("goal_id", "")).strip()
         if not goal_id:
             raise ValueError("Wpis portfolio strategicznego wymaga goal_id.")
-        payload = self.load()
         existing = payload["entries"].get(goal_id, {})
         if str(existing.get("created_at", "")).strip():
             value["created_at"] = str(existing["created_at"])
-        value["updated_at"] = self._now()
+        value["updated_at"] = updated_at
         payload["entries"][goal_id] = value
         order = payload["order"]
         if goal_id in order:
@@ -70,28 +81,32 @@ class StrategicPortfolioStore:
             )
             order.remove(removable)
             payload["entries"].pop(removable, None)
-        payload["updated_at"] = value["updated_at"]
-        self._store.save(payload)
+        payload["updated_at"] = updated_at
         return dict(value)
 
     def replace_entries(
         self,
         entries: list[StrategicPortfolioEntry | dict[str, Any]],
     ) -> list[dict[str, Any]]:
+        payload = self.load()
+        updated_at = self._now()
         incoming: set[str] = set()
         for entry in entries:
-            saved = self.save_entry(entry)
+            saved = self._merge_entry(
+                payload,
+                entry,
+                updated_at=updated_at,
+            )
             incoming.add(str(saved.get("goal_id", "")))
-        payload = self.load()
         for goal_id in list(payload["entries"]):
             if goal_id in incoming:
                 continue
             payload["entries"].pop(goal_id, None)
             if goal_id in payload["order"]:
                 payload["order"].remove(goal_id)
-        payload["updated_at"] = self._now()
+        payload["updated_at"] = updated_at
         self._store.save(payload)
-        return self.list_entries(limit=1000)
+        return self._list_entries(payload, limit=1000)
 
     def get_entry(self, goal_id: str) -> dict[str, Any] | None:
         value = self.load()["entries"].get(str(goal_id).strip())
@@ -103,7 +118,19 @@ class StrategicPortfolioStore:
         limit: int = 100,
         statuses: set[str] | None = None,
     ) -> list[dict[str, Any]]:
-        payload = self.load()
+        return self._list_entries(
+            self.load(),
+            limit=limit,
+            statuses=statuses,
+        )
+
+    @staticmethod
+    def _list_entries(
+        payload: dict[str, Any],
+        *,
+        limit: int,
+        statuses: set[str] | None = None,
+    ) -> list[dict[str, Any]]:
         allowed = {str(item).upper() for item in (statuses or set())}
         result: list[dict[str, Any]] = []
         for goal_id in reversed(payload["order"]):

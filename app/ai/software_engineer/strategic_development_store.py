@@ -34,6 +34,18 @@ class StrategicDevelopmentStore:
         self,
         goal: StrategicDevelopmentGoal | dict[str, Any],
     ) -> dict[str, Any]:
+        payload = self.load()
+        value = self._merge_goal(payload, goal, updated_at=self._now())
+        self._store.save(payload)
+        return value
+
+    def _merge_goal(
+        self,
+        payload: dict[str, Any],
+        goal: StrategicDevelopmentGoal | dict[str, Any],
+        *,
+        updated_at: str,
+    ) -> dict[str, Any]:
         item = (
             goal
             if isinstance(goal, StrategicDevelopmentGoal)
@@ -43,11 +55,10 @@ class StrategicDevelopmentStore:
         goal_id = str(value.get("goal_id", "")).strip()
         if not goal_id:
             raise ValueError("Cel strategiczny wymaga goal_id.")
-        payload = self.load()
         existing = payload["goals"].get(goal_id, {})
         if str(existing.get("created_at", "")).strip():
             value["created_at"] = str(existing["created_at"])
-        value["updated_at"] = self._now()
+        value["updated_at"] = updated_at
         payload["goals"][goal_id] = value
         order = payload["order"]
         if goal_id in order:
@@ -68,21 +79,25 @@ class StrategicDevelopmentStore:
             )
             order.remove(removable)
             payload["goals"].pop(removable, None)
-        payload["updated_at"] = value["updated_at"]
-        self._store.save(payload)
+        payload["updated_at"] = updated_at
         return dict(value)
 
     def replace_goals(
         self,
         goals: list[StrategicDevelopmentGoal | dict[str, Any]],
     ) -> list[dict[str, Any]]:
+        payload = self.load()
+        updated_at = self._now()
         saved: list[dict[str, Any]] = []
         incoming_ids: set[str] = set()
         for goal in goals:
-            value = self.save_goal(goal)
+            value = self._merge_goal(
+                payload,
+                goal,
+                updated_at=updated_at,
+            )
             incoming_ids.add(str(value.get("goal_id", "")))
             saved.append(value)
-        payload = self.load()
         for goal_id, value in list(payload["goals"].items()):
             if goal_id in incoming_ids:
                 continue
@@ -91,9 +106,9 @@ class StrategicDevelopmentStore:
             payload["goals"].pop(goal_id, None)
             if goal_id in payload["order"]:
                 payload["order"].remove(goal_id)
-        payload["updated_at"] = self._now()
+        payload["updated_at"] = updated_at
         self._store.save(payload)
-        return self.list_goals(limit=1000)
+        return self._list_goals(payload, limit=1000)
 
     def get_goal(self, goal_id: str) -> dict[str, Any] | None:
         value = self.load()["goals"].get(str(goal_id).strip())
@@ -117,7 +132,19 @@ class StrategicDevelopmentStore:
         limit: int = 100,
         statuses: set[str] | None = None,
     ) -> list[dict[str, Any]]:
-        payload = self.load()
+        return self._list_goals(
+            self.load(),
+            limit=limit,
+            statuses=statuses,
+        )
+
+    @staticmethod
+    def _list_goals(
+        payload: dict[str, Any],
+        *,
+        limit: int,
+        statuses: set[str] | None = None,
+    ) -> list[dict[str, Any]]:
         allowed = {str(item).upper() for item in (statuses or set())}
         result: list[dict[str, Any]] = []
         for goal_id in reversed(payload["order"]):
