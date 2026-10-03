@@ -14,12 +14,10 @@ from app.assistant.weather import WeatherService
 from app.assistant.status_formatter import AssistantStatusFormatter
 from app.core.project_paths import resolve_project_root
 from app.intelligence.controller import IntelligenceSuiteController
-from app.productivity.controller import ProductivitySuiteController
 from app.stability.controller import StabilitySuiteController
 from app.assistant_v12.controller import AssistantV12Controller
 from app.assistant_v12.conversation_engine import NaturalConversationEngineV3
-from app.online_assistant.controller import OnlineAssistantController
-from app.natural_actions import NaturalActionService
+from app.assistant.deferred_services import DEFERRED_STAGES, DeferredAssistantServices, deferred_matches
 from app.integrations import IntegrationStatusService
 from app.assistant.trading_runtime import LazyTradingRuntime
 class PersonalAssistantController:
@@ -31,11 +29,9 @@ class PersonalAssistantController:
         "B99": "VOICE_2_READY",
         "B100": "DAILY_WORK_CENTER_READY",
         **IntelligenceSuiteController.STAGES,
-        **ProductivitySuiteController.STAGES,
         **StabilitySuiteController.STAGES,
         **AssistantV12Controller.STAGES,
-        **OnlineAssistantController.STAGES,
-        **NaturalActionService.STAGES,
+        **DEFERRED_STAGES,
     }
     def __init__(self, project_root: str | Path | None = None, *, memory: Any | None = None) -> None:
         self.project_root = resolve_project_root(project_root)
@@ -48,11 +44,12 @@ class PersonalAssistantController:
         self.weather = WeatherService()
         self.daily = DailyWorkService(self.project_root)
         self.intelligence = IntelligenceSuiteController(self.project_root)
-        self.productivity = ProductivitySuiteController(self.project_root)
         self.stability = StabilitySuiteController(self.project_root, runtime_status=self._stability_runtime_status)
         self.assistant_v12 = AssistantV12Controller(self.project_root)
-        self.online = OnlineAssistantController(self.project_root, reminders=self.productivity.reminders)
-        self.natural_actions = NaturalActionService(self.project_root, online=self.online)
+        deferred = DeferredAssistantServices(self.project_root)
+        self.productivity = deferred.productivity
+        self.online = deferred.online
+        self.natural_actions = deferred.natural_actions
         self.integrations = IntegrationStatusService()
         self.trading = LazyTradingRuntime(self.project_root)
     @staticmethod
@@ -135,11 +132,9 @@ class PersonalAssistantController:
         return (
             any(phrase in text for phrase in phrases)
             or IntelligenceSuiteController.matches(command)
-            or ProductivitySuiteController.matches(command)
             or StabilitySuiteController.matches(command)
             or NaturalConversationEngineV3.matches(command)
-            or OnlineAssistantController.matches(command)
-            or NaturalActionService.matches(command)
+            or deferred_matches(command)
         )
     def resolve_command(self, command: object) -> ResolvedCommand:
         resolved = self.conversation.resolve(command)
@@ -188,7 +183,7 @@ class PersonalAssistantController:
                 "clarification": resolved.clarification,
             })
             return thought
-        if ProductivitySuiteController.matches(resolved.resolved):
+        if self.productivity.matches(resolved.resolved):
             thought = self.productivity.plan(resolved.resolved)
             thought.update({
                 "original_command": resolved.original,
@@ -252,7 +247,7 @@ class PersonalAssistantController:
         online_command = not direct_core and self.online.matches(text)
         v12_command = not direct_core and self.assistant_v12.matches(text)
         stability_command = not direct_core and StabilitySuiteController.matches(text)
-        productivity_command = not direct_core and ProductivitySuiteController.matches(text)
+        productivity_command = not direct_core and self.productivity.matches(text)
         suite_command = not direct_core and IntelligenceSuiteController.matches(text)
         try:
             if direct_core:

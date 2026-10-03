@@ -1,15 +1,23 @@
-from app.productivity.calendar_center import LocalCalendarCenter
-from app.productivity.controller import ProductivitySuiteController
-from app.productivity.daily_briefing import DailyProductivityBriefing
-from app.productivity.document_center import LocalDocumentCenter
-from app.productivity.mail_center import LocalMailCenter
-from app.productivity.reminder_center import ReminderCenterV2
+"""Productivity public API with per-component deferred imports."""
 
-__all__ = [
-    "DailyProductivityBriefing",
-    "LocalCalendarCenter",
-    "LocalDocumentCenter",
-    "LocalMailCenter",
-    "ProductivitySuiteController",
-    "ReminderCenterV2",
-]
+from importlib import import_module
+from typing import Any
+
+_EXPORTS = {
+    "DailyProductivityBriefing": "app.productivity.daily_briefing",
+    "LocalCalendarCenter": "app.productivity.calendar_center",
+    "LocalDocumentCenter": "app.productivity.document_center",
+    "LocalMailCenter": "app.productivity.mail_center",
+    "ProductivitySuiteController": "app.productivity.controller",
+    "ReminderCenterV2": "app.productivity.reminder_center",
+}
+__all__ = list(_EXPORTS)
+
+
+def __getattr__(name: str) -> Any:
+    module_name = _EXPORTS.get(name)
+    if module_name is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    value = getattr(import_module(module_name), name)
+    globals()[name] = value
+    return value

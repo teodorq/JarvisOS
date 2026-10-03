@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.assistant.deferred_services import google_token_present
+
 
 def business_service_snapshot(window: Any) -> tuple[str, bool]:
     """Refresh slower service checks periodically while metrics stay live."""
@@ -14,9 +16,7 @@ def business_service_snapshot(window: Any) -> tuple[str, bool]:
     except Exception:
         background = "OFFLINE"
     try:
-        online = bool(
-            window.assistant.online.status()["connection"]["token_present"]
-        )
+        online = google_token_present()
     except Exception:
         online = False
     result = (background, online)
