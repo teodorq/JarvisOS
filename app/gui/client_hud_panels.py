@@ -6,6 +6,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
 
 from app.gui.client_exit_intent import request_jarvis_shutdown
+from app.gui.client_settings_extensions import show_client_settings_controls
 
 
 def build_client_hud_row(window: Any, halo: Any) -> QHBoxLayout:
@@ -140,6 +141,7 @@ def _open_client_settings(window: Any) -> None:
     feedback = getattr(window, "setup_feedback", None)
     if feedback is not None:
         feedback.clear()
+    show_client_settings_controls(window)
     stack.setCurrentWidget(setup_page)
     name_entry = getattr(window, "name_entry", None)
     if name_entry is not None:

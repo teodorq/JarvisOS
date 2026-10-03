@@ -30,6 +30,10 @@ from app.gui.client_input_policy import should_block_client_input
 from app.gui.client_profile_read import read_client_profile
 from app.gui.client_experience_v2 import ClientExperienceV2
 from app.gui.client_window_mode import ClientWindowModeRuntime
+from app.gui.client_settings_extensions import (
+    install_client_settings_controls,
+    save_client_settings_controls,
+)
 from app.gui.main_window_runtime import set_owner_metrics_active
 from app.gui.user_text_widgets import clean_user_visible_widgets, naturalize_user_text
 class ClientExperienceWindow(ClientVoiceMixin, ClientOnlineMixin, ClientV12Mixin, QMainWindow):
@@ -169,6 +173,7 @@ class ClientExperienceWindow(ClientVoiceMixin, ClientOnlineMixin, ClientV12Mixin
         self.interaction_combo.addItem("Tylko tekst", "TEXT_ONLY")
         content.addWidget(mode_label)
         content.addWidget(self.interaction_combo)
+        install_client_settings_controls(self, content)
         safety = QLabel(
             "● Ważne działania zawsze wymagają Twojej zgody\n"
             "● Twoje dane pozostają pod kontrolą użytkownika"
@@ -340,6 +345,7 @@ class ClientExperienceWindow(ClientVoiceMixin, ClientOnlineMixin, ClientV12Mixin
             voice_enabled=bool(self.voice_combo.currentData()),
             interaction_mode=self.interaction_combo.currentData(),
         )
+        save_client_settings_controls(self)
         self.message_label.setText(f"Witaj {profile['display_name']}. Jestem gotowy.")
         self.stack.setCurrentWidget(self.client_page)
         self.controller.set_mode("CLIENT")
