@@ -31,6 +31,7 @@ class AutonomousLearningStore:
         self._store = JsonStore(
             self.path,
             lambda: self.default_payload(),
+            indent=None,
         )
 
     @classmethod

@@ -55,6 +55,7 @@ class MultiFileRunStore:
                 "runs": {},
                 "order": [],
             },
+            indent=None,
         )
 
     def save(

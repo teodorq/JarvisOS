@@ -49,7 +49,7 @@ class AutonomyGovernanceStore:
         self.paths = ProjectPaths.from_value(project_root)
         self.path = self.paths.autodev_data / "autonomy_governance_b62_b68.json"
         self.max_history = min(20000, max(500, int(max_history)))
-        self._store = JsonStore(self.path, self._default_payload)
+        self._store = JsonStore(self.path, self._default_payload, indent=None)
         self._lock = threading.RLock()
 
     def load(self) -> dict[str, Any]:

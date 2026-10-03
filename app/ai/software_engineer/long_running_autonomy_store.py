@@ -30,6 +30,7 @@ class LongRunningAutonomyStore:
         self._store = JsonStore(
             self.path,
             self._default_payload,
+            indent=None,
         )
 
     def load(self) -> dict[str, Any]:

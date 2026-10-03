@@ -106,6 +106,7 @@ class JsonStore:
                         temporary_file,
                         indent=self.indent,
                         ensure_ascii=False,
+                        separators=(",", ":") if self.indent is None else None,
                     )
                     temporary_file.flush()
                     os.fsync(

@@ -28,6 +28,7 @@ class PortfolioDirectorStore:
                 "runs": {},
                 "order": [],
             },
+            indent=None,
         )
 
     def save(self, run: dict[str, Any]) -> dict[str, Any]:

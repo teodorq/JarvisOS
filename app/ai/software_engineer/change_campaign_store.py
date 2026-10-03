@@ -40,6 +40,7 @@ class ChangeCampaignStore:
                 "campaigns": {},
                 "order": [],
             },
+            indent=None,
         )
 
     def save(

@@ -25,7 +25,7 @@ class StrategicDevelopmentStore:
         self.paths = ProjectPaths.from_value(project_root)
         self.path = self.paths.autodev_data / "strategic_development.json"
         self.max_history = min(5000, max(50, int(max_history)))
-        self._store = JsonStore(self.path, self._default_payload)
+        self._store = JsonStore(self.path, self._default_payload, indent=None)
 
     def load(self) -> dict[str, Any]:
         return self._payload(self._store.load())

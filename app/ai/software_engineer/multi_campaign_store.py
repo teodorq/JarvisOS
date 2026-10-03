@@ -30,6 +30,7 @@ class MultiCampaignStore:
                 "portfolios": {},
                 "order": [],
             },
+            indent=None,
         )
 
     def save(self, portfolio: MultiCampaignPortfolio) -> dict[str, Any]:

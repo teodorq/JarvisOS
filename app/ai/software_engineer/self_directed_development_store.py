@@ -32,7 +32,7 @@ class SelfDirectedDevelopmentStore:
             10000,
             max(100, int(max_observed_jobs)),
         )
-        self._store = JsonStore(self.path, self._default_payload)
+        self._store = JsonStore(self.path, self._default_payload, indent=None)
 
     def load(self) -> dict[str, Any]:
         return self._payload(self._store.load())

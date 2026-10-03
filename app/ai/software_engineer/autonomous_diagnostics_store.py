@@ -24,7 +24,7 @@ class AutonomousDiagnosticsStore:
         self.max_records = min(2000, max(50, int(max_records)))
         self.max_repairs = min(2000, max(50, int(max_repairs)))
         self.path = self.paths.autodev_data / "autonomous_diagnostics.json"
-        self._store = JsonStore(self.path, self._default_payload)
+        self._store = JsonStore(self.path, self._default_payload, indent=None)
 
     def save_diagnostic(
         self,

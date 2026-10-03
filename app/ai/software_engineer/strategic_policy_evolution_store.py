@@ -27,7 +27,7 @@ class StrategicPolicyEvolutionStore:
         self.path = self.paths.autodev_data / "strategic_policy_evolution.json"
         self.max_history = min(5000, max(100, int(max_history)))
         self.max_revisions = min(1000, max(10, int(max_revisions)))
-        self._store = JsonStore(self.path, self._default_payload)
+        self._store = JsonStore(self.path, self._default_payload, indent=None)
 
     def load(self) -> dict[str, Any]:
         return self._payload(self._store.load())

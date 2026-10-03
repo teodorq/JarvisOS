@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 from pathlib import Path
@@ -7,6 +8,57 @@ from tempfile import TemporaryDirectory
 
 from app.ai.software_engineer.full_autonomy_store import FullAutonomyStore
 from app.ai.software_engineer.safe_development_store import SafeDevelopmentStore
+from tools.compact_autodev_json import compact_autodev_json
+
+
+def test_autodev_json_stores_use_compact_atomic_serialization() -> None:
+    root = Path(__file__).resolve().parents[1]
+    store_root = root / "app" / "ai" / "software_engineer"
+    checked = 0
+    for path in store_root.glob("*_store.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if not (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id == "JsonStore"
+            ):
+                continue
+            checked += 1
+            indent = next(
+                (item.value for item in node.keywords if item.arg == "indent"),
+                None,
+            )
+            assert isinstance(indent, ast.Constant), path.name
+            assert indent.value is None, path.name
+    assert checked >= 10
+
+
+def test_autodev_compactor_is_allowlisted_atomic_and_semantic() -> None:
+    with TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        data = root / "data" / "autodev"
+        data.mkdir(parents=True)
+        selected = data / "change_campaigns.json"
+        unrelated = data / "owner_notes.json"
+        payload = {"version": 1, "items": [{"name": "zażółć", "value": 7}]}
+        selected.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=4),
+            encoding="utf-8",
+        )
+        unrelated.write_text('{"keep": true}\n', encoding="utf-8")
+        before = selected.read_bytes()
+
+        preview = compact_autodev_json(root)
+        assert selected.read_bytes() == before
+        result = compact_autodev_json(root, apply=True)
+
+        assert preview["saved_bytes"] == 0
+        assert result["saved_bytes"] > 0
+        assert json.loads(selected.read_text(encoding="utf-8")) == payload
+        assert selected.stat().st_size < len(before)
+        assert unrelated.read_text(encoding="utf-8") == '{"keep": true}\n'
+        assert not list(data.glob("*.compact.tmp"))
 
 
 def test_full_autonomy_compaction_keeps_newest_records() -> None:
@@ -55,6 +107,7 @@ def test_full_autonomy_compaction_rewrites_existing_history_compactly() -> None:
     assert result == {"kept": 1, "removed": 0}
     assert len(compact_text.encode("utf-8")) < before_bytes
     assert "\n" not in compact_text
+    assert ": " not in compact_text
     assert json.loads(compact_text) == payload
 
 

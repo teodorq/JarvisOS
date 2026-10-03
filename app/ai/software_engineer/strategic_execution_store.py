@@ -28,7 +28,7 @@ class StrategicExecutionStore:
         self.path = self.paths.autodev_data / "strategic_execution.json"
         self.max_records = min(10000, max(100, int(max_records)))
         self.max_history = min(5000, max(100, int(max_history)))
-        self._store = JsonStore(self.path, self._default_payload)
+        self._store = JsonStore(self.path, self._default_payload, indent=None)
 
     def load(self) -> dict[str, Any]:
         return self._payload(self._store.load())

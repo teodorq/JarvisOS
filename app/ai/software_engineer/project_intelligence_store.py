@@ -28,7 +28,7 @@ class ProjectIntelligenceStore:
             / "project_intelligence.json"
         )
         self.max_cycles = min(5000, max(50, int(max_cycles)))
-        self._store = JsonStore(self.path, self._default_payload)
+        self._store = JsonStore(self.path, self._default_payload, indent=None)
 
     def load(self) -> dict[str, Any]:
         return self._payload(self._store.load())
