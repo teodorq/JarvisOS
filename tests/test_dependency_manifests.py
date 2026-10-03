@@ -50,3 +50,15 @@ def test_metatrader_is_pinned_and_windows_only_everywhere() -> None:
         metatrader = _requirements(filename)["metatrader5"]
         assert str(metatrader.specifier) == expected_specifier
         assert str(metatrader.marker) == expected_marker
+
+
+def test_installer_does_not_retain_download_cache() -> None:
+    installer = (ROOT / "install.bat").read_text(encoding="utf-8")
+
+    install_lines = [
+        line
+        for line in installer.splitlines()
+        if " -m pip install " in line
+    ]
+    assert install_lines
+    assert all("--no-cache-dir" in line for line in install_lines)

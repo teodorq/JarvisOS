@@ -24,9 +24,9 @@ set "REQUIREMENTS=requirements-lock.txt"
 if not exist "%REQUIREMENTS%" set "REQUIREMENTS=requirements.txt"
 
 echo Instalowanie zweryfikowanych bibliotek JARVIS OS...
-".venv\Scripts\python.exe" -m pip install --upgrade pip
+".venv\Scripts\python.exe" -m pip install --no-cache-dir --upgrade pip
 if errorlevel 1 goto :error
-".venv\Scripts\python.exe" -m pip install -r "%REQUIREMENTS%"
+".venv\Scripts\python.exe" -m pip install --no-cache-dir -r "%REQUIREMENTS%"
 if errorlevel 1 goto :error
 if exist "tools\optimize_runtime_dependencies.py" (
     echo Optymalizowanie rozmiaru bibliotek JARVIS OS...
