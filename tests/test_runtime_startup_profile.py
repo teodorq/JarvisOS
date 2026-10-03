@@ -28,6 +28,11 @@ class RuntimeStartupProfileTests(unittest.TestCase):
             source,
         )
 
+    def test_gui_uses_lazy_voice_proxy(self) -> None:
+        source = Path("app/gui/main_window.py").read_text(encoding="utf-8")
+        self.assertIn("LazyVoiceListener", source)
+        self.assertNotIn("from app.voice.voice_listener import", source)
+
     def test_lightweight_core_is_available_for_every_gui_start_mode(self) -> None:
         with patch(
             "app.client_experience.controller.ClientExperienceController.should_start_client",

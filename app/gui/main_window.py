@@ -19,7 +19,7 @@ from app.gui.business_status_snapshot import business_service_snapshot
 from app.gui.main_window_runtime import connect_main_runtime, prepare_owner_interface, set_owner_metrics_active
 from app.gui.owner_page_loader import ensure_owner_page
 from app.system.monitor import SystemMonitor
-from app.voice.voice_listener import VoiceListener
+from app.voice.lazy_listener import LazyVoiceListener
 LEGACY_UI_LABELS = ("BUSINESS COMMAND CENTER", "COMMAND CONSOLE", "ORGANIZATION", "LICENSE & TRUST", "OWNER DEVELOPMENT LICENSE")
 UI_COMPATIBILITY_MARKER = "B80.2 FINAL UI"
 LAZY_OWNER_PAGE_TYPES = (
@@ -60,9 +60,10 @@ class MainWindow(BusinessCommandRuntimeMixin, QMainWindow):
         self._connect_runtime()
     def _initialize_voice(self) -> None:
         try:
-            self.voice = VoiceListener(on_text=self.handle_voice_text_safe,
+            self.voice = LazyVoiceListener(on_text=self.handle_voice_text_safe,
                 settings=self.assistant.voice.settings(), auto_start=False)
-            self.voice_online = True
+            self.voice_online = self.voice.dependencies_available
+            if not self.voice_online: self.voice = None
         except Exception as error:
             self.voice = None
             self.voice_online = False
