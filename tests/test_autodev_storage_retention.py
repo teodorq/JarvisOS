@@ -27,6 +27,37 @@ def test_full_autonomy_compaction_keeps_newest_records() -> None:
     assert set(payload["runs"]) == set(order[-10:])
 
 
+def test_full_autonomy_compaction_rewrites_existing_history_compactly() -> None:
+    with TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        path = root / "data" / "autodev" / "full_autonomy_runs.json"
+        path.parent.mkdir(parents=True)
+        payload = {
+            "version": 1,
+            "updated_at": "",
+            "runs": {
+                "run-1": {
+                    "run_id": "run-1",
+                    "details": {"items": list(range(100))},
+                },
+            },
+            "order": ["run-1"],
+        }
+        path.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=4),
+            encoding="utf-8",
+        )
+        before_bytes = path.stat().st_size
+
+        result = FullAutonomyStore(root).compact()
+        compact_text = path.read_text(encoding="utf-8")
+
+    assert result == {"kept": 1, "removed": 0}
+    assert len(compact_text.encode("utf-8")) < before_bytes
+    assert "\n" not in compact_text
+    assert json.loads(compact_text) == payload
+
+
 def test_terminal_session_drops_workspace_but_keeps_artifacts() -> None:
     with TemporaryDirectory() as temporary:
         store = SafeDevelopmentStore(temporary)

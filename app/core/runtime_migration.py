@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime, timezone
+import gzip
+import hashlib
 import json
+import os
 from pathlib import Path
 import shutil
 from typing import Any
@@ -191,6 +194,7 @@ class RuntimeDataMigrator:
         archived = self._archive(
             path,
             reason=reason,
+            compress=reason == "oversized",
         )
 
         return {
@@ -211,6 +215,7 @@ class RuntimeDataMigrator:
         source: Path,
         *,
         reason: str,
+        compress: bool = False,
     ) -> Path:
         self.archive_dir.mkdir(
             parents=True,
@@ -228,6 +233,7 @@ class RuntimeDataMigrator:
                 f"{reason}."
                 f"{timestamp}"
                 f"{source.suffix}"
+                f"{'.gz' if compress else ''}"
             )
         )
         counter = 1
@@ -241,16 +247,57 @@ class RuntimeDataMigrator:
                     f"{timestamp}."
                     f"{counter}"
                     f"{source.suffix}"
+                    f"{'.gz' if compress else ''}"
                 )
             )
             counter += 1
 
-        shutil.move(
-            str(source),
-            str(destination),
+        if not compress:
+            shutil.move(
+                str(source),
+                str(destination),
+            )
+            return destination
+
+        temporary = destination.with_name(
+            f".{destination.name}.tmp"
         )
+        try:
+            source_digest = self._file_sha256(source)
+            with source.open("rb") as input_stream, gzip.open(
+                temporary,
+                "wb",
+                compresslevel=9,
+            ) as output_stream:
+                shutil.copyfileobj(
+                    input_stream,
+                    output_stream,
+                )
+            with gzip.open(temporary, "rb") as input_stream:
+                archive_digest = self._stream_sha256(input_stream)
+            if archive_digest != source_digest:
+                raise OSError(
+                    "Weryfikacja skompresowanego archiwum nie powiodła się."
+                )
+            os.replace(temporary, destination)
+            source.unlink()
+        except Exception:
+            temporary.unlink(missing_ok=True)
+            raise
 
         return destination
+
+    @staticmethod
+    def _file_sha256(path: Path) -> str:
+        with path.open("rb") as stream:
+            return RuntimeDataMigrator._stream_sha256(stream)
+
+    @staticmethod
+    def _stream_sha256(stream: Any) -> str:
+        digest = hashlib.sha256()
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(block)
+        return digest.hexdigest()
 
     @staticmethod
     def _is_valid_json(

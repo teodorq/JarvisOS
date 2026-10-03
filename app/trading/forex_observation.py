@@ -410,7 +410,7 @@ class ForexObservationJournal:
     def __init__(self, project_root: str | Path | None = None) -> None:
         root = resolve_project_root(project_root)
         self.path = root / "data" / "trading" / "forex_observations.json"
-        self.store = JsonStore(self.path, self._default)
+        self.store = JsonStore(self.path, self._default, indent=None)
         self._lock = _shared_lock(self.path)
         self.lock_path = self.path.with_name(".forex_observations.lock")
 
@@ -470,6 +470,31 @@ class ForexObservationJournal:
     def snapshot(self) -> dict[str, Any]:
         with self._lock:
             return deepcopy(self._normalized(self._load_strict()))
+
+    def compact(self) -> dict[str, int]:
+        """Rewrite valid evidence compactly without changing its contents."""
+        if not self.path.exists():
+            return {
+                "observations": 0,
+                "before_bytes": 0,
+                "after_bytes": 0,
+            }
+        with self._lock, exclusive_file_lock(
+            self.lock_path,
+            timeout_message="Forex observation journal lock timeout",
+        ):
+            before_bytes = self.path.stat().st_size
+            state = self._normalized(self._load_strict())
+            if not self.verify(state):
+                raise TradingValidationError(
+                    "forex_observation: audit_chain_invalid"
+                )
+            self.store.save(state)
+            return {
+                "observations": len(state["observations"]),
+                "before_bytes": before_bytes,
+                "after_bytes": self.path.stat().st_size,
+            }
 
     def summary(self) -> dict[str, Any]:
         review = self.review()

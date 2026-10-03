@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+
+import tools.run_forex_historical_research as research_tool
 from tools.run_forex_historical_research import (
     _candidate_summary,
     _development_candidate,
@@ -92,3 +95,19 @@ def test_v3_development_report_never_promotes_reused_results() -> None:
     assert portfolio["paper_orders_sent"] is False
     assert portfolio["live_orders_sent"] is False
     assert "windows" not in _candidate_summary(report)["portfolio"]
+
+
+def test_report_writer_uses_compact_atomic_json(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(research_tool, "PROJECT_ROOT", tmp_path)
+    report = {
+        "created_at": "2026-10-03T10:00:00+00:00",
+        "result": {"items": list(range(100))},
+    }
+
+    path = research_tool._write_report(report)
+    text = path.read_text(encoding="utf-8")
+
+    assert text.count("\n") == 1
+    assert text.endswith("\n")
+    assert json.loads(text) == report
+    assert len(text) < len(json.dumps(report, ensure_ascii=False, indent=2))

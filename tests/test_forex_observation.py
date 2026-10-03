@@ -3,6 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+import json
 import multiprocessing
 import os
 from pathlib import Path
@@ -246,6 +247,31 @@ class ForexObservationTests(unittest.TestCase):
         self.assertTrue(
             (self.root / "data/trading/forex_observations.json").exists()
         )
+
+    def test_journal_compaction_preserves_verified_observations(self) -> None:
+        journal = ForexObservationJournal(self.root)
+        journal.record({
+            "status": "OBSERVATION_RECORDED",
+            "mode": "FOREX_OBSERVATION_ONLY",
+            "observation_id": "forex-compaction-0001",
+            "paper_orders_sent": False,
+            "live_orders_sent": False,
+            "details": {"items": list(range(100))},
+        })
+        state = journal.snapshot()
+        journal.path.write_text(
+            json.dumps(state, ensure_ascii=False, indent=4),
+            encoding="utf-8",
+        )
+        before_bytes = journal.path.stat().st_size
+
+        result = journal.compact()
+
+        self.assertEqual(result["observations"], 1)
+        self.assertEqual(result["before_bytes"], before_bytes)
+        self.assertLess(result["after_bytes"], before_bytes)
+        self.assertEqual(journal.snapshot(), state)
+        self.assertTrue(journal.verify(journal.snapshot()))
 
     def test_decision_fingerprint_binds_quotes_beyond_closed_bars(self) -> None:
         original = bundle(self.now)

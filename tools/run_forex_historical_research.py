@@ -52,7 +52,13 @@ def _write_report(report: dict[str, object]) -> Path:
     )
     try:
         with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as stream:
-            json.dump(report, stream, ensure_ascii=False, indent=2, sort_keys=True)
+            json.dump(
+                report,
+                stream,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
             stream.write("\n")
             stream.flush()
             os.fsync(stream.fileno())

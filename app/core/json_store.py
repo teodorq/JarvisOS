@@ -40,7 +40,7 @@ class JsonStore:
         path: str | Path,
         default_factory: Callable[[], Any],
         *,
-        indent: int = 4,
+        indent: int | None = 4,
     ) -> None:
         self.path = Path(
             path

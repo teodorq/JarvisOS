@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import gzip
 import json
 from pathlib import Path
 import tempfile
@@ -171,6 +172,21 @@ class AuditA232AiPathsRuntimeTests(unittest.TestCase):
             self.assertEqual(
                 result["reason"],
                 "OVERSIZED",
+            )
+            archive = Path(result["archive"])
+            self.assertEqual(
+                archive.suffixes[-2:],
+                [".json", ".gz"],
+            )
+            with gzip.open(
+                archive,
+                "rt",
+                encoding="utf-8",
+            ) as stream:
+                archived_payload = json.load(stream)
+            self.assertEqual(
+                archived_payload["payload"],
+                "x" * 500,
             )
 
     def test_invalid_cache_is_archived(self) -> None:

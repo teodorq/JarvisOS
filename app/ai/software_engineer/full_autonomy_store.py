@@ -28,6 +28,7 @@ class FullAutonomyStore:
                 "runs": {},
                 "order": [],
             },
+            indent=None,
         )
 
     def save(
@@ -57,6 +58,7 @@ class FullAutonomyStore:
         removed = before - len(payload["order"])
         if removed:
             payload["updated_at"] = self._now()
+        if removed or self.path.exists():
             self._store.save(payload)
         return {"kept": len(payload["order"]), "removed": removed}
 
