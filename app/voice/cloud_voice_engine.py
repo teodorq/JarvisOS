@@ -12,6 +12,8 @@ import wave
 
 import requests
 
+from app.core.storage_retention import enforce_audio_cache_retention
+
 
 try:
     import winsound
@@ -218,6 +220,13 @@ class CloudVoiceEngine:
             audio = self._synthesize(message)
             self._write_pcm_wave(output, audio)
         self._play(output)
+        try:
+            enforce_audio_cache_retention(
+                output.parent,
+                current_file=output,
+            )
+        except OSError:
+            pass
 
     def _synthesize(self, message: str) -> bytes:
         if self.config.provider == "CARTESIA":

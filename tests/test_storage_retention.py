@@ -10,7 +10,9 @@ from unittest.mock import patch
 from PIL import Image
 
 from app.core.storage_retention import (
+    AudioCacheRetentionPolicy,
     ScreenshotRetentionPolicy,
+    enforce_audio_cache_retention,
     enforce_screenshot_retention,
 )
 from app.vision.screen import ScreenVision
@@ -109,6 +111,51 @@ class ScreenshotRetentionTests(unittest.TestCase):
             with Image.open(path) as saved:
                 self.assertEqual(saved.format, "WEBP")
                 self.assertEqual(saved.size, (320, 180))
+
+
+class AudioCacheRetentionTests(unittest.TestCase):
+    def test_bounds_wav_cache_and_preserves_current_audio(self) -> None:
+        now = datetime(2026, 10, 3, 12, 0)
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            files = [
+                ScreenshotRetentionTests._file(
+                    root,
+                    f"voice_{index}.wav",
+                    30,
+                    now - timedelta(minutes=index + 1),
+                )
+                for index in range(5)
+            ]
+            current = files[-1]
+
+            result = enforce_audio_cache_retention(
+                root,
+                policy=AudioCacheRetentionPolicy(
+                    max_files=3,
+                    max_total_bytes=1_000,
+                    max_age_days=90,
+                ),
+                current_file=current,
+                now=now,
+            )
+
+            self.assertTrue(current.exists())
+            self.assertEqual(result["removed_files"], 2)
+            self.assertEqual(len(list(root.glob("*.wav"))), 3)
+
+    def test_ignores_non_wav_files_and_rejects_invalid_policy(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            note = root / "voice.txt"
+            note.write_text("keep", encoding="utf-8")
+
+            result = enforce_audio_cache_retention(root)
+
+            self.assertTrue(note.exists())
+            self.assertEqual(result["removed_files"], 0)
+        with self.assertRaises(ValueError):
+            AudioCacheRetentionPolicy(max_files=0)
 
 
 if __name__ == "__main__":

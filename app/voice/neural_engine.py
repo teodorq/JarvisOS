@@ -15,6 +15,7 @@ from typing import Any
 import winsound
 
 from app.core.safe_process import SafeProcessRunner
+from app.core.storage_retention import enforce_audio_cache_retention
 
 
 @dataclass(frozen=True)
@@ -218,6 +219,13 @@ class LocalNeuralVoiceEngine:
                     )
                     raise RuntimeError(message)
             winsound.PlaySound(str(output), winsound.SND_FILENAME)
+            try:
+                enforce_audio_cache_retention(
+                    cache_dir,
+                    current_file=output,
+                )
+            except OSError:
+                pass
             self._clear_failure()
         except Exception:
             self._trip_circuit()

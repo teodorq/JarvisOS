@@ -208,6 +208,28 @@ class CloudVoiceProviderTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "nieprawidłowe audio"):
                 engine.runAndWait()
 
+    def test_cache_cleanup_failure_never_breaks_spoken_response(self) -> None:
+        session = _Session(_Response(b"\x00\x00" * 64))
+        config = CloudVoiceConfig.from_environment(
+            "CARTESIA",
+            environment={
+                "CARTESIA_API_KEY": "secret",
+                "CARTESIA_VOICE_ID": "voice_123",
+            },
+        )
+        with TemporaryDirectory() as temporary:
+            engine = CloudVoiceEngine(
+                config,
+                project_root=temporary,
+                session=session,
+            )
+            with patch.object(engine, "_play"), patch(
+                "app.voice.cloud_voice_engine.enforce_audio_cache_retention",
+                side_effect=OSError("cache busy"),
+            ):
+                engine.say("System gotowy")
+                engine.runAndWait()
+
 
 if __name__ == "__main__":
     unittest.main()
