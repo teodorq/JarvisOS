@@ -148,7 +148,8 @@ def _maintenance_done(window: Any, result: object, *, cleanup: bool) -> None:
         text = (
             f"Gotowe. Odzyskano {_size(value.get('saved_bytes', 0))}; "
             f"usunięte stare zrzuty: "
-            f"{int(value.get('removed_screenshots', 0) or 0)}."
+            f"{int(value.get('removed_screenshots', 0) or 0)}; cache: "
+            f"{int(value.get('removed_cache_files', 0) or 0)} plików."
         )
     else:
         text = (

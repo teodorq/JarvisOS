@@ -96,6 +96,12 @@ def test_cleanup_compacts_allowlisted_history_and_old_screenshots(tmp_path) -> N
         screenshot.write_bytes(b"image")
         stamp = (now - timedelta(minutes=index)).timestamp()
         os.utime(screenshot, (stamp, stamp))
+    cache = tmp_path / "app" / "feature" / "__pycache__"
+    cache.mkdir(parents=True)
+    (cache / "feature.cpython-313.pyc").write_bytes(b"cache" * 100)
+    protected = tmp_path / "data" / "memory" / "important.pyc"
+    protected.parent.mkdir(parents=True)
+    protected.write_bytes(b"keep")
 
     result = cleanup_runtime_storage(tmp_path)
 
@@ -103,4 +109,7 @@ def test_cleanup_compacts_allowlisted_history_and_old_screenshots(tmp_path) -> N
     assert result["saved_bytes"] > 0
     assert result["compacted_files"] == 1
     assert result["removed_screenshots"] == 2
+    assert result["removed_cache_files"] == 1
+    assert not cache.exists()
+    assert protected.read_bytes() == b"keep"
     assert len(list(screenshots.glob("*.png"))) == 12

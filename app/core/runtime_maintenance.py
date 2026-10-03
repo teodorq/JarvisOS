@@ -8,6 +8,10 @@ from typing import Any
 from app.core.autodev_compaction import compact_autodev_json
 from app.core.performance_profile import load_performance_profile
 from app.core.project_paths import resolve_project_root
+from app.core.regenerable_cache_cleanup import (
+    cleanup_regenerable_caches,
+    regenerable_cache_status,
+)
 from app.core.storage_retention import enforce_screenshot_retention
 
 
@@ -28,12 +32,14 @@ def runtime_storage_status(project_root: str | Path | None = None) -> dict[str, 
     root = resolve_project_root(project_root)
     screenshots = root / "data" / "screenshots"
     usage = shutil.disk_usage(root)
+    caches = regenerable_cache_status(root)
     return {
         "profile": load_performance_profile(root).name,
         "data_bytes": directory_size(root / "data"),
         "autodev_bytes": directory_size(root / "data" / "autodev"),
         "screenshot_count": sum(1 for path in screenshots.glob("*") if path.is_file()),
         "disk_free_bytes": usage.free,
+        **caches,
     }
 
 
@@ -41,14 +47,17 @@ def cleanup_runtime_storage(project_root: str | Path | None = None) -> dict[str,
     root = resolve_project_root(project_root)
     compacted = compact_autodev_json(root, apply=True)
     screenshots = enforce_screenshot_retention(root / "data" / "screenshots")
+    caches = cleanup_regenerable_caches(root)
     return {
         "saved_bytes": int(compacted.get("saved_bytes", 0))
-        + int(screenshots.get("removed_bytes", 0)),
+        + int(screenshots.get("removed_bytes", 0))
+        + int(caches.get("removed_cache_bytes", 0)),
         "compacted_files": sum(
             item.get("status") == "COMPACTED"
             for item in compacted.get("files", [])
         ),
         "removed_screenshots": int(screenshots.get("removed_files", 0)),
+        **caches,
         "status": runtime_storage_status(root),
     }
 

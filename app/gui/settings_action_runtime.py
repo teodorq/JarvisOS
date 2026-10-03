@@ -113,7 +113,8 @@ class SettingsActionRuntime(QObject):
         return (
             f"Porządkowanie zakończone • odzyskano "
             f"{_size(value.get('saved_bytes', 0))} • usunięte stare zrzuty: "
-            f"{int(value.get('removed_screenshots', 0) or 0)}."
+            f"{int(value.get('removed_screenshots', 0) or 0)} • cache: "
+            f"{int(value.get('removed_cache_files', 0) or 0)} plików."
         )
 
 
