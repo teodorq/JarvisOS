@@ -18,7 +18,10 @@ def test_controller_start_does_not_load_deferred_suites() -> None:
         "import sys; from app.assistant.controller import PersonalAssistantController; "
         "assistant=PersonalAssistantController('.'); "
         "assistant.set_progress_callback(lambda event: None); "
+        "assert not assistant.intelligence.loaded; "
         "assert not assistant.productivity.loaded; "
+        "assert not assistant.stability.loaded; "
+        "assert not assistant.assistant_v12.loaded; "
         "assert not assistant.online.loaded; "
         "assert not assistant.natural_actions.loaded; "
         "assert 'app.online_assistant.controller' not in sys.modules; "
@@ -57,12 +60,18 @@ def test_google_token_probe_needs_no_online_controller() -> None:
 
 
 def test_deferred_stage_manifest_matches_real_services() -> None:
+    from app.assistant_v12 import AssistantV12Controller
+    from app.intelligence import IntelligenceSuiteController
     from app.natural_actions import NaturalActionService
     from app.online_assistant import OnlineAssistantController
     from app.productivity import ProductivitySuiteController
+    from app.stability import StabilitySuiteController
 
     expected = {
+        **IntelligenceSuiteController.STAGES,
         **ProductivitySuiteController.STAGES,
+        **StabilitySuiteController.STAGES,
+        **AssistantV12Controller.STAGES,
         **OnlineAssistantController.STAGES,
         **NaturalActionService.STAGES,
     }

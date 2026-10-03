@@ -11,11 +11,26 @@ from app.core.project_paths import resolve_project_root
 
 
 DEFERRED_STAGES = {
+    "B101": "VISION_3_READY",
+    "B102": "BRAIN_2_READY",
+    "B103": "DESKTOP_AGENT_2_READY",
+    "B104": "MEMORY_2_READY",
+    "B105": "AUTONOMY_CONTROL_CENTER_2_READY",
     "B106": "LOCAL_MAIL_CENTER_READY",
     "B107": "LOCAL_CALENDAR_READY",
     "B108": "LOCAL_DOCUMENT_CENTER_READY",
     "B109": "REMINDER_CENTER_2_READY",
     "B110": "DAILY_PRODUCTIVITY_REPORTING_READY",
+    "B111": "REAL_SCENARIO_VALIDATION_READY",
+    "B112": "RUNTIME_PERFORMANCE_READY",
+    "B113": "RUNTIME_RECOVERY_READY",
+    "B114": "SAFE_SERVICE_RESTART_READY",
+    "B115": "BUSINESS_BETA_READINESS_READY",
+    "B121": "NATURAL_CONVERSATION_3_READY",
+    "B122": "UNIFIED_CONTEXT_HUB_READY",
+    "B123": "UNIFIED_PRODUCTIVITY_ROUTER_READY",
+    "B124": "ASSISTANT_PROGRESS_RUNTIME_READY",
+    "B125": "BUSINESS_1_2_BETA_READINESS_READY",
     "B126": "REAL_GMAIL_CENTER_READY",
     "B127": "REAL_GOOGLE_CALENDAR_READY",
     "B128": "REAL_GOOGLE_DRIVE_READY",
@@ -116,10 +131,24 @@ class LazyAssistantService:
 
 
 class DeferredAssistantServices:
-    def __init__(self, project_root: str | Path | None = None) -> None:
+    def __init__(
+        self,
+        project_root: str | Path | None = None,
+        *,
+        stability_runtime_status: Callable[[], dict[str, Any]] | None = None,
+    ) -> None:
         root = resolve_project_root(project_root)
+        self.intelligence = LazyAssistantService(
+            lambda: _intelligence_controller(root)
+        )
         self.productivity = LazyAssistantService(
             lambda: _productivity_controller(root)
+        )
+        self.stability = LazyAssistantService(
+            lambda: _stability_controller(root, stability_runtime_status)
+        )
+        self.assistant_v12 = LazyAssistantService(
+            lambda: _assistant_v12_controller(root)
         )
         self.online = LazyAssistantService(
             lambda: _online_controller(root, self.productivity.reminders)
@@ -134,6 +163,21 @@ def _productivity_controller(root: Path) -> Any:
     return ProductivitySuiteController(root)
 
 
+def _intelligence_controller(root: Path) -> Any:
+    from app.intelligence.controller import IntelligenceSuiteController
+    return IntelligenceSuiteController(root)
+
+
+def _stability_controller(root: Path, runtime_status: Any) -> Any:
+    from app.stability.controller import StabilitySuiteController
+    return StabilitySuiteController(root, runtime_status=runtime_status)
+
+
+def _assistant_v12_controller(root: Path) -> Any:
+    from app.assistant_v12.controller import AssistantV12Controller
+    return AssistantV12Controller(root)
+
+
 def _online_controller(root: Path, reminders: Any) -> Any:
     from app.online_assistant.controller import OnlineAssistantController
     return OnlineAssistantController(root, reminders=reminders)
@@ -145,6 +189,15 @@ def _natural_actions(root: Path, online: Any) -> Any:
 
 
 def deferred_matches(command: object) -> bool:
+    from app.intelligence.controller import IntelligenceSuiteController
+    if IntelligenceSuiteController.matches(command):
+        return True
+    from app.stability.controller import StabilitySuiteController
+    if StabilitySuiteController.matches(command):
+        return True
+    from app.assistant_v12.conversation_engine import NaturalConversationEngineV3
+    if NaturalConversationEngineV3.matches(command):
+        return True
     from app.productivity.controller import ProductivitySuiteController
     if ProductivitySuiteController.matches(command):
         return True

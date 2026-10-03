@@ -13,10 +13,6 @@ from app.assistant.voice_runtime import VoiceRuntimeService
 from app.assistant.weather import WeatherService
 from app.assistant.status_formatter import AssistantStatusFormatter
 from app.core.project_paths import resolve_project_root
-from app.intelligence.controller import IntelligenceSuiteController
-from app.stability.controller import StabilitySuiteController
-from app.assistant_v12.controller import AssistantV12Controller
-from app.assistant_v12.conversation_engine import NaturalConversationEngineV3
 from app.assistant.deferred_services import DEFERRED_STAGES, DeferredAssistantServices, deferred_matches
 from app.integrations import IntegrationStatusService
 from app.assistant.trading_runtime import LazyTradingRuntime
@@ -28,9 +24,6 @@ class PersonalAssistantController:
         "B98": "PROJECT_MEMORY_READY",
         "B99": "VOICE_2_READY",
         "B100": "DAILY_WORK_CENTER_READY",
-        **IntelligenceSuiteController.STAGES,
-        **StabilitySuiteController.STAGES,
-        **AssistantV12Controller.STAGES,
         **DEFERRED_STAGES,
     }
     def __init__(self, project_root: str | Path | None = None, *, memory: Any | None = None) -> None:
@@ -43,11 +36,13 @@ class PersonalAssistantController:
         self.voice = VoiceRuntimeService(self.project_root)
         self.weather = WeatherService()
         self.daily = DailyWorkService(self.project_root)
-        self.intelligence = IntelligenceSuiteController(self.project_root)
-        self.stability = StabilitySuiteController(self.project_root, runtime_status=self._stability_runtime_status)
-        self.assistant_v12 = AssistantV12Controller(self.project_root)
-        deferred = DeferredAssistantServices(self.project_root)
+        deferred = DeferredAssistantServices(
+            self.project_root, stability_runtime_status=self._stability_runtime_status,
+        )
+        self.intelligence = deferred.intelligence
         self.productivity = deferred.productivity
+        self.stability = deferred.stability
+        self.assistant_v12 = deferred.assistant_v12
         self.online = deferred.online
         self.natural_actions = deferred.natural_actions
         self.integrations = IntegrationStatusService()
@@ -131,9 +126,6 @@ class PersonalAssistantController:
         )
         return (
             any(phrase in text for phrase in phrases)
-            or IntelligenceSuiteController.matches(command)
-            or StabilitySuiteController.matches(command)
-            or NaturalConversationEngineV3.matches(command)
             or deferred_matches(command)
         )
     def resolve_command(self, command: object) -> ResolvedCommand:
@@ -175,7 +167,7 @@ class PersonalAssistantController:
                 "clarification": thought.get("clarification", "") or resolved.clarification,
             })
             return thought
-        if StabilitySuiteController.matches(resolved.resolved):
+        if self.stability.matches(resolved.resolved):
             thought = self.stability.plan(resolved.resolved)
             thought.update({
                 "original_command": resolved.original,
@@ -191,7 +183,7 @@ class PersonalAssistantController:
                 "clarification": resolved.clarification,
             })
             return thought
-        if IntelligenceSuiteController.matches(resolved.resolved):
+        if self.intelligence.matches(resolved.resolved):
             thought = self.intelligence.plan(resolved.resolved)
             thought.update({
                 "original_command": resolved.original,
@@ -246,9 +238,9 @@ class PersonalAssistantController:
         )
         online_command = not direct_core and self.online.matches(text)
         v12_command = not direct_core and self.assistant_v12.matches(text)
-        stability_command = not direct_core and StabilitySuiteController.matches(text)
+        stability_command = not direct_core and self.stability.matches(text)
         productivity_command = not direct_core and self.productivity.matches(text)
-        suite_command = not direct_core and IntelligenceSuiteController.matches(text)
+        suite_command = not direct_core and self.intelligence.matches(text)
         try:
             if direct_core:
                 response = self._dispatch(intent, text)
