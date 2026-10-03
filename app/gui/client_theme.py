@@ -16,6 +16,9 @@ class ClientTheme:
             background-color: rgba(2, 10, 19, 174);
             border: 1px solid rgba(45, 157, 205, 76); border-radius: 9px;
         }
+        QScrollArea#ClientSetupScroll, QWidget#ClientSetupViewport {
+            background: transparent; border: 0;
+        }
         QLabel#ClientBrand { color: #DDF8FF; font-size: 16px; font-weight: 800; letter-spacing: 5px; }
         QLabel#ClientSubtitle { color: #477C94; font-size: 8px; letter-spacing: 2px; }
         QLabel#ClientState { color: #BDEEFF; font-size: 13px; font-weight: 700; letter-spacing: 4px; }

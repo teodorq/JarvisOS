@@ -3,7 +3,6 @@ from typing import Any
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QComboBox,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -11,7 +10,6 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QPushButton,
     QProgressBar,
-    QSizePolicy,
     QStackedWidget,
     QVBoxLayout,
     QWidget,
@@ -30,10 +28,8 @@ from app.gui.client_input_policy import should_block_client_input
 from app.gui.client_profile_read import read_client_profile
 from app.gui.client_experience_v2 import ClientExperienceV2
 from app.gui.client_window_mode import ClientWindowModeRuntime
-from app.gui.client_settings_extensions import (
-    install_client_settings_controls,
-    save_client_settings_controls,
-)
+from app.gui.client_settings_extensions import save_client_settings_controls
+from app.gui.client_setup_page import build_client_setup_page
 from app.gui.main_window_runtime import set_owner_metrics_active
 from app.gui.user_text_widgets import clean_user_visible_widgets, naturalize_user_text
 class ClientExperienceWindow(ClientVoiceMixin, ClientOnlineMixin, ClientV12Mixin, QMainWindow):
@@ -133,68 +129,7 @@ class ClientExperienceWindow(ClientVoiceMixin, ClientOnlineMixin, ClientV12Mixin
         self.owner_button = owner
         return frame
     def _setup_page(self) -> QWidget:
-        page = QWidget()
-        outer = QVBoxLayout(page)
-        outer.addStretch(1)
-        card = QFrame()
-        card.setObjectName("SetupCard")
-        card.setMaximumWidth(720)
-        card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        content = QVBoxLayout(card)
-        content.setContentsMargins(34, 30, 34, 30)
-        content.setSpacing(16)
-        title = QLabel("PIERWSZE URUCHOMIENIE")
-        title.setObjectName("ClientState")
-        subtitle = QLabel(
-            "Ustaw podstawy. Wszystko pozostaje lokalnie na tym komputerze."
-        )
-        subtitle.setObjectName("ClientMessage")
-        subtitle.setWordWrap(True)
-        content.addWidget(title)
-        content.addWidget(subtitle)
-        content.addSpacing(8)
-        name_label = QLabel("Jak mam się do Ciebie zwracać?")
-        name_label.setObjectName("ClientHint")
-        self.name_entry = QLineEdit()
-        self.name_entry.setPlaceholderText("Twoje imię")
-        content.addWidget(name_label)
-        content.addWidget(self.name_entry)
-        voice_label = QLabel("Obsługa głosowa")
-        voice_label.setObjectName("ClientHint")
-        self.voice_combo = QComboBox()
-        self.voice_combo.addItem("Włączona", True)
-        self.voice_combo.addItem("Wyłączona", False)
-        content.addWidget(voice_label)
-        content.addWidget(self.voice_combo)
-        mode_label = QLabel("Sposób rozmowy")
-        mode_label.setObjectName("ClientHint")
-        self.interaction_combo = QComboBox()
-        self.interaction_combo.addItem("Głos i tekst", "VOICE_AND_TEXT")
-        self.interaction_combo.addItem("Tylko tekst", "TEXT_ONLY")
-        content.addWidget(mode_label)
-        content.addWidget(self.interaction_combo)
-        install_client_settings_controls(self, content)
-        safety = QLabel(
-            "● Ważne działania zawsze wymagają Twojej zgody\n"
-            "● Twoje dane pozostają pod kontrolą użytkownika"
-        )
-        safety.setObjectName("ClientHealthy")
-        safety.setWordWrap(True)
-        content.addWidget(safety)
-        start = QPushButton("ZAPISZ I URUCHOM JARVISA")
-        start.setObjectName("ClientPrimary")
-        start.clicked.connect(self._save_setup)
-        content.addWidget(start)
-        self.setup_feedback = QLabel("")
-        self.setup_feedback.setObjectName("ClientWarning")
-        content.addWidget(self.setup_feedback)
-        centered = QHBoxLayout()
-        centered.addStretch(1)
-        centered.addWidget(card, 1)
-        centered.addStretch(1)
-        outer.addLayout(centered)
-        outer.addStretch(1)
-        return page
+        return build_client_setup_page(self)
     def _client_page(self) -> QWidget:
         page = QWidget()
         outer = QVBoxLayout(page)

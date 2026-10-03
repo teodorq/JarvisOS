@@ -12,7 +12,7 @@ from app.business.business_config import BusinessConfigStore
 from app.client_experience.controller import ClientExperienceController
 
 try:
-    from PySide6.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication, QScrollArea
     from app.gui.client_experience_window import ClientExperienceWindow
     from app.gui.halo_widget import HaloWidget
     HAS_PYSIDE6 = True
@@ -151,8 +151,23 @@ class B116B120ClientExperienceTests(unittest.TestCase):
 
             window = ClientExperienceWindow(ClientExperienceController(root), Owner())
             self.assertIsInstance(window.halo, HaloWidget)
+            self.assertIsNotNone(
+                window.setup_page.findChild(QScrollArea, "ClientSetupScroll")
+            )
             self.assertTrue(window.owner_button.isEnabled())
             self.assertTrue(window.command_entry.isEnabled())
+            window.resize(800, 600)
+            window.show()
+            with patch(
+                "app.gui.client_settings_extensions.submit_client_read",
+                return_value=False,
+            ):
+                window.settings_button.click()
+            self.app.processEvents()
+            scroll = window.setup_page.findChild(
+                QScrollArea, "ClientSetupScroll"
+            )
+            self.assertGreater(scroll.verticalScrollBar().maximum(), 0)
             window._sync_timer.stop()
             window.deleteLater()
 

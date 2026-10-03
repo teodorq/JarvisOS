@@ -17,6 +17,7 @@ from app.core.runtime_maintenance import (
     cleanup_runtime_storage,
     runtime_storage_status,
 )
+from app.core.windows_autostart import autostart_status, set_autostart
 from app.gui.client_background_reads import submit_client_read
 
 
@@ -66,6 +67,26 @@ def install_client_settings_controls(window: Any, content: QVBoxLayout) -> None:
     window.client_maintenance_feedback.setObjectName("ClientHint")
     window.client_maintenance_feedback.setWordWrap(True)
     layout.addWidget(window.client_maintenance_feedback)
+    autostart_title = QLabel("AUTOSTART PO WŁĄCZENIU KOMPUTERA")
+    autostart_title.setObjectName("ClientHint")
+    layout.addWidget(autostart_title)
+    autostart_actions = QHBoxLayout()
+    window.client_autostart_on = QPushButton("WŁĄCZ")
+    window.client_autostart_off = QPushButton("WYŁĄCZ")
+    for button in (window.client_autostart_on, window.client_autostart_off):
+        button.setObjectName("ClientSecondary")
+        autostart_actions.addWidget(button)
+    window.client_autostart_on.clicked.connect(
+        lambda: _run_autostart(window, enabled=True)
+    )
+    window.client_autostart_off.clicked.connect(
+        lambda: _run_autostart(window, enabled=False)
+    )
+    layout.addLayout(autostart_actions)
+    window.client_autostart_feedback = QLabel("Stan autostartu: nie sprawdzono.")
+    window.client_autostart_feedback.setObjectName("ClientHint")
+    window.client_autostart_feedback.setWordWrap(True)
+    layout.addWidget(window.client_autostart_feedback)
     window.client_settings_advanced = frame
     frame.hide()
     content.addWidget(frame)
@@ -82,6 +103,7 @@ def show_client_settings_controls(window: Any) -> None:
     _select(window.client_sounds, bool(sound.get("effects_enabled", True)))
     _select(window.client_startup, ui.get("startup_mode", "remember"))
     window.client_settings_advanced.show()
+    _run_autostart(window, enabled=None)
 
 
 def save_client_settings_controls(window: Any) -> None:
@@ -141,6 +163,55 @@ def _maintenance_failed(window: Any) -> None:
     window.client_maintenance_feedback.setText(
         "Nie udało się zakończyć kontroli. Dane pozostały bez zmian."
     )
+
+
+def _run_autostart(window: Any, *, enabled: bool | None) -> None:
+    _set_autostart_busy(window, True)
+    if enabled is None:
+        operation = autostart_status
+    else:
+        operation = lambda: set_autostart(
+            window.controller.project_root, enabled=enabled
+        )
+    accepted = submit_client_read(
+        window,
+        operation,
+        lambda result: _autostart_done(window, result),
+        lambda _error: _autostart_failed(window),
+    )
+    if not accepted:
+        _set_autostart_busy(window, False)
+        window.client_autostart_feedback.setText(
+            "Kończę inną kontrolę. Stan odświeży się przy kolejnym otwarciu."
+        )
+
+
+def _autostart_done(window: Any, result: object) -> None:
+    _set_autostart_busy(window, False)
+    value = dict(result) if isinstance(result, dict) else {}
+    if not value.get("supported", True):
+        text = "Autostart jest dostępny na komputerze z Windows."
+    elif value.get("installed"):
+        state = str(value.get("state") or "READY").upper()
+        state_label = "działa" if state == "RUNNING" else "gotowy"
+        text = f"Autostart: WŁĄCZONY — {state_label}."
+    else:
+        text = "Autostart: WYŁĄCZONY."
+    window.client_autostart_feedback.setText(text)
+
+
+def _autostart_failed(window: Any) -> None:
+    _set_autostart_busy(window, False)
+    window.client_autostart_feedback.setText(
+        "Nie udało się sprawdzić autostartu. Ustawienie nie zostało zmienione."
+    )
+
+
+def _set_autostart_busy(window: Any, busy: bool) -> None:
+    window.client_autostart_on.setDisabled(busy)
+    window.client_autostart_off.setDisabled(busy)
+    if busy:
+        window.client_autostart_feedback.setText("Sprawdzam autostart w tle…")
 
 
 def _set_busy(window: Any, busy: bool) -> None:

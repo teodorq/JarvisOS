@@ -36,7 +36,11 @@ def _window(tmp_path):
 def test_client_settings_are_loaded_and_saved(tmp_path) -> None:
     app, host, window, store = _window(tmp_path)
 
-    show_client_settings_controls(window)
+    with patch(
+        "app.gui.client_settings_extensions.autostart_status",
+        return_value={"supported": True, "installed": True, "state": "READY"},
+    ):
+        show_client_settings_controls(window)
     window.client_performance.setCurrentIndex(
         window.client_performance.findData("low_resource")
     )
@@ -53,6 +57,9 @@ def test_client_settings_are_loaded_and_saved(tmp_path) -> None:
     assert saved["sound"]["effects_enabled"] is False
     assert saved["ui"]["startup_mode"] == "client"
     assert window.owner_window.business_config == saved
+    assert window.client_autostart_feedback.text() == (
+        "Autostart: WŁĄCZONY — gotowy."
+    )
     host.close()
     app.processEvents()
 
