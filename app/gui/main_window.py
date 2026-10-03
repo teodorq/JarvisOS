@@ -11,7 +11,6 @@ from app.core.project_paths import resolve_project_root
 from app.client_experience.controller import ClientExperienceController
 from app.gui.business_command_runtime import BusinessCommandRuntimeMixin
 from app.gui.confirmation_revision_runtime import handle_owner_confirmation, remember_confirmed_calendar_write
-from app.gui.client_experience_window import ClientExperienceWindow
 from app.gui.owner_access_setup import ensure_owner_pin
 from app.gui.business_display import display_environment, display_status, same_identity
 from app.gui.business_theme import BusinessTheme
@@ -140,7 +139,9 @@ class MainWindow(BusinessCommandRuntimeMixin, QMainWindow):
         self._ensure_owner_interface(); self.show()
     def _open_client_mode(self) -> None:
         if not ensure_owner_pin(self, self.project_root): return
-        if self.client_window is None: self.client_window = ClientExperienceWindow(ClientExperienceController(self.project_root), self)
+        if self.client_window is None:
+            from app.gui.client_experience_window import ClientExperienceWindow
+            self.client_window = ClientExperienceWindow(ClientExperienceController(self.project_root), self)
         self.client_window.showMaximized(); self.client_window.window_mode.show_conversation(); self.client_window.raise_(); self.client_window.activateWindow()
         set_owner_metrics_active(self, False)
         self.hide()

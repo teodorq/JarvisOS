@@ -21,7 +21,7 @@ from app.assistant_v12.conversation_engine import NaturalConversationEngineV3
 from app.online_assistant.controller import OnlineAssistantController
 from app.natural_actions import NaturalActionService
 from app.integrations import IntegrationStatusService
-from app.trading import TradingControlCenter
+from app.assistant.trading_runtime import LazyTradingRuntime
 class PersonalAssistantController:
     """B96-B130 cohesive assistant runtime without bypassing safety gates."""
     STAGES = {
@@ -54,7 +54,7 @@ class PersonalAssistantController:
         self.online = OnlineAssistantController(self.project_root, reminders=self.productivity.reminders)
         self.natural_actions = NaturalActionService(self.project_root, online=self.online)
         self.integrations = IntegrationStatusService()
-        self.trading = TradingControlCenter(self.project_root)
+        self.trading = LazyTradingRuntime(self.project_root)
     @staticmethod
     def matches(command: object) -> bool:
         text = fold_text(command)

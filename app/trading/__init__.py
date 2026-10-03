@@ -1,233 +1,152 @@
-"""Broker-neutral, local-only paper-trading foundation for JARVIS OS."""
+"""Broker-neutral paper trading with a lazy public import surface."""
 
-from app.trading.backtest import HistoricalPaperBacktester
-from app.trading.control_center import TradingControlCenter
-from app.trading.dataset import HistoricalCsvLoader, HistoricalDataset
-from app.trading.forex_coordinator import ForexPaperCoordinator, ForexPaperInstruction
-from app.trading.forex_activity import ForexPaperActivityFeed
-from app.trading.forex_activity_journal import ForexPaperActivityJournal
-from app.trading.forex_dashboard import ForexPaperDashboard
-from app.trading.forex_candidate_v2 import (
-    ForexRegimeCandidatePolicy,
-    ForexRegimeFilteredScanner,
-)
-from app.trading.forex_candidate_v3 import (
-    ForexStrengthCandidatePolicy,
-    ForexStrengthFilteredScanner,
-)
-from app.trading.forex_autopilot import ForexPaperAutopilot
-from app.trading.forex_executor import ForexPaperExecutionEngine
-from app.trading.forex_forward_evidence import (
-    ForexV2ForwardEvidenceReport,
-    ForexV3ForwardEvidenceReport,
-    build_forex_v2_forward_evidence_report,
-    build_forex_v3_forward_evidence_report,
-    verify_forex_v2_forward_evidence_report,
-    verify_forex_v3_forward_evidence_report,
-)
-from app.trading.forex_forward_review import (
-    ForexV2OwnerReviewPacket,
-    build_forex_v2_owner_review_packet,
-    verify_forex_v2_owner_review_lineage,
-    verify_forex_v2_owner_review_packet,
-)
-from app.trading.forex_historical import (
-    BidirectionalForexHistoricalBacktester,
-    FixedForexCrossoverSignalGenerator,
-    ForexHistoricalPolicy,
-    ForexHistoricalSignal,
-    ForexHistoricalWalkForwardValidator,
-    ForexWalkForwardPolicy,
-)
-from app.trading.forex_ledger import ForexPaperLedger
-from app.trading.forex_paper_performance import (
-    ForexPaperPerformancePolicy,
-    build_forex_paper_performance_review,
-)
-from app.trading.forex_performance_review import (
-    ForexPaperPerformanceReviewPacket,
-    build_forex_paper_performance_review_packet,
-    verify_forex_paper_performance_review_lineage,
-    verify_forex_paper_performance_review_packet,
-)
-from app.trading.forex_portfolio_historical import (
-    ForexPortfolioHistoricalBacktester,
-    ForexPortfolioHistoricalPolicy,
-    ForexPortfolioHistoricalWalkForwardValidator,
-    ForexPortfolioWalkForwardPolicy,
-)
-from app.trading.forex_models import (
-    ForexBar,
-    ForexPair,
-    ForexPosition,
-    ForexQuote,
-    ForexSafetyContext,
-    MAJOR_FOREX_PAIRS,
-    USD_PLN_CONVERSION_PAIR,
-    major_pair,
-)
-from app.trading.forex_risk import (
-    ForexPaperPolicy,
-    ForexPortfolioRiskEngine,
-    ForexRateBook,
-    ForexRiskDecision,
-)
-from app.trading.forex_research_status import ForexHistoricalResearchGate
-from app.trading.forex_scanner import (
-    ForexMarketScanner,
-    ForexPairAssessment,
-    ForexScannerPolicy,
-)
-from app.trading.forex_sample_contract import (
-    CONTRACT_ID as FOREX_PAPER_SAMPLE_CONTRACT_ID,
-    V3_SHADOW_CONTRACT_ID as FOREX_V3_SHADOW_SAMPLE_CONTRACT_ID,
-    build_forex_paper_sample_contract,
-    build_forex_v3_shadow_sample_contract,
-    is_superseded_sample_contract,
-    sample_contracts_match,
-    verify_forex_paper_sample_contract,
-    verify_forex_v3_shadow_sample_contract,
-)
-from app.trading.forex_strategy_cohorts import (
-    ForexStrategyCohortReview,
-    build_forex_strategy_cohort_review,
-)
-from app.trading.forex_strategy_replay import ForexStrategyCounterfactualReplay
-from app.trading.forex_strategy_walk_forward import (
-    ForexStrategyCounterfactualWalkForwardComparison,
-)
-from app.trading.forex_trade_diagnostics import (
-    build_forex_trade_diagnostics,
-)
-from app.trading.forex_v3_shadow import (
-    ForexV3ShadowInitializer,
-    ForexV3ShadowReadiness,
-)
-from app.trading.forex_v3_shadow_ledger import ForexV3ShadowLedger
-from app.trading.forex_v3_shadow_planner import (
-    ForexV3ShadowPlanner,
-    verify_forex_v3_shadow_plan,
-)
-from app.trading.forex_v3_shadow_plan_journal import (
-    ForexV3ShadowPlanJournal,
-)
-from app.trading.forex_v3_shadow_plan_observer import (
-    ForexV3ShadowPlanObserver,
-)
-from app.trading.forex_v3_shadow_simulation import (
-    ForexV3ShadowSimulationReadiness,
-)
-from app.trading.forex_risk_diagnostics import build_forex_risk_diagnostics
-from app.trading.ledger import PaperTradingLedger
-from app.trading.models import (
-    MarketBar,
-    MarketQuote,
-    PaperOrder,
-    StrategySignal,
-    TradingValidationError,
-)
-from app.trading.paper_broker import LiveTradingBlockedError, PaperTradingEngine
-from app.trading.policy import PaperTradingPolicy
-from app.trading.risk import PreTradeRiskEngine, RiskDecision
-from app.trading.walk_forward import (
-    ChronologicalHoldoutValidator,
-    HistoricalWalkForwardValidator,
-    WalkForwardPolicy,
-)
+from __future__ import annotations
 
-__all__ = [
-    "HistoricalPaperBacktester",
-    "BidirectionalForexHistoricalBacktester",
-    "ChronologicalHoldoutValidator",
-    "HistoricalWalkForwardValidator",
-    "HistoricalCsvLoader",
-    "HistoricalDataset",
-    "ForexBar",
-    "FixedForexCrossoverSignalGenerator",
-    "ForexHistoricalPolicy",
-    "ForexHistoricalSignal",
-    "ForexHistoricalWalkForwardValidator",
-    "ForexHistoricalResearchGate",
-    "ForexMarketScanner",
-    "ForexPair",
-    "ForexPairAssessment",
-    "ForexPaperCoordinator",
-    "ForexPaperActivityFeed",
-    "ForexPaperActivityJournal",
-    "ForexPaperDashboard",
-    "ForexPaperAutopilot",
-    "ForexPaperExecutionEngine",
-    "ForexV2ForwardEvidenceReport",
-    "ForexV3ForwardEvidenceReport",
-    "ForexV2OwnerReviewPacket",
-    "ForexPaperInstruction",
-    "ForexPaperLedger",
-    "ForexPaperPolicy",
-    "ForexPaperPerformancePolicy",
-    "ForexPortfolioRiskEngine",
-    "ForexPortfolioHistoricalBacktester",
-    "ForexPortfolioHistoricalPolicy",
-    "ForexPortfolioHistoricalWalkForwardValidator",
-    "ForexPortfolioWalkForwardPolicy",
-    "ForexPosition",
-    "ForexQuote",
-    "ForexRateBook",
-    "ForexRegimeCandidatePolicy",
-    "ForexRegimeFilteredScanner",
-    "ForexStrengthCandidatePolicy",
-    "ForexStrengthFilteredScanner",
-    "ForexV3ShadowReadiness",
-    "ForexV3ShadowInitializer",
-    "ForexV3ShadowLedger",
-    "ForexV3ShadowPlanner",
-    "ForexV3ShadowPlanJournal",
-    "ForexV3ShadowPlanObserver",
-    "ForexV3ShadowSimulationReadiness",
-    "verify_forex_v3_shadow_plan",
-    "ForexRiskDecision",
-    "ForexPaperPerformanceReviewPacket",
-    "ForexSafetyContext",
-    "ForexScannerPolicy",
-    "FOREX_PAPER_SAMPLE_CONTRACT_ID",
-    "FOREX_V3_SHADOW_SAMPLE_CONTRACT_ID",
-    "ForexStrategyCohortReview",
-    "ForexWalkForwardPolicy",
-    "LiveTradingBlockedError",
-    "MarketBar",
-    "MarketQuote",
-    "MAJOR_FOREX_PAIRS",
-    "PaperOrder",
-    "PaperTradingEngine",
-    "PaperTradingLedger",
-    "PaperTradingPolicy",
-    "PreTradeRiskEngine",
-    "RiskDecision",
-    "StrategySignal",
-    "TradingControlCenter",
-    "TradingValidationError",
-    "USD_PLN_CONVERSION_PAIR",
-    "major_pair",
-    "build_forex_paper_performance_review",
-    "build_forex_paper_performance_review_packet",
-    "build_forex_v2_forward_evidence_report",
-    "build_forex_v3_forward_evidence_report",
-    "build_forex_v2_owner_review_packet",
-    "verify_forex_v2_owner_review_lineage",
-    "verify_forex_v2_forward_evidence_report",
-    "verify_forex_v3_forward_evidence_report",
-    "verify_forex_v2_owner_review_packet",
-    "verify_forex_paper_performance_review_lineage",
-    "verify_forex_paper_performance_review_packet",
-    "build_forex_paper_sample_contract",
-    "build_forex_v3_shadow_sample_contract",
-    "is_superseded_sample_contract",
-    "build_forex_strategy_cohort_review",
-    "ForexStrategyCounterfactualReplay",
-    "ForexStrategyCounterfactualWalkForwardComparison",
-    "build_forex_trade_diagnostics",
-    "build_forex_risk_diagnostics",
-    "sample_contracts_match",
-    "verify_forex_paper_sample_contract",
-    "verify_forex_v3_shadow_sample_contract",
-    "WalkForwardPolicy",
-]
+from importlib import import_module
+from typing import Any
+
+
+_MODULE_EXPORTS = {
+    "app.trading.backtest": ("HistoricalPaperBacktester",),
+    "app.trading.control_center": ("TradingControlCenter",),
+    "app.trading.dataset": ("HistoricalCsvLoader", "HistoricalDataset"),
+    "app.trading.forex_coordinator": (
+        "ForexPaperCoordinator", "ForexPaperInstruction",
+    ),
+    "app.trading.forex_activity": ("ForexPaperActivityFeed",),
+    "app.trading.forex_activity_journal": ("ForexPaperActivityJournal",),
+    "app.trading.forex_dashboard": ("ForexPaperDashboard",),
+    "app.trading.forex_candidate_v2": (
+        "ForexRegimeCandidatePolicy", "ForexRegimeFilteredScanner",
+    ),
+    "app.trading.forex_candidate_v3": (
+        "ForexStrengthCandidatePolicy", "ForexStrengthFilteredScanner",
+    ),
+    "app.trading.forex_autopilot": ("ForexPaperAutopilot",),
+    "app.trading.forex_executor": ("ForexPaperExecutionEngine",),
+    "app.trading.forex_forward_evidence": (
+        "ForexV2ForwardEvidenceReport", "ForexV3ForwardEvidenceReport",
+        "build_forex_v2_forward_evidence_report",
+        "build_forex_v3_forward_evidence_report",
+        "verify_forex_v2_forward_evidence_report",
+        "verify_forex_v3_forward_evidence_report",
+    ),
+    "app.trading.forex_forward_review": (
+        "ForexV2OwnerReviewPacket", "build_forex_v2_owner_review_packet",
+        "verify_forex_v2_owner_review_lineage",
+        "verify_forex_v2_owner_review_packet",
+    ),
+    "app.trading.forex_historical": (
+        "BidirectionalForexHistoricalBacktester",
+        "FixedForexCrossoverSignalGenerator", "ForexHistoricalPolicy",
+        "ForexHistoricalSignal", "ForexHistoricalWalkForwardValidator",
+        "ForexWalkForwardPolicy",
+    ),
+    "app.trading.forex_ledger": ("ForexPaperLedger",),
+    "app.trading.forex_paper_performance": (
+        "ForexPaperPerformancePolicy", "build_forex_paper_performance_review",
+    ),
+    "app.trading.forex_performance_review": (
+        "ForexPaperPerformanceReviewPacket",
+        "build_forex_paper_performance_review_packet",
+        "verify_forex_paper_performance_review_lineage",
+        "verify_forex_paper_performance_review_packet",
+    ),
+    "app.trading.forex_portfolio_historical": (
+        "ForexPortfolioHistoricalBacktester",
+        "ForexPortfolioHistoricalPolicy",
+        "ForexPortfolioHistoricalWalkForwardValidator",
+        "ForexPortfolioWalkForwardPolicy",
+    ),
+    "app.trading.forex_models": (
+        "ForexBar", "ForexPair", "ForexPosition", "ForexQuote",
+        "ForexSafetyContext", "MAJOR_FOREX_PAIRS", "USD_PLN_CONVERSION_PAIR",
+        "major_pair",
+    ),
+    "app.trading.forex_risk": (
+        "ForexPaperPolicy", "ForexPortfolioRiskEngine", "ForexRateBook",
+        "ForexRiskDecision",
+    ),
+    "app.trading.forex_research_status": ("ForexHistoricalResearchGate",),
+    "app.trading.forex_scanner": (
+        "ForexMarketScanner", "ForexPairAssessment", "ForexScannerPolicy",
+    ),
+    "app.trading.forex_sample_contract": (
+        "build_forex_paper_sample_contract",
+        "build_forex_v3_shadow_sample_contract", "is_superseded_sample_contract",
+        "sample_contracts_match", "verify_forex_paper_sample_contract",
+        "verify_forex_v3_shadow_sample_contract",
+    ),
+    "app.trading.forex_strategy_cohorts": (
+        "ForexStrategyCohortReview", "build_forex_strategy_cohort_review",
+    ),
+    "app.trading.forex_strategy_replay": (
+        "ForexStrategyCounterfactualReplay",
+    ),
+    "app.trading.forex_strategy_walk_forward": (
+        "ForexStrategyCounterfactualWalkForwardComparison",
+    ),
+    "app.trading.forex_trade_diagnostics": ("build_forex_trade_diagnostics",),
+    "app.trading.forex_v3_shadow": (
+        "ForexV3ShadowInitializer", "ForexV3ShadowReadiness",
+    ),
+    "app.trading.forex_v3_shadow_ledger": ("ForexV3ShadowLedger",),
+    "app.trading.forex_v3_shadow_planner": (
+        "ForexV3ShadowPlanner", "verify_forex_v3_shadow_plan",
+    ),
+    "app.trading.forex_v3_shadow_plan_journal": (
+        "ForexV3ShadowPlanJournal",
+    ),
+    "app.trading.forex_v3_shadow_plan_observer": (
+        "ForexV3ShadowPlanObserver",
+    ),
+    "app.trading.forex_v3_shadow_simulation": (
+        "ForexV3ShadowSimulationReadiness",
+    ),
+    "app.trading.forex_risk_diagnostics": ("build_forex_risk_diagnostics",),
+    "app.trading.ledger": ("PaperTradingLedger",),
+    "app.trading.models": (
+        "MarketBar", "MarketQuote", "PaperOrder", "StrategySignal",
+        "TradingValidationError",
+    ),
+    "app.trading.paper_broker": (
+        "LiveTradingBlockedError", "PaperTradingEngine",
+    ),
+    "app.trading.policy": ("PaperTradingPolicy",),
+    "app.trading.risk": ("PreTradeRiskEngine", "RiskDecision"),
+    "app.trading.walk_forward": (
+        "ChronologicalHoldoutValidator", "HistoricalWalkForwardValidator",
+        "WalkForwardPolicy",
+    ),
+}
+
+_ALIASES = {
+    "FOREX_PAPER_SAMPLE_CONTRACT_ID": (
+        "app.trading.forex_sample_contract", "CONTRACT_ID",
+    ),
+    "FOREX_V3_SHADOW_SAMPLE_CONTRACT_ID": (
+        "app.trading.forex_sample_contract", "V3_SHADOW_CONTRACT_ID",
+    ),
+}
+
+_EXPORTS = {
+    name: (module_name, name)
+    for module_name, names in _MODULE_EXPORTS.items()
+    for name in names
+}
+_EXPORTS.update(_ALIASES)
+__all__ = list(_EXPORTS)
+
+
+def __getattr__(name: str) -> Any:
+    target = _EXPORTS.get(name)
+    if target is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    module_name, attribute = target
+    value = getattr(import_module(module_name), attribute)
+    globals()[name] = value
+    return value
+
+
+def __dir__() -> list[str]:
+    return sorted(set(globals()) | set(__all__))

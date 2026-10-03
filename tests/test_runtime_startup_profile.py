@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import ast
+from pathlib import Path
 import unittest
 from unittest.mock import Mock, patch
 
@@ -9,6 +11,23 @@ from app.voice.voice_listener import VoiceListener
 
 
 class RuntimeStartupProfileTests(unittest.TestCase):
+    def test_owner_start_defers_client_window_module(self) -> None:
+        source = Path("app/gui/main_window.py").read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        top_level_imports = [
+            node for node in tree.body
+            if isinstance(node, (ast.Import, ast.ImportFrom))
+        ]
+        self.assertFalse(any(
+            isinstance(node, ast.ImportFrom)
+            and node.module == "app.gui.client_experience_window"
+            for node in top_level_imports
+        ))
+        self.assertIn(
+            "from app.gui.client_experience_window import ClientExperienceWindow",
+            source,
+        )
+
     def test_lightweight_core_is_available_for_every_gui_start_mode(self) -> None:
         with patch(
             "app.client_experience.controller.ClientExperienceController.should_start_client",
