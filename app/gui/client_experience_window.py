@@ -27,6 +27,7 @@ from app.gui.client_v12_mixin import ClientV12Mixin
 from app.gui.client_online_mixin import ClientOnlineMixin
 from app.gui.client_voice_mixin import ClientVoiceMixin
 from app.gui.client_input_policy import should_block_client_input
+from app.gui.client_profile_read import read_client_profile
 from app.gui.client_experience_v2 import ClientExperienceV2
 from app.gui.client_window_mode import ClientWindowModeRuntime
 from app.gui.main_window_runtime import set_owner_metrics_active
@@ -327,8 +328,6 @@ class ClientExperienceWindow(ClientVoiceMixin, ClientOnlineMixin, ClientV12Mixin
             self.client_page if profile["setup_completed"] else self.setup_page
         )
         self._update_stable_status(status)
-        self._update_v12_status()
-        self._sync_online_status()
     def _save_setup(self) -> None:
         name = self.name_entry.text().strip()
         if not name:
@@ -427,7 +426,7 @@ class ClientExperienceWindow(ClientVoiceMixin, ClientOnlineMixin, ClientV12Mixin
         self.owner_window.raise_()
         self.owner_window.activateWindow()
     def closeEvent(self, event) -> None:  # noqa: N802 - Qt API
-        self.window_mode.close(); mode = "CLIENT" if self.controller.status()["profile"]["setup_completed"] else "OWNER"
+        self.window_mode.close(); mode = "CLIENT" if read_client_profile(self.controller).get("setup_completed") else "OWNER"
         self.controller.set_mode(mode)
         if self.owner_window is not None:
             commands = getattr(self.owner_window, "_client_background_commands", None)

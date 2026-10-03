@@ -182,7 +182,7 @@ class ClientExperienceController:
 
     def status(self) -> dict[str, Any]:
         state = self._load()
-        profile = dict(state.get("profile", {}) or {})
+        profile = self._profile(state)
         runtime = dict(state.get("runtime", {}) or {})
         audits = list(state.get("usability_audits", []) or [])
         confirmations = list(state.get("stable_confirmations", []) or [])
@@ -191,12 +191,7 @@ class ClientExperienceController:
         return {
             "status": "CLIENT_EXPERIENCE_SUITE_READY",
             "stages": dict(self.STAGES),
-            "profile": {
-                "display_name": str(profile.get("display_name", "Kacper")),
-                "voice_enabled": bool(profile.get("voice_enabled", True)),
-                "interaction_mode": str(profile.get("interaction_mode", "VOICE_AND_TEXT")),
-                "setup_completed": bool(profile.get("setup_completed", False)),
-            },
+            "profile": profile,
             "runtime": {
                 "mode": str(runtime.get("mode", "OWNER")),
                 "halo_state": str(runtime.get("halo_state", "idle")),
@@ -209,6 +204,22 @@ class ClientExperienceController:
             "stable_ready": latest_confirmation.get("status") == "BUSINESS_1_1_STABLE_READY",
             "automatic_publication": False,
             "owner_mode_preserved": True,
+        }
+
+    def profile(self) -> dict[str, Any]:
+        """Read only client preferences without evaluating business readiness."""
+        return self._profile(self._load())
+
+    @staticmethod
+    def _profile(state: dict[str, Any]) -> dict[str, Any]:
+        profile = dict(state.get("profile", {}) or {})
+        return {
+            "display_name": str(profile.get("display_name", "Kacper")),
+            "voice_enabled": bool(profile.get("voice_enabled", True)),
+            "interaction_mode": str(
+                profile.get("interaction_mode", "VOICE_AND_TEXT")
+            ),
+            "setup_completed": bool(profile.get("setup_completed", False)),
         }
 
     def should_start_client(self) -> bool:

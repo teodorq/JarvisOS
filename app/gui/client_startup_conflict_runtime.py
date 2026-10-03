@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import Any
 from PySide6.QtCore import QTimer
 from app.gui.client_background_reads import submit_client_read
+from app.gui.client_profile_read import read_client_profile
 class ClientStartupConflictRuntime:
     """Reliable, read-only startup scan with bounded delayed retries."""
     DELAYS_MS = (1200, 1800, 2800, 4200, 6000)
@@ -28,7 +29,7 @@ class ClientStartupConflictRuntime:
             else:
                 self._retry()
             return
-        profile = dict(self.window.controller.status().get("profile", {}) or {})
+        profile = read_client_profile(self.window.controller)
         assistant = getattr(self.window.owner_window, "assistant", None)
         natural = getattr(assistant, "natural_actions", None)
         if not profile.get("setup_completed"): self._finish(); return

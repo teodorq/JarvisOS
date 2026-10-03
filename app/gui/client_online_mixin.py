@@ -7,6 +7,7 @@ from app.gui.client_safe_proactivity import ClientSafeProactivityRuntime
 from app.gui.client_startup_conflict_runtime import ClientStartupConflictRuntime
 from app.gui.client_forex_activity import arm_client_forex_activity
 from app.gui.client_background_reads import submit_client_read
+from app.gui.client_profile_read import read_client_profile
 from app.jarvis_experience.isolation import ClientIsolationPolicy
 
 class ClientOnlineMixin:
@@ -72,7 +73,7 @@ class ClientOnlineMixin:
         if not runtime.request(self._show_proactive_brief_now, priority=10, kind="daily_brief"):
             return
     def _show_proactive_brief_now(self) -> None:
-        profile = self.controller.status()["profile"]
+        profile = read_client_profile(self.controller)
         assistant = getattr(self.owner_window, "assistant", None)
         natural = getattr(assistant, "natural_actions", None)
         if natural is None or not profile.get("setup_completed"):

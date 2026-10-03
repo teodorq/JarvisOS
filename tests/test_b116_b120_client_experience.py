@@ -2,7 +2,9 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import json
 import os
+from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -63,6 +65,21 @@ class B116B120ClientExperienceTests(unittest.TestCase):
             self.assertEqual(controller.set_halo("thinking", "Analiza")["state"], "thinking")
             self.assertEqual(controller.set_halo("unknown", "Test")["state"], "idle")
             self.assertEqual(len(controller.HALO_STATES), 7)
+
+    def test_profile_read_skips_full_business_readiness(self) -> None:
+        with TemporaryDirectory() as temporary:
+            controller = ClientExperienceController(
+                self.prepare_root(temporary)
+            )
+            with patch(
+                "app.client_experience.controller."
+                "BusinessBetaReadinessCenter.status"
+            ) as readiness:
+                profile = controller.profile()
+
+            self.assertEqual(profile["display_name"], "Kacper")
+            self.assertFalse(profile["setup_completed"])
+            readiness.assert_not_called()
 
     def test_usability_gates_unlock_business_1_1_stable(self) -> None:
         with TemporaryDirectory() as temporary:
@@ -136,6 +153,47 @@ class B116B120ClientExperienceTests(unittest.TestCase):
             self.assertIsInstance(window.halo, HaloWidget)
             self.assertTrue(window.owner_button.isEnabled())
             self.assertTrue(window.command_entry.isEnabled())
+            window._sync_timer.stop()
+            window.deleteLater()
+
+    @unittest.skipUnless(HAS_PYSIDE6, "PySide6 is unavailable")
+    def test_gui_does_not_load_hidden_optional_suites_on_construction(self) -> None:
+        with TemporaryDirectory() as temporary:
+            root = self.prepare_root(temporary)
+
+            class OptionalSuite:
+                def __init__(self) -> None:
+                    self.status_calls = 0
+
+                def status(self):
+                    self.status_calls += 1
+                    raise AssertionError("hidden suite loaded during client startup")
+
+            assistant_v12 = OptionalSuite()
+            online = OptionalSuite()
+
+            class Owner:
+                pending_thought = None
+                assistant = SimpleNamespace(
+                    assistant_v12=assistant_v12,
+                    online=online,
+                )
+
+                def process_command(self, text, source="Ty"): return None
+                def say_safe(self, text): return None
+                def show(self): return None
+                def hide(self): return None
+                def raise_(self): return None
+                def activateWindow(self): return None
+                def close(self): return None
+
+            window = ClientExperienceWindow(
+                ClientExperienceController(root),
+                Owner(),
+            )
+
+            self.assertEqual(assistant_v12.status_calls, 0)
+            self.assertEqual(online.status_calls, 0)
             window._sync_timer.stop()
             window.deleteLater()
 

@@ -5,6 +5,7 @@ from typing import Any
 from PySide6.QtCore import QTimer
 
 from app.gui.client_background_reads import submit_client_read
+from app.gui.client_profile_read import read_client_profile
 
 
 class ClientLiveConflictRefreshRuntime:
@@ -35,7 +36,7 @@ class ClientLiveConflictRefreshRuntime:
                     kind="live_conflict_refresh",
                 )
             return
-        profile = dict(self.window.controller.status().get("profile", {}) or {})
+        profile = read_client_profile(self.window.controller)
         assistant = getattr(self.window.owner_window, "assistant", None)
         natural = getattr(assistant, "natural_actions", None)
         if not profile.get("setup_completed") or natural is None:
