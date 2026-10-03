@@ -36,7 +36,8 @@ class ClientBackgroundReadRuntime(QObject):
 
     def __init__(self, window: QObject) -> None:
         super().__init__(window)
-        self.pool = QThreadPool.globalInstance()
+        self.pool = QThreadPool(self)
+        self.pool.setMaxThreadCount(1)
         self._active: _ReadJob | None = None
         self._done: Callable[[Any], None] | None = None
         self._failed: Callable[[object], None] | None = None

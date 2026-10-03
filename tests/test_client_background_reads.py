@@ -2,9 +2,28 @@ from __future__ import annotations
 
 import time
 
-from PySide6.QtCore import QCoreApplication, QEventLoop, QObject, QTimer
+from PySide6.QtCore import (
+    QCoreApplication,
+    QEventLoop,
+    QObject,
+    QThreadPool,
+    QTimer,
+)
 
-from app.gui.client_background_reads import submit_client_read
+from app.gui.client_background_reads import (
+    ClientBackgroundReadRuntime,
+    submit_client_read,
+)
+
+
+def test_client_read_lane_is_isolated_from_global_worker_backlog() -> None:
+    window = QObject()
+    runtime = ClientBackgroundReadRuntime(window)
+
+    assert runtime.pool is not QThreadPool.globalInstance()
+    assert runtime.pool.maxThreadCount() == 1
+
+    runtime.shutdown()
 
 
 def test_client_read_returns_before_slow_operation_finishes() -> None:

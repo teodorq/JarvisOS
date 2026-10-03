@@ -19,6 +19,7 @@ QUICK_TESTS = (
     "tests/test_autodev_storage_retention.py",
     "tests/test_audit_a2_2_runtime_storage.py",
     "tests/test_audit_a5_final_integrity.py",
+    "tests/test_client_background_reads.py",
 )
 
 
