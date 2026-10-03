@@ -67,18 +67,21 @@ class TestClientCinematicMode(unittest.TestCase):
     def test_only_external_work_uses_pupil_until_manual_restore(self) -> None:
         window = _ClientWindow()
         runtime = ClientWindowModeRuntime(window)
+        self.assertIsNone(runtime._eye)
         runtime.show_conversation()
         self.app.processEvents()
         self.assertEqual(window.fullscreen_calls, 1)
+        self.assertIsNone(runtime._eye)
 
         runtime.update_state("thinking", 24)
         self.app.processEvents()
         self.assertTrue(window.isVisible())
-        self.assertFalse(runtime.eye.isVisible())
+        self.assertIsNone(runtime._eye)
 
         runtime.update_state("acting", 58, "pupil")
         self.app.processEvents()
         QTest.qWait(140)
+        self.assertIsNotNone(runtime._eye)
         self.assertFalse(window.isVisible())
         self.assertTrue(runtime.eye.isVisible())
         self.assertEqual(runtime.eye.halo.state, "acting")

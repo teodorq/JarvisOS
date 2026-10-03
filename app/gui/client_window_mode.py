@@ -93,8 +93,7 @@ class ClientWindowModeRuntime(QObject):
     def __init__(self, window: Any) -> None:
         super().__init__(window)
         self.window = window
-        self.eye = FloatingJarvisEye()
-        self.eye.restore_requested.connect(self._restore_manually)
+        self._eye: FloatingJarvisEye | None = None
         self._working = False
         self._keep_conversation_open = False
         self._pupil_session = False
@@ -103,9 +102,17 @@ class ClientWindowModeRuntime(QObject):
         self._speech_active = False
 
         self._main_eye_size = 0
+
+    @property
+    def eye(self) -> FloatingJarvisEye:
+        if self._eye is None:
+            self._eye = FloatingJarvisEye()
+            self._eye.restore_requested.connect(self._restore_manually)
+        return self._eye
+
     @property
     def compact(self) -> bool:
-        return self.eye.isVisible()
+        return self._eye is not None and self._eye.isVisible()
 
     def show_conversation(self) -> None:
         resume_client_observers(self.window)
@@ -133,8 +140,9 @@ class ClientWindowModeRuntime(QObject):
         self, state: object, progress: object = 0, view_mode: object = ""
     ) -> None:
         value = str(state or "idle").casefold()
-        self.eye.set_state(value, progress)
         requested = str(view_mode or "").casefold() == "pupil"
+        if requested or self._pupil_session or self._eye is not None:
+            self.eye.set_state(value, progress)
         if requested:
             self._pupil_session = True
             self._working = value in self.WORKING_STATES
@@ -146,23 +154,27 @@ class ClientWindowModeRuntime(QObject):
             self._working = value in self.WORKING_STATES
             return
         self._working = False
-        if self.eye.isVisible() or not self.window.isVisible():
+        eye_visible = self._eye is not None and self._eye.isVisible()
+        if eye_visible or not self.window.isVisible():
             self.show_conversation()
 
     def begin_speaking(self, tts: Any) -> None:
-        if not (self.eye.isVisible() or self.window.isVisible()):
+        eye_visible = self._eye is not None and self._eye.isVisible()
+        if not (eye_visible or self.window.isVisible()):
             return
         self._speech_generation += 1
         token = self._speech_generation
         self._speech_active = True
-        self.eye.set_state("speaking", 100)
+        if self._eye is not None:
+            self._eye.set_state("speaking", 100)
         self.window.halo.set_state("speaking", 100)
         QTimer.singleShot(100, lambda: self._poll_speaking(token, tts, 0))
 
     def settle_success(self) -> None:
         if self._speech_active:
             return
-        self.eye.set_state("idle", 0)
+        if self._eye is not None:
+            self._eye.set_state("idle", 0)
         self.window.halo.set_state("idle", 0)
 
     def _poll_speaking(self, token: int, tts: Any, attempts: int) -> None:
@@ -176,8 +188,12 @@ class ClientWindowModeRuntime(QObject):
             )
             return
         self._speech_active = False
-        if self._pupil_session and self.eye.isVisible():
-            self.eye.set_state("idle", 0)
+        if (
+            self._pupil_session
+            and self._eye is not None
+            and self._eye.isVisible()
+        ):
+            self._eye.set_state("idle", 0)
         else:
             self.window.halo.set_state("idle", 0)
 
@@ -186,10 +202,11 @@ class ClientWindowModeRuntime(QObject):
         self._pupil_session = True
         self._transition_generation += 1
         generation = self._transition_generation
-        self.eye.halo.set_animation_active(True)
+        eye = self.eye
+        eye.halo.set_animation_active(True)
         self._place_eye()
-        self.eye.show()
-        self.eye.raise_()
+        eye.show()
+        eye.raise_()
         status = getattr(self.window, "stable_label", None)
         if status is not None:
             status.setText("JARVIS DZIAŁA W TLE")
@@ -201,8 +218,9 @@ class ClientWindowModeRuntime(QObject):
         self._keep_conversation_open = False
         self._pupil_session = False
         self._transition_generation += 1
-        self.eye.hide()
-        self.eye.halo.set_animation_active(False)
+        if self._eye is not None:
+            self._eye.hide()
+            self._eye.halo.set_animation_active(False)
         self.window.halo.set_animation_active(False)
 
     def close(self) -> None:
@@ -211,9 +229,11 @@ class ClientWindowModeRuntime(QObject):
         self._keep_conversation_open = False
         self._pupil_session = False
         self._transition_generation += 1
-        self.eye.halo.set_animation_active(False)
+        if self._eye is not None:
+            self._eye.halo.set_animation_active(False)
         self.window.halo.set_animation_active(False)
-        self.eye.close()
+        if self._eye is not None:
+            self._eye.close()
 
     def _size_main_eye(self) -> None:
         screen = self.window.screen() or QApplication.primaryScreen()
@@ -226,11 +246,13 @@ class ClientWindowModeRuntime(QObject):
         self._main_eye_size = size
 
     def _hide_main_after_eye(self, generation: int) -> None:
+        eye = self._eye
         if (
             generation != self._transition_generation
             or not self._pupil_session
             or self._keep_conversation_open
-            or not self.eye.isVisible()
+            or eye is None
+            or not eye.isVisible()
         ):
             return
         self.window.halo.set_animation_active(False)
@@ -239,8 +261,9 @@ class ClientWindowModeRuntime(QObject):
     def _hide_eye_after_restore(self, generation: int) -> None:
         if generation != self._transition_generation:
             return
-        self.eye.hide()
-        self.eye.halo.set_animation_active(False)
+        if self._eye is not None:
+            self._eye.hide()
+            self._eye.halo.set_animation_active(False)
 
     def _restore_manually(self) -> None:
         self._working = False
@@ -257,8 +280,9 @@ class ClientWindowModeRuntime(QObject):
         status = getattr(self.window, "stable_label", None)
         if status is not None:
             status.setText("JARVIS DOSTĘPNY")
-        self.eye.hide()
-        self.eye.halo.set_animation_active(False)
+        if self._eye is not None:
+            self._eye.hide()
+            self._eye.halo.set_animation_active(False)
 
     def _place_eye(self) -> None:
         screen = self.window.screen() or QApplication.primaryScreen()
@@ -266,9 +290,10 @@ class ClientWindowModeRuntime(QObject):
             return
         area = screen.availableGeometry()
         margin = 26
-        self.eye.move(
-            area.right() - self.eye.width() - margin,
-            area.bottom() - self.eye.height() - margin,
+        eye = self.eye
+        eye.move(
+            area.right() - eye.width() - margin,
+            area.bottom() - eye.height() - margin,
         )
 
 

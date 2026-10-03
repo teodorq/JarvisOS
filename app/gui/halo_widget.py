@@ -1,4 +1,6 @@
 from __future__ import annotations
+from time import perf_counter
+
 from PySide6.QtCore import QSize, QTimer
 from PySide6.QtWidgets import QWidget
 
@@ -61,6 +63,10 @@ class HaloWidget(QWidget):
     ACTIVE_FRAME_INTERVAL_MS = 33
     IDLE_FRAME_INTERVAL_MS = 50
     IDLE_STATES = frozenset({"idle", "brief", "success"})
+    ACTIVE_ADAPTIVE_STEP_MS = 10
+    IDLE_ADAPTIVE_STEP_MS = 15
+    MAX_FRAME_INTERVAL_MS = 100
+    MAX_MOTION_FRAME_MULTIPLIER = 2.5
 
     def __init__(self, performance_profile: PerformanceProfile | None = None) -> None:
         super().__init__()
@@ -76,6 +82,8 @@ class HaloWidget(QWidget):
         self._target_intensity = self._intensity
         self._renderer = CinematicOrbRenderer()
         self._frame_budget = OrbFrameBudget(initial_stride_multiplier=self.performance_profile.orb_stride_multiplier)
+        self._baseline_stride_multiplier = self._frame_budget.stride_multiplier
+        self._last_tick_at = perf_counter()
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._tick)
         self._timer.start(self._frame_interval_ms())
@@ -105,6 +113,7 @@ class HaloWidget(QWidget):
         """Pause work for a hidden orb and resume without rebuilding it."""
         if active:
             if not self._timer.isActive():
+                self._last_tick_at = perf_counter()
                 self._timer.start(self._frame_interval_ms())
             self.update()
             return
@@ -129,15 +138,42 @@ class HaloWidget(QWidget):
         self.update()
 
     def _frame_interval_ms(self) -> int:
+        base = self._base_frame_interval_ms()
+        extra_detail_reduction = max(
+            0,
+            self._frame_budget.stride_multiplier
+            - self._baseline_stride_multiplier,
+        )
+        step = (
+            self.IDLE_ADAPTIVE_STEP_MS
+            if self._state in self.IDLE_STATES
+            else self.ACTIVE_ADAPTIVE_STEP_MS
+        )
+        return min(
+            self.MAX_FRAME_INTERVAL_MS,
+            base + extra_detail_reduction * step,
+        )
+
+    def _base_frame_interval_ms(self) -> int:
         if self._state in self.IDLE_STATES:
             return self.performance_profile.idle_frame_interval_ms
         return self.performance_profile.active_frame_interval_ms
 
     def _tick(self) -> None:
+        now = perf_counter()
+        elapsed_ms = max(0.0, (now - self._last_tick_at) * 1000.0)
+        self._last_tick_at = now
+        nominal_ms = float(self._base_frame_interval_ms())
+        if elapsed_ms < nominal_ms * 0.5:
+            elapsed_ms = float(self._timer.interval() or nominal_ms)
+        motion_scale = min(
+            self.MAX_MOTION_FRAME_MULTIPLIER,
+            elapsed_ms / nominal_ms,
+        )
         speed = self.SPEEDS[self._state]
-        self._angle += speed
-        self._pulse += 0.038 * max(speed, 0.65)
-        self._scan += 1.8 * max(speed, 0.65)
+        self._angle += speed * motion_scale
+        self._pulse += 0.038 * max(speed, 0.65) * motion_scale
+        self._scan += 1.8 * max(speed, 0.65) * motion_scale
         self._intensity += (
             self._target_intensity - self._intensity
         ) * 0.08
@@ -157,3 +193,7 @@ class HaloWidget(QWidget):
             intensity=self._intensity,
             active=self._state not in self.IDLE_STATES,
         )
+        if self._timer.isActive():
+            interval = self._frame_interval_ms()
+            if self._timer.interval() != interval:
+                self._timer.setInterval(interval)

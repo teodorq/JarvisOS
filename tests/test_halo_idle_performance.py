@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import os
 import unittest
+from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -144,6 +145,42 @@ class HaloIdlePerformanceTests(unittest.TestCase):
             self.assertEqual(halo._timer.interval(), 80)  # noqa: SLF001
             halo.set_state("thinking")
             self.assertEqual(halo._timer.interval(), 50)  # noqa: SLF001
+        finally:
+            halo.set_animation_active(False)
+            halo.deleteLater()
+
+    def test_slow_frames_reduce_refresh_rate_and_fast_frames_restore_it(self) -> None:
+        halo = HaloWidget()
+        try:
+            halo.set_state("thinking")
+            for _ in range(3):
+                halo._frame_budget.observe(30.0, active=True)  # noqa: SLF001
+            halo._timer.setInterval(halo._frame_interval_ms())  # noqa: SLF001
+            self.assertEqual(halo.particle_stride_multiplier, 2)
+            self.assertEqual(halo._timer.interval(), 43)  # noqa: SLF001
+
+            for _ in range(90):
+                halo._frame_budget.observe(5.0, active=True)  # noqa: SLF001
+            halo._timer.setInterval(halo._frame_interval_ms())  # noqa: SLF001
+            self.assertEqual(halo.particle_stride_multiplier, 1)
+            self.assertEqual(halo._timer.interval(), 33)  # noqa: SLF001
+        finally:
+            halo.set_animation_active(False)
+            halo.deleteLater()
+
+    def test_adaptive_interval_preserves_time_based_motion_speed(self) -> None:
+        halo = HaloWidget()
+        try:
+            halo.set_state("thinking")
+            halo._angle = 0.0  # noqa: SLF001
+            halo._last_tick_at = 10.0  # noqa: SLF001
+            halo._timer.setInterval(43)  # noqa: SLF001
+
+            with patch("app.gui.halo_widget.perf_counter", return_value=10.043):
+                halo._tick()  # noqa: SLF001
+
+            expected = halo.SPEEDS["thinking"] * 43 / 33
+            self.assertAlmostEqual(halo._angle, expected, places=5)  # noqa: SLF001
         finally:
             halo.set_animation_active(False)
             halo.deleteLater()
