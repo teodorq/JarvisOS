@@ -17,3 +17,4 @@ PyGetWindow
 pywin32
 azure-identity
 azure-storage-queue
+MetaTrader5==5.0.5735; sys_platform == "win32"
