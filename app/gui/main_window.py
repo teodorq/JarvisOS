@@ -8,6 +8,7 @@ from app.assistant.controller import PersonalAssistantController
 from app.business.business_config import BusinessConfigStore
 from app.business.business_edition_service import BusinessEditionService
 from app.core.project_paths import resolve_project_root
+from app.core.performance_profile import load_performance_profile
 from app.client_experience.controller import ClientExperienceController
 from app.gui.business_command_runtime import BusinessCommandRuntimeMixin
 from app.gui.confirmation_revision_runtime import handle_owner_confirmation, remember_confirmed_calendar_write
@@ -34,6 +35,7 @@ class MainWindow(BusinessCommandRuntimeMixin, QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.project_root = resolve_project_root(); self._interface_ready = False
+        self.performance_profile = load_performance_profile(self.project_root)
         self._voice_runtime_connected = False
         self._client_start_requested = ClientExperienceController(
             self.project_root

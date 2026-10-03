@@ -115,6 +115,16 @@ class B178LiveConflictRefreshTests(unittest.TestCase):
         self.assertEqual(runtime.timer.interval, 60_000)
         self.assertEqual(runtime.timer.starts, 1)
 
+    def test_low_resource_profile_refreshes_every_two_minutes(self):
+        window = _Window(_Natural(self.duplicate()))
+        window.owner_window.performance_profile = SimpleNamespace(
+            calendar_refresh_interval_ms=120_000,
+        )
+
+        runtime = ClientLiveConflictRefreshRuntime(window)
+
+        self.assertEqual(runtime.timer.interval, 120_000)
+
     def test_new_or_changed_conflict_is_delivered(self):
         natural = _Natural(self.conflict())
         window = _Window(natural)

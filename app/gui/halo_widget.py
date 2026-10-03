@@ -8,58 +8,15 @@ from app.core.performance_profile import PerformanceProfile, load_performance_pr
 from app.gui.cinematic_orb_renderer import CinematicOrbRenderer
 from app.gui.orb_frame_budget import OrbFrameBudget
 from app.gui.orb_widget_painter import paint_orb_frame
+from app.gui.halo_visual_profile import ACCESSIBLE, COLORS, INTENSITY, SPEEDS
 
 class HaloWidget(QWidget):
     """Filmowa kula cząsteczkowa JARVISA z czytelnymi stanami pracy."""
 
-    COLORS = {
-        "idle": "#43B9FF",
-        "listening": "#4DEBFF",
-        "thinking": "#669DFF",
-        "acting": "#53CCFF",
-        "speaking": "#B47CFF",
-        "success": "#53E6BD",
-        "brief": "#43B9FF",
-        "important": "#FFB454",
-        "warning": "#FF9D57",
-        "error": "#FF6678",
-    }
-    SPEEDS = {
-        "idle": 0.42,
-        "listening": 0.92,
-        "thinking": 1.28,
-        "acting": 1.72,
-        "speaking": 0.82,
-        "success": 0.58,
-        "brief": 0.48,
-        "important": 0.74,
-        "warning": 1.05,
-        "error": 0.45,
-    }
-    ACCESSIBLE = {
-        "idle": "Jarvis jest gotowy",
-        "listening": "Jarvis słucha",
-        "thinking": "Jarvis analizuje",
-        "acting": "Jarvis wykonuje zadanie",
-        "speaking": "Jarvis odpowiada",
-        "success": "Jarvis zakończył zadanie",
-        "brief": "Jarvis pokazuje brief dnia",
-        "important": "Jarvis pokazuje ważną informację",
-        "warning": "Jarvis czeka na decyzję",
-        "error": "Jarvis wymaga uwagi",
-    }
-    INTENSITY = {
-        "idle": 0.8,
-        "listening": 1.0,
-        "thinking": 0.94,
-        "acting": 1.0,
-        "speaking": 0.96,
-        "success": 0.88,
-        "brief": 0.8,
-        "important": 0.92,
-        "warning": 0.96,
-        "error": 0.84,
-    }
+    COLORS = COLORS
+    SPEEDS = SPEEDS
+    ACCESSIBLE = ACCESSIBLE
+    INTENSITY = INTENSITY
     ACTIVE_FRAME_INTERVAL_MS = 33
     IDLE_FRAME_INTERVAL_MS = 50
     IDLE_STATES = frozenset({"idle", "brief", "success"})

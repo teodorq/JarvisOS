@@ -201,7 +201,9 @@ class ClientExperienceWindow(ClientVoiceMixin, ClientOnlineMixin, ClientV12Mixin
         content.setContentsMargins(28, 20, 28, 22)
         content.setSpacing(10)
         content.addStretch(1)
-        self.halo = HaloWidget()
+        self.halo = HaloWidget(performance_profile=getattr(
+            self.owner_window, "performance_profile", None,
+        ))
         content.addLayout(build_client_hud_row(self, self.halo))
         self.state_label = QLabel("JESTEM GOTOWY")
         self.state_label.setObjectName("ClientState")

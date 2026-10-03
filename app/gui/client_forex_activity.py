@@ -15,7 +15,11 @@ class ClientForexActivityRuntime:
     def __init__(self, window: Any) -> None:
         self.window = window
         self.timer = QTimer(window)
-        self.timer.setInterval(30 * 1000)
+        profile = getattr(window.owner_window, "performance_profile", None)
+        interval = getattr(profile, "client_forex_interval_ms", 30 * 1000)
+        if not isinstance(interval, int):
+            interval = 30 * 1000
+        self.timer.setInterval(max(1000, interval))
         self.timer.timeout.connect(self.poll)
 
     def arm(self) -> None:

@@ -19,6 +19,10 @@ class PerformanceProfile:
     active_frame_interval_ms: int
     idle_frame_interval_ms: int
     sound_theme_enabled: bool
+    owner_metrics_interval_ms: int
+    owner_forex_interval_ms: int
+    client_forex_interval_ms: int
+    calendar_refresh_interval_ms: int
 
 
 BALANCED = PerformanceProfile(
@@ -28,6 +32,10 @@ BALANCED = PerformanceProfile(
     active_frame_interval_ms=33,
     idle_frame_interval_ms=50,
     sound_theme_enabled=True,
+    owner_metrics_interval_ms=1000,
+    owner_forex_interval_ms=5000,
+    client_forex_interval_ms=30_000,
+    calendar_refresh_interval_ms=60_000,
 )
 LOW_RESOURCE = PerformanceProfile(
     name="low_resource",
@@ -36,6 +44,10 @@ LOW_RESOURCE = PerformanceProfile(
     active_frame_interval_ms=50,
     idle_frame_interval_ms=80,
     sound_theme_enabled=False,
+    owner_metrics_interval_ms=2000,
+    owner_forex_interval_ms=15_000,
+    client_forex_interval_ms=60_000,
+    calendar_refresh_interval_ms=120_000,
 )
 
 

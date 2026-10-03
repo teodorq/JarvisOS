@@ -93,6 +93,21 @@ def test_client_runtime_dispatches_file_poll_outside_gui_thread() -> None:
     )
 
 
+def test_low_resource_client_polls_forex_less_often() -> None:
+    window = SimpleNamespace(
+        owner_window=SimpleNamespace(
+            performance_profile=SimpleNamespace(
+                client_forex_interval_ms=60_000,
+            ),
+        ),
+    )
+
+    with patch("app.gui.client_forex_activity.QTimer", _Timer):
+        runtime = ClientForexActivityRuntime(window)
+
+    assert runtime.timer.interval == 60_000
+
+
 def test_hidden_client_does_not_consume_owner_forex_activity() -> None:
     feed = SimpleNamespace(poll=Mock())
     window = SimpleNamespace(

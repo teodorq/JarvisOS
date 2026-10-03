@@ -17,7 +17,15 @@ class ClientLiveConflictRefreshRuntime:
         self.window = window
         self.running = False
         self.timer = QTimer(window)
-        self.timer.setInterval(self.INTERVAL_MS)
+        profile = getattr(window.owner_window, "performance_profile", None)
+        interval = getattr(
+            profile,
+            "calendar_refresh_interval_ms",
+            self.INTERVAL_MS,
+        )
+        if not isinstance(interval, int):
+            interval = self.INTERVAL_MS
+        self.timer.setInterval(max(5000, interval))
         self.timer.timeout.connect(self.run)
 
     def arm(self) -> None:

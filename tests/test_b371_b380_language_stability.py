@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -108,20 +109,22 @@ class TestB371B380LanguageStability(unittest.TestCase):
             calls["background"] += 1
             return "READY"
 
-        class Online:
-            @staticmethod
-            def status() -> dict:
-                calls["online"] += 1
-                return {"connection": {"token_present": True}}
+        def token_present() -> bool:
+            calls["online"] += 1
+            return True
 
         window = SimpleNamespace(
             _status_tick=0,
             _background_status=background,
-            assistant=SimpleNamespace(online=Online()),
+            assistant=SimpleNamespace(online=None),
         )
-        self.assertEqual(business_service_snapshot(window), ("READY", True))
-        window._status_tick = 1
-        self.assertEqual(business_service_snapshot(window), ("READY", True))
+        with patch(
+            "app.gui.business_status_snapshot.google_token_present",
+            side_effect=token_present,
+        ):
+            self.assertEqual(business_service_snapshot(window), ("READY", True))
+            window._status_tick = 1
+            self.assertEqual(business_service_snapshot(window), ("READY", True))
         self.assertEqual(calls, {"background": 1, "online": 1})
 
 

@@ -26,6 +26,10 @@ def test_auto_selects_low_resource_for_small_machine() -> None:
         )
     assert profile.name == "low_resource"
     assert profile.lazy_voice is True
+    assert profile.owner_metrics_interval_ms == 2000
+    assert profile.owner_forex_interval_ms == 15_000
+    assert profile.client_forex_interval_ms == 60_000
+    assert profile.calendar_refresh_interval_ms == 120_000
 
 
 def test_auto_keeps_balanced_profile_for_capable_machine() -> None:
@@ -37,6 +41,7 @@ def test_auto_keeps_balanced_profile_for_capable_machine() -> None:
         )
     assert profile.name == "balanced"
     assert profile.orb_stride_multiplier == 1
+    assert profile.owner_metrics_interval_ms == 1000
 
 
 def test_environment_override_wins_over_file_and_probe() -> None:

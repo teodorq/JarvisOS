@@ -8,6 +8,20 @@ from app.gui.user_text_widgets import clean_user_visible_widgets
 from app.gui.remote_command_runtime import connect_remote_command_runtime
 
 OWNER_METRICS_INTERVAL_MS = 1000
+OWNER_FOREX_INTERVAL_MS = 5000
+
+
+def _interval(window: Any, name: str, fallback: int) -> int:
+    profile = getattr(window, "performance_profile", None)
+    value = getattr(profile, name, fallback)
+    if not isinstance(value, int):
+        return fallback
+    return max(250, value)
+
+
+def _runtime_timer(window: Any, name: str):
+    attributes = getattr(window, "__dict__", {})
+    return attributes.get(name) if isinstance(attributes, dict) else None
 
 
 def connect_main_runtime(window: Any) -> None:
@@ -25,20 +39,43 @@ def connect_main_runtime(window: Any) -> None:
         return
     window.timer = QTimer(window)
     window.timer.timeout.connect(window.update_system_status)
-    window.timer.start(OWNER_METRICS_INTERVAL_MS)
+    window.timer.start(
+        _interval(
+            window,
+            "owner_metrics_interval_ms",
+            OWNER_METRICS_INTERVAL_MS,
+        )
+    )
 
 
 def set_owner_metrics_active(window: Any, active: bool) -> None:
     """Avoid refreshing hidden owner widgets while shared runtimes stay alive."""
-    timer = getattr(window, "timer", None)
-    if timer is None:
-        return
+    timer = _runtime_timer(window, "timer")
+    forex_timer = _runtime_timer(window, "_forex_activity_timer")
     if active:
-        if not timer.isActive():
-            timer.start(OWNER_METRICS_INTERVAL_MS)
-        window.update_system_status()
+        if timer is not None:
+            if not timer.isActive():
+                timer.start(
+                    _interval(
+                        window,
+                        "owner_metrics_interval_ms",
+                        OWNER_METRICS_INTERVAL_MS,
+                    )
+                )
+            window.update_system_status()
+        if forex_timer is not None and not forex_timer.isActive():
+            forex_timer.start(
+                _interval(
+                    window,
+                    "owner_forex_interval_ms",
+                    OWNER_FOREX_INTERVAL_MS,
+                )
+            )
         return
-    timer.stop()
+    if timer is not None:
+        timer.stop()
+    if forex_timer is not None:
+        forex_timer.stop()
 
 
 def _connect_forex_activity_runtime(window: Any) -> None:
@@ -48,7 +85,13 @@ def _connect_forex_activity_runtime(window: Any) -> None:
     window._forex_activity_timer.timeout.connect(
         lambda: _show_forex_paper_activity(window)
     )
-    window._forex_activity_timer.start(5000)
+    window._forex_activity_timer.start(
+        _interval(
+            window,
+            "owner_forex_interval_ms",
+            OWNER_FOREX_INTERVAL_MS,
+        )
+    )
 
 
 def _show_forex_paper_activity(window: Any) -> None:
