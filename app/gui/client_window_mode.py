@@ -6,6 +6,7 @@ from PySide6.QtCore import QPoint, QObject, QTimer, Qt, Signal
 from PySide6.QtWidgets import QApplication, QVBoxLayout, QWidget
 
 from app.gui.halo_widget import HaloWidget
+from app.gui.client_observer_lifecycle import resume_client_observers, suspend_client_observers
 
 
 class FloatingJarvisEye(QWidget):
@@ -107,6 +108,7 @@ class ClientWindowModeRuntime(QObject):
         return self.eye.isVisible()
 
     def show_conversation(self) -> None:
+        resume_client_observers(self.window)
         self._working = False
         self._keep_conversation_open = False
         self._pupil_session = False
@@ -194,6 +196,7 @@ class ClientWindowModeRuntime(QObject):
         self._hide_main_after_eye(generation)
 
     def leave(self) -> None:
+        suspend_client_observers(self.window)
         self._working = False
         self._keep_conversation_open = False
         self._pupil_session = False
@@ -203,6 +206,7 @@ class ClientWindowModeRuntime(QObject):
         self.window.halo.set_animation_active(False)
 
     def close(self) -> None:
+        suspend_client_observers(self.window)
         self._working = False
         self._keep_conversation_open = False
         self._pupil_session = False
