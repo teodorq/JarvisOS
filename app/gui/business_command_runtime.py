@@ -96,7 +96,7 @@ class BusinessCommandRuntimeMixin(ClientCommandRuntimeMixin):
         if repeated is not None:
             self._execute_repeated_calendar_confirmation(text, repeated)
             return
-        if text.lower().strip() in {"jarvis", "hej jarvis", "cześć jarvis"}:
+        if text.lower().strip() in {"jarvis", "hej jarvis"}:
             self.console_page.append("Jarvis: Słucham.")
             self.say_safe("Słucham")
             return

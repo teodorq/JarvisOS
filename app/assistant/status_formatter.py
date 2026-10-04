@@ -11,6 +11,7 @@ class AssistantStatusFormatter:
         key = str(value or "").strip().casefold()
         labels = {
             "assistant_status": "sprawdzenie gotowości asystenta",
+            "contextual_greeting": "przygotowanie bieżącego skrótu dnia",
             "capability_help": "wyświetlenie możliwości JARVIS OS",
             "conversation_status": "sprawdzenie pamięci rozmowy",
             "desktop_status": "sprawdzenie sterowania pulpitem",

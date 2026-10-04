@@ -6,6 +6,7 @@ import re
 from typing import Any
 from app.assistant.daily_work import DailyWorkService
 from app.assistant.capability_guide import CapabilityGuideService
+from app.assistant.contextual_greeting import ContextualGreetingService
 from app.assistant.natural_language import NaturalLanguageService, ResolvedCommand, fold_text
 from app.assistant.project_memory import ProjectMemoryService
 from app.assistant.reliable_desktop import ReliableDesktopService
@@ -45,6 +46,7 @@ class PersonalAssistantController:
         self.assistant_v12 = deferred.assistant_v12
         self.online = deferred.online
         self.natural_actions = deferred.natural_actions
+        self.greetings = ContextualGreetingService(self.natural_actions)
         self.integrations = IntegrationStatusService()
         self.trading = LazyTradingRuntime(self.project_root)
     @staticmethod
@@ -126,6 +128,7 @@ class PersonalAssistantController:
         )
         return (
             any(phrase in text for phrase in phrases)
+            or NaturalLanguageService.classify(command) == "contextual_greeting"
             or deferred_matches(command)
         )
     def resolve_command(self, command: object) -> ResolvedCommand:
@@ -203,6 +206,7 @@ class PersonalAssistantController:
             "desktop_status",
             "daily_status",
             "integration_status",
+            "contextual_greeting",
             "paper_trading_status",
             "forex_observation_review",
             "clarification",
@@ -315,6 +319,8 @@ class PersonalAssistantController:
             },
         }
     def _dispatch(self, intent: str, command: str) -> str:
+        if intent == "contextual_greeting":
+            return self.greetings.reply()
         if intent == "current_time": return format_local_clock(command)
         if intent == "device_status": return format_local_device_status()
         if intent == "weather":

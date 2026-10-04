@@ -29,6 +29,18 @@ _CONTINUE_PHRASES = {
     "wróć do tego",
     "wroc do tego",
 }
+_GREETING_PHRASES = {
+    "dzien dobry",
+    "dzien dobry jarvis",
+    "dobry wieczor",
+    "dobry wieczor jarvis",
+    "czesc",
+    "czesc jarvis",
+    "witaj",
+    "witaj jarvis",
+    "hej",
+    "hejka",
+}
 _POLITE_PREFIXES = (
     "proszę ",
     "prosze ",
@@ -216,6 +228,9 @@ class NaturalLanguageService:
     @staticmethod
     def classify(command: object) -> str:
         text = fold_text(command)
+        exact = " ".join(re.sub(r"[^\w\s]", " ", text).split())
+        if exact in _GREETING_PHRASES:
+            return "contextual_greeting"
         patterns = (
             ("clear_context", ("wyczysc kontekst rozmowy",)),
             ("capability_help", ("co potrafisz", "co umiesz", "co mozesz zrobic", "jakie masz funkcje", "pokaz pomoc", "pomoc jarvis", "jak z ciebie korzystac", "przyklady polecen", "lista polecen", "centrum mozliwosci")),
