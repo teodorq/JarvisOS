@@ -50,12 +50,16 @@ def test_client_settings_are_loaded_and_saved(tmp_path) -> None:
     window.client_startup.setCurrentIndex(
         window.client_startup.findData("client")
     )
+    window.client_start_minimized.setCurrentIndex(
+        window.client_start_minimized.findData(True)
+    )
     save_client_settings_controls(window)
 
     saved = store.ensure()
     assert saved["performance"]["profile"] == "low_resource"
     assert saved["sound"]["effects_enabled"] is False
     assert saved["ui"]["startup_mode"] == "client"
+    assert saved["ui"]["start_minimized"] is True
     assert window.owner_window.business_config == saved
     assert window.client_autostart_feedback.text() == (
         "Autostart: WŁĄCZONY — gotowy."

@@ -18,6 +18,10 @@ def harden_user_preferences(config: dict[str, Any]) -> None:
     ui["startup_mode"] = (
         mode if mode in {"remember", "client", "owner"} else "remember"
     )
+    start_minimized = ui.get("start_minimized", False)
+    ui["start_minimized"] = (
+        start_minimized if isinstance(start_minimized, bool) else False
+    )
     ui["show_quick_actions"] = bool(ui.get("show_quick_actions", True))
     ui["density"] = "comfortable"
     config["ui"] = ui

@@ -17,6 +17,7 @@ def test_settings_page_emits_complete_user_preferences() -> None:
     page = SettingsPage()
     page.load_config(DEFAULT_BUSINESS_CONFIG)
     page.startup_mode.setCurrentIndex(page.startup_mode.findData("client"))
+    page.start_minimized.setCurrentIndex(page.start_minimized.findData(True))
     page.start_page.setCurrentIndex(page.start_page.findData("forex"))
     page.performance_profile.setCurrentIndex(
         page.performance_profile.findData("low_resource")
@@ -28,6 +29,7 @@ def test_settings_page_emits_complete_user_preferences() -> None:
     page._save()
 
     assert emitted[0]["ui"]["startup_mode"] == "client"
+    assert emitted[0]["ui"]["start_minimized"] is True
     assert emitted[0]["ui"]["start_page"] == "forex"
     assert emitted[0]["performance"]["profile"] == "low_resource"
     assert emitted[0]["sound"]["effects_enabled"] is False

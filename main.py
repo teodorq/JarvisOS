@@ -5,7 +5,7 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QIcon, QPixmap
-from PySide6.QtWidgets import QApplication, QSplashScreen
+from PySide6.QtWidgets import QApplication, QSplashScreen, QSystemTrayIcon
 
 from app.business.business_config import BusinessConfigStore
 from app.cloud.environment import load_cloud_environment
@@ -20,6 +20,7 @@ def main() -> int:
     load_forex_environment(project_root)
     load_voice_environment(project_root)
     from app.gui.main_window import MainWindow
+    from app.gui.system_tray import install_system_tray, should_start_in_tray
 
     config = BusinessConfigStore(project_root).ensure()
 
@@ -29,12 +30,22 @@ def main() -> int:
     app.setOrganizationName(str(config["organization"]))
 
     icon_path = project_root / "JARVIS_OS.ico"
+    app_icon = QIcon(str(icon_path)) if icon_path.is_file() else QIcon()
     if icon_path.is_file():
-        app.setWindowIcon(QIcon(str(icon_path)))
+        app.setWindowIcon(app_icon)
 
     splash_path = project_root / "JARVIS_OS.png"
     pixmap = QPixmap(str(splash_path))
-    if not pixmap.isNull():
+    if app_icon.isNull() and not pixmap.isNull():
+        app_icon = QIcon(pixmap)
+        app.setWindowIcon(app_icon)
+
+    tray_available = QSystemTrayIcon.isSystemTrayAvailable()
+    start_in_tray = should_start_in_tray(
+        config,
+        tray_available=tray_available,
+    )
+    if not start_in_tray and not pixmap.isNull():
         pixmap = pixmap.scaled(
             520,
             520,
@@ -49,7 +60,9 @@ def main() -> int:
         splash = None
 
     window = MainWindow()
-    window.show_start_mode()
+    tray = install_system_tray(app, window, app_icon)
+    if not start_in_tray or tray is None:
+        window.show_start_mode()
     if splash is not None:
         QTimer.singleShot(100, splash.close)
     return app.exec()

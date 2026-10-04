@@ -41,6 +41,10 @@ def install_settings_extensions(page: Any, content: Any) -> None:
     form = QFormLayout()
     form.setHorizontalSpacing(18)
     page.startup_mode = _combo(STARTUP_MODES)
+    page.start_minimized = _combo((
+        ("Pokaż okno", False),
+        ("Zacznij w zasobniku obok zegara", True),
+    ))
     page.start_page = _combo(START_PAGES)
     page.performance_profile = _combo(PERFORMANCE_PROFILES)
     page.sound_effects = _combo((
@@ -48,12 +52,14 @@ def install_settings_extensions(page: Any, content: Any) -> None:
         ("Wyłączone", False),
     ))
     form.addRow("Ekran po uruchomieniu", page.startup_mode)
+    form.addRow("Widoczność po uruchomieniu", page.start_minimized)
     form.addRow("Start panelu właściciela", page.start_page)
     form.addRow("Tryb wydajności", page.performance_profile)
     form.addRow("Dźwięki interfejsu", page.sound_effects)
     runtime.content_layout.addLayout(form)
     note = QLabel(
-        "Zmiana wydajności i dźwięków działa od razu po zapisaniu."
+        "Zmiana wydajności i dźwięków działa od razu. Sposób uruchomienia "
+        "zacznie obowiązywać przy następnym starcie JARVIS."
     )
     note.setObjectName("Muted")
     note.setWordWrap(True)
@@ -118,6 +124,7 @@ def install_settings_extensions(page: Any, content: Any) -> None:
 def load_settings_extensions(page: Any, config: dict[str, Any]) -> None:
     ui = dict(config.get("ui", {}) or {})
     _select(page.startup_mode, ui.get("startup_mode", "remember"))
+    _select(page.start_minimized, bool(ui.get("start_minimized", False)))
     _select(page.start_page, ui.get("start_page", "console"))
     performance = dict(config.get("performance", {}) or {})
     _select(page.performance_profile, performance.get("profile", "auto"))
@@ -129,6 +136,7 @@ def settings_extension_updates(page: Any) -> dict[str, Any]:
     return {
         "ui": {
             "startup_mode": page.startup_mode.currentData(),
+            "start_minimized": bool(page.start_minimized.currentData()),
             "start_page": page.start_page.currentData(),
             "show_quick_actions": bool(page.quick_actions.currentData()),
         },

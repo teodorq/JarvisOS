@@ -32,6 +32,7 @@ DEFAULT_BUSINESS_CONFIG: dict[str, Any] = {
     "ui": {
         "start_page": "console",
         "startup_mode": "remember",
+        "start_minimized": False,
         "show_quick_actions": True,
         "density": "comfortable",
     },

@@ -44,9 +44,14 @@ def install_client_settings_controls(window: Any, content: QVBoxLayout) -> None:
         ("Rozmowa z JARVIS", "client"),
         ("Panel właściciela", "owner"),
     ))
+    window.client_start_minimized = _combo((
+        ("Pokaż okno", False),
+        ("Zacznij w zasobniku obok zegara", True),
+    ))
     form.addRow("Wydajność", window.client_performance)
     form.addRow("Dźwięki", window.client_sounds)
     form.addRow("Ekran po uruchomieniu", window.client_startup)
+    form.addRow("Widoczność po uruchomieniu", window.client_start_minimized)
     layout.addLayout(form)
     actions = QHBoxLayout()
     window.client_health_button = QPushButton("SPRAWDŹ STAN")
@@ -103,6 +108,10 @@ def show_client_settings_controls(window: Any) -> None:
     _select(window.client_performance, performance.get("profile", "auto"))
     _select(window.client_sounds, bool(sound.get("effects_enabled", True)))
     _select(window.client_startup, ui.get("startup_mode", "remember"))
+    _select(
+        window.client_start_minimized,
+        bool(ui.get("start_minimized", False)),
+    )
     window.client_settings_advanced.show()
     _run_autostart(window, enabled=None)
 
@@ -111,7 +120,12 @@ def save_client_settings_controls(window: Any) -> None:
     if not window.client_settings_advanced.isVisible():
         return
     config = _store(window).update({
-        "ui": {"startup_mode": window.client_startup.currentData()},
+        "ui": {
+            "startup_mode": window.client_startup.currentData(),
+            "start_minimized": bool(
+                window.client_start_minimized.currentData()
+            ),
+        },
         "performance": {"profile": window.client_performance.currentData()},
         "sound": {"effects_enabled": bool(window.client_sounds.currentData())},
     })

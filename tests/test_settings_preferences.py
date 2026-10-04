@@ -26,21 +26,31 @@ class _Controller:
 def test_preferences_are_persisted_and_invalid_values_are_hardened(tmp_path) -> None:
     store = BusinessConfigStore(tmp_path)
     saved = store.update({
-        "ui": {"startup_mode": "client", "start_page": "forex"},
+        "ui": {
+            "startup_mode": "client",
+            "start_page": "forex",
+            "start_minimized": True,
+        },
         "performance": {"profile": "low_resource"},
         "sound": {"effects_enabled": False},
     })
     assert saved["ui"]["startup_mode"] == "client"
     assert saved["ui"]["start_page"] == "forex"
+    assert saved["ui"]["start_minimized"] is True
     assert saved["performance"]["profile"] == "low_resource"
     assert saved["sound"]["effects_enabled"] is False
 
     hardened = store.update({
-        "ui": {"startup_mode": "unsafe", "start_page": "hidden"},
+        "ui": {
+            "startup_mode": "unsafe",
+            "start_page": "hidden",
+            "start_minimized": "yes",
+        },
         "performance": {"profile": "unbounded"},
     })
     assert hardened["ui"]["startup_mode"] == "remember"
     assert hardened["ui"]["start_page"] == "console"
+    assert hardened["ui"]["start_minimized"] is False
     assert hardened["performance"]["profile"] == "auto"
 
 

@@ -19,6 +19,7 @@
     "ui": {
         "start_page": "console",
         "startup_mode": "remember",
+        "start_minimized": true,
         "show_quick_actions": true,
         "density": "comfortable"
     },
