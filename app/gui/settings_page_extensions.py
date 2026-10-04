@@ -82,6 +82,38 @@ def install_settings_extensions(page: Any, content: Any) -> None:
     maintenance.content_layout.addWidget(page.maintenance_feedback)
     content.addWidget(maintenance)
 
+    autostart = SectionCard(
+        "Autostart Windows",
+        "Uruchamiaj JARVIS po zalogowaniu, bez okna konsoli. Ręczne zamknięcie "
+        "nie uruchamia aplikacji ponownie.",
+    )
+    autostart_row = QHBoxLayout()
+    page.autostart_check_button = QPushButton("SPRAWDŹ")
+    page.autostart_on_button = QPushButton("WŁĄCZ")
+    page.autostart_off_button = QPushButton("WYŁĄCZ")
+    for button in (
+        page.autostart_check_button,
+        page.autostart_on_button,
+        page.autostart_off_button,
+    ):
+        button.setObjectName("SecondaryButton")
+        autostart_row.addWidget(button)
+    autostart_row.addStretch(1)
+    page.autostart_check_button.clicked.connect(
+        page.autostart_refresh_requested.emit
+    )
+    page.autostart_on_button.clicked.connect(
+        lambda: page.autostart_set_requested.emit(True)
+    )
+    page.autostart_off_button.clicked.connect(
+        lambda: page.autostart_set_requested.emit(False)
+    )
+    autostart.content_layout.addLayout(autostart_row)
+    page.autostart_feedback = QLabel("Stan autostartu: nie sprawdzono.")
+    page.autostart_feedback.setObjectName("Muted")
+    autostart.content_layout.addWidget(page.autostart_feedback)
+    content.addWidget(autostart)
+
 
 def load_settings_extensions(page: Any, config: dict[str, Any]) -> None:
     ui = dict(config.get("ui", {}) or {})
@@ -108,6 +140,13 @@ def settings_extension_updates(page: Any) -> dict[str, Any]:
 def set_settings_action_busy(page: Any, busy: bool) -> None:
     page.health_button.setDisabled(bool(busy))
     page.cleanup_button.setDisabled(bool(busy))
+    for name in (
+        "autostart_check_button", "autostart_on_button",
+        "autostart_off_button",
+    ):
+        button = getattr(page, name, None)
+        if button is not None:
+            button.setDisabled(bool(busy))
     if busy:
         page.maintenance_feedback.setText("Sprawdzam — możesz dalej używać JARVIS.")
 
@@ -118,6 +157,14 @@ def set_settings_action_feedback(page: Any, text: str, healthy: bool) -> None:
     page.maintenance_feedback.setObjectName("Healthy" if healthy else "Danger")
     page.maintenance_feedback.style().unpolish(page.maintenance_feedback)
     page.maintenance_feedback.style().polish(page.maintenance_feedback)
+
+
+def set_autostart_action_feedback(page: Any, text: str, healthy: bool) -> None:
+    set_settings_action_busy(page, False)
+    page.autostart_feedback.setText(str(text))
+    page.autostart_feedback.setObjectName("Healthy" if healthy else "Danger")
+    page.autostart_feedback.style().unpolish(page.autostart_feedback)
+    page.autostart_feedback.style().polish(page.autostart_feedback)
 
 
 def _combo(items: tuple[tuple[str, Any], ...]) -> QComboBox:
@@ -134,6 +181,7 @@ def _select(combo: QComboBox, value: object) -> None:
 
 __all__ = [
     "install_settings_extensions", "load_settings_extensions",
+    "set_autostart_action_feedback",
     "set_settings_action_busy", "set_settings_action_feedback",
     "settings_extension_updates",
 ]

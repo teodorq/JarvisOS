@@ -9,7 +9,9 @@ from app.core.runtime_maintenance import (
     cleanup_runtime_storage,
     runtime_storage_status,
 )
+from app.core.windows_autostart import autostart_status, set_autostart
 from app.gui.settings_page_extensions import (
+    set_autostart_action_feedback,
     set_settings_action_busy,
     set_settings_action_feedback,
 )
@@ -44,6 +46,7 @@ class SettingsActionRuntime(QObject):
         self.pool = QThreadPool(self)
         self.pool.setMaxThreadCount(1)
         self._active: _Job | None = None
+        self._active_kind = "maintenance"
 
     def check_health(self) -> None:
         self._submit(
@@ -57,14 +60,29 @@ class SettingsActionRuntime(QObject):
             self._cleanup_text,
         )
 
+    def check_autostart(self) -> None:
+        self._submit(autostart_status, self._autostart_text, kind="autostart")
+
+    def set_autostart_enabled(self, enabled: bool) -> None:
+        self._submit(
+            lambda: set_autostart(self.window.project_root, enabled=enabled),
+            self._autostart_text,
+            kind="autostart",
+        )
+
     def _submit(
         self,
         operation: Callable[[], Any],
         formatter: Callable[[dict[str, Any]], str],
+        *,
+        kind: str = "maintenance",
     ) -> None:
         if self._active is not None:
             return
         set_settings_action_busy(self.page, True)
+        self._active_kind = kind
+        if kind == "autostart":
+            self.page.autostart_feedback.setText("Sprawdzam autostart w tle…")
         job = _Job(operation)
         self._active = job
         job.signals.done.connect(
@@ -83,18 +101,23 @@ class SettingsActionRuntime(QObject):
             return
         self._active = None
         payload = dict(result) if isinstance(result, dict) else {}
-        set_settings_action_feedback(self.page, formatter(payload), True)
+        if self._active_kind == "autostart":
+            set_autostart_action_feedback(
+                self.page, formatter(payload), True
+            )
+        else:
+            set_settings_action_feedback(self.page, formatter(payload), True)
 
     @Slot(object, object)
     def _failed(self, job: _Job, _error: object) -> None:
         if self._active is not job:
             return
         self._active = None
-        set_settings_action_feedback(
-            self.page,
-            "Nie udało się zakończyć kontroli. Dane pozostały bez zmian.",
-            False,
-        )
+        text = "Nie udało się zakończyć kontroli. Dane pozostały bez zmian."
+        if self._active_kind == "autostart":
+            set_autostart_action_feedback(self.page, text, False)
+        else:
+            set_settings_action_feedback(self.page, text, False)
 
     @staticmethod
     def _health_text(value: dict[str, Any]) -> str:
@@ -117,6 +140,18 @@ class SettingsActionRuntime(QObject):
             f"{int(value.get('removed_cache_files', 0) or 0)} plików."
         )
 
+    @staticmethod
+    def _autostart_text(value: dict[str, Any]) -> str:
+        if not value.get("supported", True):
+            return "Autostart jest dostępny wyłącznie w Windows."
+        if not value.get("installed"):
+            return "Autostart: WYŁĄCZONY."
+        state = str(value.get("state") or "READY").upper()
+        return (
+            "Autostart: WŁĄCZONY — "
+            f"{'działa' if state == 'RUNNING' else 'gotowy'}."
+        )
+
 
 def _size(value: object) -> str:
     amount = max(0, int(value or 0))
@@ -131,6 +166,12 @@ def connect_settings_actions(window: Any) -> SettingsActionRuntime:
     runtime = SettingsActionRuntime(window)
     window.settings_page.health_requested.connect(runtime.check_health)
     window.settings_page.cleanup_requested.connect(runtime.cleanup)
+    window.settings_page.autostart_refresh_requested.connect(
+        runtime.check_autostart
+    )
+    window.settings_page.autostart_set_requested.connect(
+        runtime.set_autostart_enabled
+    )
     window._settings_action_runtime = runtime
     return runtime
 

@@ -146,6 +146,8 @@ class SettingsPage(QWidget):
     reset_requested = Signal()
     health_requested = Signal()
     cleanup_requested = Signal()
+    autostart_refresh_requested = Signal()
+    autostart_set_requested = Signal(bool)
 
     ACCENTS = (
         ("Błękit Jarvisa", "#4DA3FF"),

@@ -39,9 +39,21 @@ def test_settings_maintenance_buttons_emit_actions() -> None:
     events: list[str] = []
     page.health_requested.connect(lambda: events.append("health"))
     page.cleanup_requested.connect(lambda: events.append("cleanup"))
+    page.autostart_refresh_requested.connect(
+        lambda: events.append("autostart_check")
+    )
+    page.autostart_set_requested.connect(
+        lambda enabled: events.append(f"autostart_{enabled}")
+    )
 
     page.health_button.click()
     page.cleanup_button.click()
+    page.autostart_check_button.click()
+    page.autostart_on_button.click()
+    page.autostart_off_button.click()
 
-    assert events == ["health", "cleanup"]
+    assert events == [
+        "health", "cleanup", "autostart_check",
+        "autostart_True", "autostart_False",
+    ]
     page.deleteLater()
