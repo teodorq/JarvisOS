@@ -24,6 +24,7 @@ def apply_runtime_preferences(
     )
     client = getattr(owner_window, "client_window", None)
     if client is None:
+        _sync_power_watcher(owner_window)
         return profile
     halo = getattr(client, "halo", None)
     apply_halo = getattr(halo, "set_performance_profile", None)
@@ -42,6 +43,7 @@ def apply_runtime_preferences(
             "effects_enabled", True
         ))
         apply_sound(enabled=enabled, performance_profile=profile)
+    _sync_power_watcher(owner_window)
     return profile
 
 
@@ -58,6 +60,13 @@ def _set_runtime_timer(runtime: Any, interval: int) -> None:
     setter = getattr(timer, "setInterval", None)
     if callable(setter):
         setter(int(interval))
+
+
+def _sync_power_watcher(owner_window: Any) -> None:
+    watcher = getattr(owner_window, "_performance_power_watcher", None)
+    sync = getattr(watcher, "sync", None)
+    if callable(sync):
+        sync()
 
 
 __all__ = ["apply_runtime_preferences"]

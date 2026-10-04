@@ -6,6 +6,7 @@ from PySide6.QtCore import QTimer
 
 from app.gui.user_text_widgets import clean_user_visible_widgets
 from app.gui.remote_command_runtime import connect_remote_command_runtime
+from app.gui.performance_power_watcher import connect_performance_power_watcher
 
 OWNER_METRICS_INTERVAL_MS = 1000
 OWNER_FOREX_INTERVAL_MS = 5000
@@ -34,6 +35,7 @@ def connect_main_runtime(window: Any) -> None:
             window.voice.start()
         window._voice_runtime_connected = True
     connect_remote_command_runtime(window)
+    connect_performance_power_watcher(window)
     _connect_forex_activity_runtime(window)
     if not window._interface_ready or hasattr(window, "timer"):
         return
