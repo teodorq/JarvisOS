@@ -17,7 +17,8 @@ class BusinessDayIntelligenceService:
 
     INTENTS = {
         "day_overview", "day_review", "day_business_summary", "documents_recent",
-        "calendar_today_overview", "calendar_week_overview",
+        "calendar_today_overview", "calendar_tomorrow_overview",
+        "calendar_week_overview",
         "reminders_overview", "bills_overview", "advertising_overview",
         "trading_overview",
     }
@@ -39,6 +40,10 @@ class BusinessDayIntelligenceService:
             return self._documents_response(self._collect("documents"))
         if intent == "calendar_today_overview":
             return self._calendar_response(self._collect("calendar"))
+        if intent == "calendar_tomorrow_overview":
+            return self._calendar_tomorrow_response(
+                self._collect("calendar_tomorrow")
+            )
         if intent == "calendar_week_overview":
             return self._calendar_week_response(self._collect("calendar_week"))
         if intent == "reminders_overview":
@@ -63,6 +68,8 @@ class BusinessDayIntelligenceService:
             })
         elif scope == "calendar":
             calls["events"] = self._today_events
+        elif scope == "calendar_tomorrow":
+            calls["events"] = self._tomorrow_events
         elif scope == "calendar_week":
             calls["events"] = self._week_events
         elif scope == "documents":
@@ -121,6 +128,16 @@ class BusinessDayIntelligenceService:
         end = start + timedelta(days=days_to_next_monday)
         return list(self.online.calendar.find_events(
             "", start_at=start, end_at=end, max_results=50
+        ) or [])
+
+    def _tomorrow_events(self) -> list[dict[str, Any]]:
+        now = datetime.now().astimezone()
+        start = datetime.combine(
+            now.date() + timedelta(days=1), time.min, tzinfo=now.tzinfo,
+        )
+        return list(self.online.calendar.find_events(
+            "", start_at=start, end_at=start + timedelta(days=1),
+            max_results=20,
         ) or [])
 
     def _mail(self, scope: str) -> list[dict[str, Any]]:
@@ -258,6 +275,23 @@ class BusinessDayIntelligenceService:
 
     def _calendar_response(self, data: dict[str, Any]) -> str:
         return self._calendar(data)
+
+    def _calendar_tomorrow_response(self, data: dict[str, Any]) -> str:
+        if not data["available"].get("events", False):
+            return "Kalendarz: nie udało mi się teraz odczytać planu na jutro."
+        events = sorted(
+            (dict(item) for item in list(data.get("events", []) or [])),
+            key=lambda item: str(item.get("start_at", "")),
+        )
+        if not events:
+            return "Kalendarz: nie masz jutro zaplanowanych wydarzeń."
+        first = events[0]
+        title = self._clean(first.get("title")) or "wydarzenie"
+        return (
+            f"Kalendarz na jutro: masz "
+            f"{IntelligentDayQuality.event_count(len(events))}; pierwsze to "
+            f"„{title}” {self.daily._moment(first.get('start_at'))}."
+        )
 
     def _calendar_week_response(self, data: dict[str, Any]) -> str:
         if not data["available"].get("events", False):

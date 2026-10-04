@@ -14,7 +14,7 @@ from app.assistant.voice_runtime import VoiceRuntimeService
 from app.assistant.weather import WeatherService
 from app.assistant.status_formatter import AssistantStatusFormatter
 from app.core.project_paths import resolve_project_root
-from app.assistant.deferred_services import DEFERRED_STAGES, DeferredAssistantServices, deferred_matches
+from app.assistant.deferred_services import DEFERRED_STAGES, DeferredAssistantServices, deferred_matches, handle_deferred_natural_action
 from app.integrations import IntegrationStatusService
 from app.assistant.trading_runtime import LazyTradingRuntime
 class PersonalAssistantController:
@@ -249,8 +249,7 @@ class PersonalAssistantController:
             if direct_core:
                 response = self._dispatch(intent, text)
             elif natural_command:
-                response = self.natural_actions.handle(text)
-                intent = "natural_action"
+                response, intent = handle_deferred_natural_action(self.natural_actions, text)
             elif online_command:
                 response = self.online.handle(text)
                 intent = self.online.intent(text)
@@ -286,7 +285,6 @@ class PersonalAssistantController:
             except Exception:
                 raise RuntimeError("AutoDev: przechwycony wyjątek")
         return response
-
     def _conversation_target(self, intent: str, command: str) -> str:
         if intent == "weather":
             try:

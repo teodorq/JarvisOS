@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 import json
 import os
 from pathlib import Path
@@ -23,8 +23,18 @@ from app.natural_actions.models import NaturalActionRequest
 
 
 class _Calendar:
+    def __init__(self):
+        self.queries = []
+
     def today(self):
         return [{"title": "Rozmowa z klientem", "start_at": "2026-08-02T10:00:00+02:00"}]
+
+    def find_events(self, _query, *, start_at, end_at, max_results=20):
+        self.queries.append((start_at, end_at, max_results))
+        return [{
+            "title": "Planowanie projektu",
+            "start_at": start_at.replace(hour=9).isoformat(),
+        }]
 
 
 class _Gmail:
@@ -84,6 +94,7 @@ class DailyBusinessOverviewTests(unittest.TestCase):
             "Jaki jest mój plan dnia?": "day_overview",
             "Jak minął dzień?": "day_review",
             "Co mam dziś w kalendarzu?": "calendar_today_overview",
+            "Pokaż mój kalendarz na jutro": "calendar_tomorrow_overview",
             "Pokaż ostatnie dokumenty": "documents_recent",
             "Pokaż przypomnienia": "reminders_overview",
             "Podlicz rachunki do zapłaty": "bills_overview",
@@ -93,6 +104,31 @@ class DailyBusinessOverviewTests(unittest.TestCase):
         for command, expected in cases.items():
             with self.subTest(command=command):
                 self.assertEqual(classify_business_day(command)[0], expected)
+
+    def test_tomorrow_calendar_reads_exactly_one_future_day(self):
+        with TemporaryDirectory() as directory:
+            calendar = _Calendar()
+            online = SimpleNamespace(
+                project_root=Path(directory), provider=_Provider(),
+                calendar=calendar, gmail=_Gmail(), drive=_Drive(),
+                reminders=_Reminders(),
+            )
+            service = BusinessDayIntelligenceService(object(), online, _Daily())
+            request = NaturalActionRequest(
+                "Pokaż mój kalendarz na jutro", "",
+                "calendar_tomorrow_overview",
+            )
+            answer = service.execute(request)
+
+        start_at, end_at, limit = calendar.queries[-1]
+        self.assertEqual((end_at - start_at).days, 1)
+        self.assertEqual(
+            start_at.date(),
+            datetime.now().astimezone().date() + timedelta(days=1),
+        )
+        self.assertEqual(limit, 20)
+        self.assertIn("Kalendarz na jutro", answer)
+        self.assertIn("Planowanie projektu", answer)
 
     def test_bill_and_ad_amounts_are_exact_not_invented(self):
         result = EmailFinancialAnalyzer.analyze([

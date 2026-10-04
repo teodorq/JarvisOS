@@ -26,6 +26,7 @@ class ClientResultFormatter:
         "calendar_conflicts": "calendar",
         "calendar_status": "calendar",
         "calendar_today_overview": "calendar",
+        "calendar_tomorrow_overview": "calendar",
         "calendar_week_overview": "calendar",
         "drive_search": "documents",
         "drive_summarize": "documents",

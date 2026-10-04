@@ -215,6 +215,17 @@ class NaturalLanguageService:
                 intent="weather",
                 used_context=True,
             )
+        calendar_followup = self._calendar_followup(
+            cleaned,
+            last_intent=str(context.get("last_intent", "")),
+        )
+        if calendar_followup:
+            return ResolvedCommand(
+                original=original,
+                resolved=calendar_followup,
+                intent="natural_action",
+                used_context=True,
+            )
         temporal_determiner = bool(re.search(
             r"\b(?:ten|tego|te|to)\s+(?:tydzien|tygodnia|miesiac|miesiaca|rok|roku|kwartal|kwartalu|weekend|weekendu|dzien|dnia)\b",
             folded,
@@ -256,6 +267,27 @@ class NaturalLanguageService:
         if location:
             day = "jutro" if "jutro" in fold_text(last_command) else "dzisiaj"
             return f"Jaka jest pogoda {day} w {location.group(1).strip()}?"
+        return ""
+
+    @staticmethod
+    def _calendar_followup(command: str, *, last_intent: str) -> str:
+        calendar_intents = {
+            "calendar_today_overview",
+            "calendar_tomorrow_overview",
+            "calendar_week_overview",
+        }
+        if last_intent not in calendar_intents:
+            return ""
+        folded = fold_text(command).strip(" .,!?:;")
+        if folded in {"a jutro", "jutro"}:
+            return "Pokaż mój kalendarz na jutro"
+        if folded in {"a dzisiaj", "a dzis", "dzisiaj", "dzis"}:
+            return "Pokaż mój kalendarz na dziś"
+        if folded in {
+            "a ten tydzien", "ten tydzien", "a w tym tygodniu",
+            "w tym tygodniu",
+        }:
+            return "Pokaż mój kalendarz na ten tydzień"
         return ""
 
     @staticmethod

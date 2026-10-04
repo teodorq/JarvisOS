@@ -8,6 +8,7 @@ BUSINESS_DAY_INTENTS = {
     "day_review",
     "day_business_summary",
     "calendar_today_overview",
+    "calendar_tomorrow_overview",
     "calendar_week_overview",
     "documents_recent",
     "reminders_overview",
@@ -37,6 +38,11 @@ def classify_business_day(text: str) -> tuple[str, float] | None:
         "podsumowanie firmy", "jak poszedl biznes",
     )):
         return "day_business_summary", 0.99
+    if "kalendar" in value and any(phrase in value for phrase in (
+        "co mam jutro", "kalendarz na jutro", "jutrzejszy kalendarz",
+        "pokaz kalendarz na jutro", "plan w kalendarzu na jutro",
+    )):
+        return "calendar_tomorrow_overview", 0.99
     if "kalendar" in value and any(phrase in value for phrase in (
         "ten tydzien", "tym tygodniu", "kalendarz tygodnia",
         "najblizsze 7 dni", "najblizszych 7 dni",

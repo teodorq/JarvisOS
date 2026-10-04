@@ -37,6 +37,7 @@ GMAIL_URL = "https://mail.google.com/mail/u/0/#inbox"
 DRIVE_RECENT_URL = "https://drive.google.com/drive/u/0/recent"
 COMPANION_URLS = {
     **{intent: TODAY_CALENDAR_URL for intent in CALENDAR_COMPANION_INTENTS},
+    "calendar_tomorrow_overview": WEEK_CALENDAR_URL,
     "calendar_week_overview": WEEK_CALENDAR_URL,
     "documents_recent": DRIVE_RECENT_URL,
     "drive_search": DRIVE_RECENT_URL,

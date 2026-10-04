@@ -94,6 +94,14 @@ DEFERRED_STAGES = {
 }
 
 
+def handle_deferred_natural_action(service: Any, command: object) -> tuple[str, str]:
+    """Execute once and retain the exact understood intent for conversation memory."""
+    response = service.handle(command)
+    intent, confidence = service.understanding.classify(command)
+    remembered = intent if intent != "standard" and confidence >= 0.7 else "natural_action"
+    return response, remembered
+
+
 class LazyAssistantService:
     """Thread-safe proxy with deferred progress callback registration."""
 
