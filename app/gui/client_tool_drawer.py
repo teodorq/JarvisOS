@@ -4,7 +4,15 @@ from dataclasses import dataclass
 from typing import Any
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
+from PySide6.QtWidgets import (
+    QFrame,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QVBoxLayout,
+)
 
 from app.core.user_text import naturalize_user_text
 
@@ -18,6 +26,15 @@ class ClientToolAction:
 
 
 SAFE_CLIENT_ACTIONS: tuple[tuple[str, tuple[ClientToolAction, ...]], ...] = (
+    (
+        "JARVIS",
+        (
+            ClientToolAction("STATUS JARVIS", "Status asystenta"),
+            ClientToolAction("STAN KOMPUTERA", "Jaki jest stan komputera?"),
+            ClientToolAction("STATUS GŁOSU", "Status głosu"),
+            ClientToolAction("POGODA", "Jaka jest pogoda?"),
+        ),
+    ),
     (
         "MÓJ DZIEŃ",
         (
@@ -97,26 +114,37 @@ class ClientToolDrawer(QFrame):
         header.addWidget(close)
         outer.addLayout(header)
 
-        columns = QHBoxLayout()
-        columns.setSpacing(13)
+        self.search = QLineEdit()
+        self.search.setObjectName("ClientToolSearch")
+        self.search.setPlaceholderText("Szukaj funkcji, np. pogoda lub kalendarz…")
+        self.search.setClearButtonEnabled(True)
+        self.search.textChanged.connect(self._filter_actions)
+        outer.addWidget(self.search)
+
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(10)
+        grid.setVerticalSpacing(8)
         self.action_buttons: list[QPushButton] = []
+        self._indexed_actions: list[
+            tuple[str, ClientToolAction, QPushButton]
+        ] = []
+        index = 0
         for group, actions in SAFE_CLIENT_ACTIONS:
-            column = QVBoxLayout()
-            label = QLabel(group)
-            label.setObjectName("ClientToolsGroup")
-            column.addWidget(label)
             for action in actions:
                 button = QPushButton(action.label)
                 button.setObjectName("ClientToolAction")
                 button.setCursor(Qt.PointingHandCursor)
+                button.setToolTip(f"{group} • {action.command}")
                 button.clicked.connect(
                     lambda _checked=False, selected=action: self.run(selected)
                 )
                 self.action_buttons.append(button)
-                column.addWidget(button)
-            column.addStretch(1)
-            columns.addLayout(column, 1)
-        outer.addLayout(columns)
+                self._indexed_actions.append((group, action, button))
+                grid.addWidget(button, index // 4, index % 4)
+                index += 1
+        for column in range(4):
+            grid.setColumnStretch(column, 1)
+        outer.addLayout(grid)
 
     def toggle(self) -> None:
         self.setVisible(not self.isVisible())
@@ -124,7 +152,14 @@ class ClientToolDrawer(QFrame):
 
     def hide_tools(self) -> None:
         self.hide()
+        self.search.clear()
         self._sync_button()
+
+    def _filter_actions(self, text: str) -> None:
+        query = _search_key(text)
+        for group, action, button in self._indexed_actions:
+            haystack = _search_key(f"{group} {action.label} {action.command}")
+            button.setVisible(not query or query in haystack)
 
     def run(self, action: ClientToolAction) -> None:
         self.hide_tools()
@@ -145,3 +180,10 @@ class ClientToolDrawer(QFrame):
                 button.setText("ZAMKNIJ MENU" if self.isVisible() else "NARZĘDZIA")
                 return
             button.setText("MNIEJ" if self.isVisible() else "WIĘCEJ")
+
+
+def _search_key(value: object) -> str:
+    return str(value or "").casefold().translate(str.maketrans({
+        "ą": "a", "ć": "c", "ę": "e", "ł": "l", "ń": "n",
+        "ó": "o", "ś": "s", "ź": "z", "ż": "z",
+    }))

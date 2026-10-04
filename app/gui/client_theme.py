@@ -98,6 +98,7 @@ class ClientTheme:
         QLabel#ClientToolsTitle { color: #DFF8FF; font-size: 11px; font-weight: 700; letter-spacing: 2px; }
         QLabel#ClientToolsHint { color: #608CA0; font-size: 10px; }
         QLabel#ClientToolsGroup { color: #4ED7C1; font-size: 9px; font-weight: 700; letter-spacing: 2px; }
+        QLineEdit#ClientToolSearch { padding: 8px 12px; font-size: 12px; }
         QPushButton#ClientToolAction {
             text-align: left; color: #C6EAF7; background: rgba(6, 31, 47, 150);
             border: 1px solid rgba(51, 145, 182, 50); padding: 7px 8px; font-size: 9px; letter-spacing: 1px;

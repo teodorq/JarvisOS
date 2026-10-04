@@ -89,6 +89,38 @@ class TestB321B330ClientDailyTools(unittest.TestCase):
         self.assertEqual(window.submitted, [])
         window.close()
 
+    def test_search_filters_actions_without_diacritic_requirement(self) -> None:
+        window = _Window()
+        drawer = ClientToolDrawer(window)
+        drawer.show()
+
+        drawer.search.setText("glos")
+        self.app.processEvents()
+
+        visible = [
+            button.text()
+            for button in drawer.action_buttons
+            if not button.isHidden()
+        ]
+        self.assertEqual(visible, ["STATUS GŁOSU"])
+        drawer.hide_tools()
+        self.assertEqual(drawer.search.text(), "")
+        window.close()
+
+    def test_jarvis_group_exposes_real_client_safe_status_actions(self) -> None:
+        actions = dict(
+            (action.label, action.command)
+            for group, items in SAFE_CLIENT_ACTIONS
+            if group == "JARVIS"
+            for action in items
+        )
+        self.assertEqual(actions["STATUS JARVIS"], "Status asystenta")
+        self.assertEqual(actions["STAN KOMPUTERA"], "Jaki jest stan komputera?")
+        self.assertEqual(actions["STATUS GŁOSU"], "Status głosu")
+        self.assertEqual(actions["POGODA"], "Jaka jest pogoda?")
+        for command in actions.values():
+            self.assertEqual(ClientCapabilityPolicy.denial_message(command), "")
+
     def test_hud_integration_and_theme_stay_compact(self) -> None:
         root = Path(__file__).resolve().parents[1]
         hud = (root / "app/gui/client_hud_panels.py").read_text(encoding="utf-8")
