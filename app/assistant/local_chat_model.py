@@ -19,10 +19,10 @@ class LocalChatModel:
 
     def __init__(self, model: str | None = None, timeout: float | None = None) -> None:
         selected = str(
-            model or os.getenv("JARVIS_OS_CHAT_MODEL", "qwen3:4b-instruct")
+            model or os.getenv("JARVIS_OS_CHAT_MODEL", "gemma3:4b")
         ).strip()
         self.model = (
-            selected if _MODEL_NAME.fullmatch(selected) else "qwen3:4b-instruct"
+            selected if _MODEL_NAME.fullmatch(selected) else "gemma3:4b"
         )
         self.timeout = _bounded_timeout(
             timeout if timeout is not None else os.getenv("JARVIS_OS_CHAT_TIMEOUT_SECONDS", "30")

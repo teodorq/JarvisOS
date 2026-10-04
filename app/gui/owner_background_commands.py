@@ -65,8 +65,12 @@ class OwnerBackgroundCommandRuntime(QObject):
             self._show_busy()
             return
         planned = dict(thought)
-        self.window.console_page.set_state("WYKONUJĘ I SPRAWDZAM", "accent")
-        self.progress.start("executing")
+        chatting = planned.get("handler") == "free_conversation"
+        self.window.console_page.set_state(
+            "UKŁADAM ODPOWIEDŹ LOKALNIE" if chatting else "WYKONUJĘ I SPRAWDZAM",
+            "accent",
+        )
+        self.progress.start("chatting" if chatting else "executing")
         development = SelfDevelopmentConsoleSession.start(
             getattr(self.window, "project_root", None), planned
         )
@@ -149,9 +153,10 @@ class OwnerBackgroundCommandRuntime(QObject):
             self.window.console_page.set_state("GOTOWY NA POLECENIE", "healthy")
             self.window.say_safe(message)
             return
-        self.window.console_page.append("Jarvis: Oto co zrobię:")
-        for step in thought.get("plan", []):
-            self.window.console_page.append(f"• {step}")
+        if thought.get("handler") != "free_conversation":
+            self.window.console_page.append("Jarvis: Oto co zrobię:")
+            for step in thought.get("plan", []):
+                self.window.console_page.append(f"• {step}")
         if not thought.get("can_execute", False):
             self.window.console_page.append("Jarvis: Nie mogę bezpiecznie wykonać tej akcji.")
             self.window.console_page.set_state("POLECENIE ODRZUCONE", "danger")

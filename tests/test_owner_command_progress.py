@@ -30,12 +30,16 @@ def test_owner_progress_updates_only_the_status_bar() -> None:
     progress.start("executing")
     now[0] = 69.0
     progress._tick()
+    progress.start("chatting")
+    now[0] = 84.0
+    progress._tick()
     progress.stop()
     progress._tick()
 
     assert states == [
         ("ANALIZUJĘ POLECENIE • 7 S", "accent"),
         ("WYKONUJĘ I SPRAWDZAM • 12 S", "accent"),
+        ("UKŁADAM ODPOWIEDŹ LOKALNIE • 15 S", "accent"),
     ]
     assert progress.active is False
 

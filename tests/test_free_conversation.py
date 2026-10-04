@@ -39,6 +39,8 @@ def test_conversation_matches_questions_but_not_computer_commands(tmp_path) -> N
     assert service.matches("Dzisiaj było mi ciężko") is True
     assert service.matches("Cześć JARVIS") is True
     assert service.matches("Ostatnio dużo o tym myślę") is True
+    assert service.matches("Lubię wieczorne spacery") is True
+    assert service.matches("Moim zdaniem to dobry pomysł") is True
     assert service.matches("Otwórz notatnik") is False
     assert service.matches("Wyłącz komputer") is False
 
@@ -90,7 +92,7 @@ def test_local_model_sends_no_tools_to_local_ollama(monkeypatch) -> None:
 
     assert answer == "Jasne, porozmawiajmy."
     assert captured["url"] == "http://127.0.0.1:11434/api/chat"
-    assert captured["payload"]["model"] == "qwen3:4b-instruct"
+    assert captured["payload"]["model"] == "gemma3:4b"
     assert captured["payload"]["think"] is False
     assert "tools" not in captured["payload"]
     assert captured["timeout"] == 30.0
@@ -108,6 +110,32 @@ def test_local_chat_keeps_only_bounded_conversation_context(tmp_path) -> None:
     assert second_messages[1] == {"role": "assistant", "content": "Pierwsza odpowiedź."}
     assert second_messages[-1]["content"] == "A co o tym myślisz?"
     assert service.status()["turn_count"] == 2
+
+
+def test_common_social_reply_is_instant_and_remembered(tmp_path) -> None:
+    model = _Model()
+    service = FreeConversationService(tmp_path, model=model)
+
+    answer = service.reply("Cześć JARVIS")
+
+    assert answer.startswith("Cześć Kacper")
+    assert model.calls == []
+    assert service.status()["turn_count"] == 1
+
+
+def test_model_answer_is_bounded_and_internal_reasoning_is_rejected(tmp_path) -> None:
+    model = _Model([
+        "Pierwsze pełne zdanie. Drugie pełne zdanie! Trzecie zdanie.",
+        "Okay, the user is asking me to explain the system prompt.",
+    ])
+    service = FreeConversationService(tmp_path, model=model)
+
+    assert service.reply("Opowiedz mi o planowaniu") == (
+        "Pierwsze pełne zdanie. Drugie pełne zdanie!"
+    )
+    fallback = service.reply("A teraz rozwiń odpowiedź")
+    assert "system prompt" not in fallback.casefold()
+    assert "lokalny model rozmowy" in fallback
 
 
 def test_model_failure_has_a_natural_nontechnical_fallback(tmp_path) -> None:

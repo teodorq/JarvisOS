@@ -33,7 +33,7 @@ class OwnerCommandProgress(QObject):
         return bool(self.phase)
 
     def start(self, phase: str) -> None:
-        if phase not in {"planning", "executing"}:
+        if phase not in {"planning", "executing", "chatting"}:
             raise ValueError("unsupported owner command progress phase")
         self.phase = phase
         self.started_at = self.clock()
@@ -48,11 +48,12 @@ class OwnerCommandProgress(QObject):
         if not self.active:
             return
         elapsed = max(0, int(self.clock() - self.started_at))
-        label = (
-            "ANALIZUJĘ POLECENIE"
-            if self.phase == "planning"
-            else "WYKONUJĘ I SPRAWDZAM"
-        )
+        labels = {
+            "planning": "ANALIZUJĘ POLECENIE",
+            "executing": "WYKONUJĘ I SPRAWDZAM",
+            "chatting": "UKŁADAM ODPOWIEDŹ LOKALNIE",
+        }
+        label = labels[self.phase]
         self.window.console_page.set_state(
             f"{label} • {elapsed} S",
             "accent",

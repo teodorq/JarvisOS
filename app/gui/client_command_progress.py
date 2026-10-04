@@ -33,7 +33,7 @@ class ClientCommandProgress(QObject):
         return bool(self.phase)
 
     def start(self, phase: str) -> None:
-        if phase not in {"planning", "executing"}:
+        if phase not in {"planning", "executing", "chatting"}:
             raise ValueError("unsupported client command progress phase")
         self.phase = phase
         self.started_at = self.clock()
@@ -52,6 +52,10 @@ class ClientCommandProgress(QObject):
             state = "thinking"
             progress = min(42, 18 + (elapsed // 5) * 3)
             message = f"Nadal analizuję polecenie — {elapsed} s."
+        elif self.phase == "chatting":
+            state = "thinking"
+            progress = min(88, 48 + (elapsed // 5) * 3)
+            message = f"Nadal układam lokalną odpowiedź — {elapsed} s."
         else:
             state = "acting"
             progress = min(88, 58 + (elapsed // 5) * 2)

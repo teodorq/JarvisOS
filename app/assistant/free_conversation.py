@@ -28,6 +28,7 @@ _CONVERSATION_SIGNALS = (
     "ciesze sie", "jestem zmecz", "jest mi", "dziekuje", "dzieki",
     "ciezko", "smutno", "dobrze mi", "fajnie", "mam dobry humor",
     "czesc", "hej", "witaj", "dzien dobry", "dobry wieczor", "co slychac",
+    "dobranoc", "do zobaczenia", "na razie",
 )
 _QUESTION_STARTS = (
     "co ", "czym ", "kim ", "jak ", "dlaczego ", "czy ", "gdzie ",
@@ -36,7 +37,15 @@ _QUESTION_STARTS = (
 _STATEMENT_STARTS = (
     "dzisiaj ", "wczoraj ", "ostatnio ", "mysle ", "uwazam ",
     "zastanawiam sie ", "nie wiem ", "chce porozmawiac ",
+    "chcialbym porozmawiac ", "lubie ", "nie lubie ", "czuje ",
+    "boje sie ", "mam wrazenie ", "moim zdaniem ", "dla mnie ",
 )
+_INTERNAL_MARKERS = (
+    "okay, the user", "the user is asking", "i need to answer", "let me think",
+    "according to the instructions", "system prompt",
+)
+_ROLE_PREFIX = re.compile(r"^(?:jarvis(?: os)?|assistant|asystent)\s*:\s*", re.I)
+_ABBREVIATIONS = {"np.", "itp.", "itd.", "tj.", "dr.", "prof."}
 _SYSTEM = (
     "Jesteś JARVIS OS, prywatnym asystentem Kacpra. Rozmawiaj swobodnie, "
     "życzliwie i konkretnie, jak naturalny rozmówca z Polski, a nie instrukcja "
@@ -93,12 +102,15 @@ class FreeConversationService:
 
     def reply(self, command: object) -> str:
         text = normalize_user_command(command)[:2_000]
-        messages = self._messages()
-        messages.append({"role": "user", "content": text})
-        try:
-            answer = str(self.model.reply(messages, system=_SYSTEM) or "").strip()
-        except Exception:
-            answer = ""
+        answer = self._quick_reply(text)
+        if not answer:
+            messages = self._messages()
+            messages.append({"role": "user", "content": text})
+            try:
+                raw = self.model.reply(messages, system=_SYSTEM)
+            except Exception:
+                raw = ""
+            answer = _sanitize_model_answer(raw)
         if not answer:
             answer = self._fallback(text)
         answer = " ".join(answer.split())[:1_200]
@@ -156,6 +168,22 @@ class FreeConversationService:
         return data if isinstance(data, dict) else {"turns": [], "updated_at": ""}
 
     @staticmethod
+    def _quick_reply(text: str) -> str:
+        folded = fold_text(text).strip(" .,!?:;")
+        if re.fullmatch(
+            r"(?:czesc|hej|witaj|dzien dobry|dobry wieczor)(?: jarvis)?",
+            folded,
+        ):
+            return "Cześć Kacper. Jestem gotowy — o czym chcesz porozmawiać?"
+        if folded.startswith(("dziekuje", "dzieki")):
+            return "Nie ma za co. Jestem tutaj, gdy będziesz chciał porozmawiać albo coś zrobić."
+        if "jak sie masz" in folded or "co slychac" in folded:
+            return "Dobrze — działam i jestem gotowy do rozmowy. Co dziś chodzi Ci po głowie?"
+        if folded in {"dobranoc", "do zobaczenia", "na razie"}:
+            return "Do zobaczenia Kacper. Będę gotowy, gdy wrócisz."
+        return ""
+
+    @staticmethod
     def _fallback(text: str) -> str:
         folded = fold_text(text)
         if "dziekuj" in folded or "dzieki" in folded:
@@ -168,6 +196,32 @@ class FreeConversationService:
             "Chętnie o tym porozmawiam. Mój lokalny model rozmowy nie odpowiedział "
             "teraz na czas, więc spróbuj ponownie za chwilę albo rozwiń swoją myśl."
         )
+
+
+def _sanitize_model_answer(value: object) -> str:
+    text = str(value or "").strip()
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.I | re.S).strip()
+    text = _ROLE_PREFIX.sub("", text)
+    text = " ".join(text.split())
+    if not text or any(marker in text.casefold() for marker in _INTERNAL_MARKERS):
+        return ""
+
+    sentence_ends: list[int] = []
+    for match in re.finditer(r"[.!?](?=\s|$)", text):
+        word = text[:match.end()].rsplit(" ", 1)[-1].casefold()
+        if word in _ABBREVIATIONS:
+            continue
+        sentence_ends.append(match.end())
+        if len(sentence_ends) == 2:
+            return text[:match.end()]
+
+    if sentence_ends:
+        end = sentence_ends[0]
+        if text[end:].strip():
+            return text[:end]
+    if len(text) > 320:
+        return ""
+    return text if text.endswith((".", "!", "?")) else text.rstrip(" ,;:-") + "."
 
 
 __all__ = ["FreeConversationService"]

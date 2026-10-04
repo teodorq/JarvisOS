@@ -254,6 +254,9 @@ def test_client_command_progress_reports_liveness_without_finishing() -> None:
     progress.start("executing")
     now[0] = 130.0
     progress._tick()
+    progress.start("chatting")
+    now[0] = 145.0
+    progress._tick()
     progress.stop()
     progress._tick()
 
@@ -266,6 +269,11 @@ def test_client_command_progress_reports_liveness_without_finishing() -> None:
         "state": "acting",
         "message": "Nadal wykonuję i sprawdzam zadanie — 18 s.",
         "progress": 64,
+    }
+    assert events[2] == {
+        "state": "thinking",
+        "message": "Nadal układam lokalną odpowiedź — 15 s.",
+        "progress": 57,
     }
     assert all(event["progress"] < 100 for event in events)
     assert progress.active is False

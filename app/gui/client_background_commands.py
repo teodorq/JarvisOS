@@ -69,8 +69,11 @@ class ClientBackgroundCommandRuntime(QObject):
     def execute(self, thought: dict[str, Any]) -> bool:
         if self._closed or self.busy:
             return False
-        self.progress.start("executing")
         planned = dict(thought)
+        self.progress.start(
+            "chatting" if planned.get("handler") == "free_conversation"
+            else "executing"
+        )
         self._submit(lambda: self._execute(planned), self._after_execute)
         return True
 
@@ -159,9 +162,12 @@ class ClientBackgroundCommandRuntime(QObject):
         if outcome.status != "READY" or outcome.thought is None:
             self.window._finish_client_outcome(outcome)
             return
+        chatting = outcome.thought.get("handler") == "free_conversation"
         self.window._publish_client_event(
-            state="acting", message="Wykonuję zadanie i sprawdzam rezultat.",
-            progress=58,
+            state="thinking" if chatting else "acting",
+            message=("Układam odpowiedź lokalnie." if chatting else
+                     "Wykonuję zadanie i sprawdzam rezultat."),
+            progress=48 if chatting else 58,
             view_mode=view_mode_for_thought(outcome.thought),
         )
         if not self.execute(
