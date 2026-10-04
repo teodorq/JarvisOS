@@ -55,11 +55,17 @@ def _system_capacity() -> tuple[int, int]:
     return int(psutil.virtual_memory().total), int(psutil.cpu_count() or 1)
 
 
+def _running_on_battery() -> bool | None:
+    battery = psutil.sensors_battery()
+    return None if battery is None else not bool(battery.power_plugged)
+
+
 def load_performance_profile(
     project_root: str | Path | None = None,
     *,
     environment: dict[str, str] | None = None,
     system_probe: Callable[[], tuple[int, int]] | None = None,
+    battery_probe: Callable[[], bool | None] | None = None,
 ) -> PerformanceProfile:
     """Select a bounded UI profile without making startup depend on config I/O."""
     root = Path(project_root or resolve_project_root()).resolve()
@@ -91,6 +97,12 @@ def load_performance_profile(
         return LOW_RESOURCE
     if selected == "balanced":
         return BALANCED
+
+    try:
+        if (battery_probe or _running_on_battery)() is True:
+            return LOW_RESOURCE
+    except Exception:
+        pass
 
     try:
         total_memory, logical_cpus = (system_probe or _system_capacity)()

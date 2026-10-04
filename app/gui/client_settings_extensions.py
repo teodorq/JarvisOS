@@ -34,7 +34,7 @@ def install_client_settings_controls(window: Any, content: QVBoxLayout) -> None:
     form = QFormLayout()
     form.setHorizontalSpacing(16)
     window.client_performance = _combo((
-        ("Automatyczna — zalecana", "auto"),
+        ("Automatyczna — zalecana, oszczędza na baterii", "auto"),
         ("Oszczędna", "low_resource"),
         ("Pełna jakość", "balanced"),
     ))

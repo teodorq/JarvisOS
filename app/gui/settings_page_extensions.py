@@ -27,7 +27,7 @@ START_PAGES = (
     ("Ustawienia", "settings"),
 )
 PERFORMANCE_PROFILES = (
-    ("Automatyczna — zalecana", "auto"),
+    ("Automatyczna — zalecana, oszczędza na baterii", "auto"),
     ("Oszczędna — słabsze urządzenia", "low_resource"),
     ("Pełna jakość", "balanced"),
 )
