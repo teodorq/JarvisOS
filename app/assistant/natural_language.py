@@ -7,6 +7,7 @@ import re
 import unicodedata
 from typing import Any
 
+from app.assistant.conversation_context_policy import context_for_resolution
 from app.assistant.conversation_followups import resolve_contextual_followup
 from app.core.json_store import JsonStore
 from app.core.project_paths import resolve_project_root
@@ -174,7 +175,7 @@ class NaturalLanguageService:
         original = str(command).strip()
         cleaned = normalize_user_command(original)
         folded = fold_text(cleaned)
-        context = self.context.load()
+        context = context_for_resolution(self.context.load())
 
         if folded in {fold_text(item) for item in _REPEAT_PHRASES}:
             previous = str(context.get("last_command", "")).strip()
@@ -201,6 +202,12 @@ class NaturalLanguageService:
                     intent="continue",
                     used_context=True,
                 )
+            return ResolvedCommand(
+                original=original,
+                resolved=cleaned,
+                intent="clarification",
+                clarification="Nie mam świeżego polecenia do kontynuowania.",
+            )
 
         last_target = str(context.get("last_target", "")).strip()
         followup, followup_intent = resolve_contextual_followup(
