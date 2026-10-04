@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.core.user_text import naturalize_user_text
+from app.gui.client_context_suggestions import context_suggestions
 
 
 @dataclass(frozen=True)
@@ -114,6 +115,27 @@ class ClientToolDrawer(QFrame):
         header.addWidget(close)
         outer.addLayout(header)
 
+        self.suggestion_title = QLabel("JARVIS PROPONUJE")
+        self.suggestion_title.setObjectName("ClientSuggestionTitle")
+        outer.addWidget(self.suggestion_title)
+        suggestions = QHBoxLayout()
+        suggestions.setSpacing(8)
+        self.suggestion_buttons: list[QPushButton] = []
+        for index in range(3):
+            button = QPushButton()
+            button.setObjectName("ClientSuggestionAction")
+            button.setCursor(Qt.PointingHandCursor)
+            button.clicked.connect(
+                lambda _checked=False, selected=index: self._run_suggestion(
+                    selected
+                )
+            )
+            self.suggestion_buttons.append(button)
+            suggestions.addWidget(button, 1)
+        outer.addLayout(suggestions)
+        self._current_suggestions = ()
+        self._refresh_suggestions()
+
         self.search = QLineEdit()
         self.search.setObjectName("ClientToolSearch")
         self.search.setPlaceholderText("Szukaj funkcji, np. pogoda lub kalendarz…")
@@ -147,6 +169,8 @@ class ClientToolDrawer(QFrame):
         outer.addLayout(grid)
 
     def toggle(self) -> None:
+        if not self.isVisible():
+            self._refresh_suggestions()
         self.setVisible(not self.isVisible())
         self._sync_button()
 
@@ -160,6 +184,21 @@ class ClientToolDrawer(QFrame):
         for group, action, button in self._indexed_actions:
             haystack = _search_key(f"{group} {action.label} {action.command}")
             button.setVisible(not query or query in haystack)
+
+    def _refresh_suggestions(self) -> None:
+        period, suggestions = context_suggestions()
+        self._current_suggestions = suggestions
+        self.suggestion_title.setText(f"JARVIS PROPONUJE • {period}")
+        for button, suggestion in zip(self.suggestion_buttons, suggestions):
+            button.setText(suggestion.label)
+            button.setToolTip(suggestion.command)
+
+    def _run_suggestion(self, index: int) -> None:
+        if index < 0 or index >= len(self._current_suggestions):
+            return
+        command = self._current_suggestions[index].command
+        self.hide_tools()
+        self.window._submit_text(command)
 
     def run(self, action: ClientToolAction) -> None:
         self.hide_tools()

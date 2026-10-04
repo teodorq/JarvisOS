@@ -121,6 +121,16 @@ class TestB321B330ClientDailyTools(unittest.TestCase):
         for command in actions.values():
             self.assertEqual(ClientCapabilityPolicy.denial_message(command), "")
 
+    def test_context_suggestion_runs_through_normal_client_command(self) -> None:
+        window = _Window()
+        drawer = ClientToolDrawer(window)
+        expected = drawer._current_suggestions[0].command
+
+        drawer._run_suggestion(0)
+
+        self.assertEqual(window.submitted, [expected])
+        window.close()
+
     def test_hud_integration_and_theme_stay_compact(self) -> None:
         root = Path(__file__).resolve().parents[1]
         hud = (root / "app/gui/client_hud_panels.py").read_text(encoding="utf-8")
