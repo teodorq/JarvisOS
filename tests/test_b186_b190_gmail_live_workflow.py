@@ -140,6 +140,18 @@ class B186B190GmailLiveWorkflowTests(unittest.TestCase):
         self.assertIn("Anna", response)
         self.assertIn("from:anna@example.com", online.provider.queries[0][0])
 
+    def test_b186_important_and_unread_filters_use_exact_gmail_queries(self) -> None:
+        with TemporaryDirectory() as directory:
+            online = FakeOnline(directory)
+            service = self.service(directory, online)
+            important = service.handle("Pokaż ważne maile Gmail")
+            unread = service.handle("Pokaż nieprzeczytane maile Gmail")
+
+        self.assertEqual(online.provider.queries[0][0], "in:inbox is:important")
+        self.assertEqual(online.provider.queries[1][0], "in:inbox is:unread")
+        self.assertIn("ważnych wiadomości", important)
+        self.assertIn("nieprzeczytanych wiadomości", unread)
+
     def test_b187_reads_full_message_and_thread_from_selected_result(self) -> None:
         with TemporaryDirectory() as directory:
             online = FakeOnline(directory)

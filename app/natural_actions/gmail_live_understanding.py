@@ -53,6 +53,10 @@ def extract_gmail_live_slots(
             query = f'in:anywhere from:"{sender}"'
         elif subject:
             query = f'in:anywhere subject:"{subject}"'
+        elif any(word in folded for word in ("wazn", "priorytet", "piln")):
+            query = "in:inbox is:important"
+        elif any(word in folded for word in ("nieprzeczytan", "nieczytan")):
+            query = "in:inbox is:unread"
         elif any(word in folded for word in ("najnowsz", "ostatni", "skrzynk")):
             query = "in:inbox"
         else:

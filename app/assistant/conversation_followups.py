@@ -23,6 +23,9 @@ def resolve_contextual_followup(
     if resolved:
         return resolved, "natural_action"
     resolved = _day_followup(folded, last_intent=last_intent)
+    if resolved:
+        return resolved, "natural_action"
+    resolved = _gmail_followup(folded, last_intent=last_intent)
     return (resolved, "natural_action") if resolved else ("", "")
 
 
@@ -77,6 +80,25 @@ def _day_followup(folded: str, *, last_intent: str) -> str:
         "a dzisiaj", "a dzis", "dzisiaj", "dzis",
     }:
         return "Pokaż mój dzień"
+    return ""
+
+
+def _gmail_followup(folded: str, *, last_intent: str) -> str:
+    if last_intent not in {"gmail_search", "gmail_latest", "gmail_priority"}:
+        return ""
+    if folded in {
+        "a tylko wazne", "tylko wazne", "a wazne", "wazne",
+        "a priorytetowe", "priorytetowe", "a pilne", "pilne",
+    }:
+        return "Pokaż ważne maile Gmail"
+    if folded in {
+        "a nieprzeczytane", "nieprzeczytane", "a nieczytane", "nieczytane",
+    }:
+        return "Pokaż nieprzeczytane maile Gmail"
+    if folded in {
+        "a najnowsze", "najnowsze", "a ostatnie", "ostatnie",
+    }:
+        return "Pokaż najnowsze maile Gmail"
     return ""
 
 

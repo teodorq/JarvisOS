@@ -65,16 +65,21 @@ class GmailLiveNaturalActions:
     def execute(self, request: NaturalActionRequest) -> str:
         slots = request.slots
         if request.intent == "gmail_search":
-            results = self.center.search(str(slots.get("query", "in:inbox")), 10)
+            query = str(slots.get("query", "in:inbox"))
+            results = self.center.search(query, 10)
             if not results:
                 return "Nie znalazłem pasujących wiadomości Gmail."
+            kind = (
+                "ważnych" if "is:important" in query else
+                "nieprzeczytanych" if "is:unread" in query else "najnowszych"
+            )
             lines = [
                 f"{index}. {self._sender(item.get('from'))} — "
                 f"„{self._clip(item.get('subject') or '(bez tematu)', 110)}”"
                 for index, item in enumerate(results[:5], start=1)
             ]
             return (
-                f"Znalazłem {len(lines)} najnowszych wiadomości:\n"
+                f"Znalazłem {len(lines)} {kind} wiadomości:\n"
                 + "\n".join(lines)
                 + "\nAby przeczytać wiadomość, powiedz na przykład: "
                 "„Przeczytaj wiadomość numer 1”."
