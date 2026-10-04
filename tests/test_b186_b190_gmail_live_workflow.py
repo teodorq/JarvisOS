@@ -163,6 +163,16 @@ class B186B190GmailLiveWorkflowTests(unittest.TestCase):
         self.assertIn("Wątek ma 2 wiadomości", thread)
         self.assertIn("Druga wiadomość", thread)
 
+    def test_b187_numeric_selection_uses_the_exact_persisted_result(self) -> None:
+        with TemporaryDirectory() as directory:
+            service = self.service(directory)
+            service.handle("Pokaż najnowsze maile Gmail")
+            service.handle("Przeczytaj wiadomość numer 2")
+            selected = service.runtime.gmail_live.center.resolve_message()
+
+        self.assertEqual(selected["id"], "m2")
+        self.assertEqual(selected["subject"], "Raport")
+
     def test_b187_selected_message_survives_service_recreation(self) -> None:
         with TemporaryDirectory() as directory:
             online = FakeOnline(directory)

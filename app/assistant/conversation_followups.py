@@ -84,8 +84,32 @@ def _day_followup(folded: str, *, last_intent: str) -> str:
 
 
 def _gmail_followup(folded: str, *, last_intent: str) -> str:
-    if last_intent not in {"gmail_search", "gmail_latest", "gmail_priority"}:
+    if last_intent not in {
+        "gmail_search", "gmail_latest", "gmail_priority", "gmail_read",
+        "gmail_thread",
+    }:
         return ""
+    selection = re.sub(r"^a\s+", "", folded)
+    selection = re.sub(
+        r"^(?:otworz|przeczytaj|pokaz|wyswietl)\s+", "", selection,
+    )
+    selection = re.sub(r"^(?:mail|wiadomosc)\s+", "", selection)
+    selection = re.sub(r"\s+(?:mail|wiadomosc)$", "", selection)
+    selection = re.sub(r"^numer\s+", "", selection)
+    position = {
+        "pierwszy": 1, "pierwsza": 1, "1": 1,
+        "drugi": 2, "druga": 2, "2": 2,
+        "trzeci": 3, "trzecia": 3, "3": 3,
+        "czwarty": 4, "czwarta": 4, "4": 4,
+        "piaty": 5, "piata": 5, "5": 5,
+    }.get(selection)
+    if position:
+        return f"Przeczytaj wiadomość numer {position}"
+    if last_intent in {"gmail_read", "gmail_thread"} and folded in {
+        "a caly watek", "caly watek", "pokaz caly watek",
+        "przeczytaj caly watek",
+    }:
+        return "Pokaż cały wątek"
     if folded in {
         "a tylko wazne", "tylko wazne", "a wazne", "wazne",
         "a priorytetowe", "priorytetowe", "a pilne", "pilne",
