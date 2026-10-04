@@ -29,6 +29,9 @@
     "sound": {
         "effects_enabled": true
     },
+    "notifications": {
+        "desktop_enabled": true
+    },
     "features": {
         "business_dashboard": true,
         "autonomy_control_center": true,

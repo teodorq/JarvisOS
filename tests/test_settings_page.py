@@ -23,6 +23,9 @@ def test_settings_page_emits_complete_user_preferences() -> None:
         page.performance_profile.findData("low_resource")
     )
     page.sound_effects.setCurrentIndex(page.sound_effects.findData(False))
+    page.desktop_notifications.setCurrentIndex(
+        page.desktop_notifications.findData(False)
+    )
     emitted: list[dict] = []
     page.save_requested.connect(emitted.append)
 
@@ -33,6 +36,7 @@ def test_settings_page_emits_complete_user_preferences() -> None:
     assert emitted[0]["ui"]["start_page"] == "forex"
     assert emitted[0]["performance"]["profile"] == "low_resource"
     assert emitted[0]["sound"]["effects_enabled"] is False
+    assert emitted[0]["notifications"]["desktop_enabled"] is False
     page.deleteLater()
 
 

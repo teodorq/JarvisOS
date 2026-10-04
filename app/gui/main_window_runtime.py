@@ -7,6 +7,7 @@ from PySide6.QtCore import QTimer
 from app.gui.user_text_widgets import clean_user_visible_widgets
 from app.gui.remote_command_runtime import connect_remote_command_runtime
 from app.gui.performance_power_watcher import connect_performance_power_watcher
+from app.gui.system_tray import notify_tray_event
 
 OWNER_METRICS_INTERVAL_MS = 1000
 OWNER_FOREX_INTERVAL_MS = 5000
@@ -110,6 +111,9 @@ def _show_forex_paper_activity(window: Any) -> None:
     message = str(event.get("message", "")).strip()
     if window._interface_ready and message:
         window.console_page.append(f"Jarvis: {message}")
+    owner_visible = getattr(window, "isVisible", None)
+    if callable(owner_visible) and not owner_visible():
+        notify_tray_event(window, event)
     window.client_event_signal.emit(event)
 
 

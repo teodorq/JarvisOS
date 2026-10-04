@@ -42,6 +42,9 @@ DEFAULT_BUSINESS_CONFIG: dict[str, Any] = {
     "sound": {
         "effects_enabled": True,
     },
+    "notifications": {
+        "desktop_enabled": True,
+    },
     "features": {
         "business_dashboard": True,
         "autonomy_control_center": True,

@@ -39,6 +39,10 @@ def install_client_settings_controls(window: Any, content: QVBoxLayout) -> None:
         ("Pełna jakość", "balanced"),
     ))
     window.client_sounds = _combo((("Włączone", True), ("Wyłączone", False)))
+    window.client_desktop_notifications = _combo((
+        ("Włączone", True),
+        ("Wyłączone", False),
+    ))
     window.client_startup = _combo((
         ("Ostatnio używany ekran", "remember"),
         ("Rozmowa z JARVIS", "client"),
@@ -50,6 +54,7 @@ def install_client_settings_controls(window: Any, content: QVBoxLayout) -> None:
     ))
     form.addRow("Wydajność", window.client_performance)
     form.addRow("Dźwięki", window.client_sounds)
+    form.addRow("Powiadomienia Windows", window.client_desktop_notifications)
     form.addRow("Ekran po uruchomieniu", window.client_startup)
     form.addRow("Widoczność po uruchomieniu", window.client_start_minimized)
     layout.addLayout(form)
@@ -105,8 +110,13 @@ def show_client_settings_controls(window: Any) -> None:
     ui = dict(config.get("ui", {}) or {})
     performance = dict(config.get("performance", {}) or {})
     sound = dict(config.get("sound", {}) or {})
+    notifications = dict(config.get("notifications", {}) or {})
     _select(window.client_performance, performance.get("profile", "auto"))
     _select(window.client_sounds, bool(sound.get("effects_enabled", True)))
+    _select(
+        window.client_desktop_notifications,
+        bool(notifications.get("desktop_enabled", True)),
+    )
     _select(window.client_startup, ui.get("startup_mode", "remember"))
     _select(
         window.client_start_minimized,
@@ -128,6 +138,11 @@ def save_client_settings_controls(window: Any) -> None:
         },
         "performance": {"profile": window.client_performance.currentData()},
         "sound": {"effects_enabled": bool(window.client_sounds.currentData())},
+        "notifications": {
+            "desktop_enabled": bool(
+                window.client_desktop_notifications.currentData()
+            )
+        },
     })
     if getattr(window, "owner_window", None) is not None:
         window.owner_window.business_config = config

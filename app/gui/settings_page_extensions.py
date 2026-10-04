@@ -51,11 +51,16 @@ def install_settings_extensions(page: Any, content: Any) -> None:
         ("Włączone", True),
         ("Wyłączone", False),
     ))
+    page.desktop_notifications = _combo((
+        ("Włączone", True),
+        ("Wyłączone", False),
+    ))
     form.addRow("Ekran po uruchomieniu", page.startup_mode)
     form.addRow("Widoczność po uruchomieniu", page.start_minimized)
     form.addRow("Start panelu właściciela", page.start_page)
     form.addRow("Tryb wydajności", page.performance_profile)
     form.addRow("Dźwięki interfejsu", page.sound_effects)
+    form.addRow("Powiadomienia Windows", page.desktop_notifications)
     runtime.content_layout.addLayout(form)
     note = QLabel(
         "Zmiana wydajności i dźwięków działa od razu. Sposób uruchomienia "
@@ -130,6 +135,11 @@ def load_settings_extensions(page: Any, config: dict[str, Any]) -> None:
     _select(page.performance_profile, performance.get("profile", "auto"))
     sound = dict(config.get("sound", {}) or {})
     _select(page.sound_effects, bool(sound.get("effects_enabled", True)))
+    notifications = dict(config.get("notifications", {}) or {})
+    _select(
+        page.desktop_notifications,
+        bool(notifications.get("desktop_enabled", True)),
+    )
 
 
 def settings_extension_updates(page: Any) -> dict[str, Any]:
@@ -142,6 +152,9 @@ def settings_extension_updates(page: Any) -> dict[str, Any]:
         },
         "performance": {"profile": page.performance_profile.currentData()},
         "sound": {"effects_enabled": bool(page.sound_effects.currentData())},
+        "notifications": {
+            "desktop_enabled": bool(page.desktop_notifications.currentData())
+        },
     }
 
 

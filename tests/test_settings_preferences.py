@@ -33,12 +33,14 @@ def test_preferences_are_persisted_and_invalid_values_are_hardened(tmp_path) -> 
         },
         "performance": {"profile": "low_resource"},
         "sound": {"effects_enabled": False},
+        "notifications": {"desktop_enabled": False},
     })
     assert saved["ui"]["startup_mode"] == "client"
     assert saved["ui"]["start_page"] == "forex"
     assert saved["ui"]["start_minimized"] is True
     assert saved["performance"]["profile"] == "low_resource"
     assert saved["sound"]["effects_enabled"] is False
+    assert saved["notifications"]["desktop_enabled"] is False
 
     hardened = store.update({
         "ui": {
@@ -47,11 +49,13 @@ def test_preferences_are_persisted_and_invalid_values_are_hardened(tmp_path) -> 
             "start_minimized": "yes",
         },
         "performance": {"profile": "unbounded"},
+        "notifications": {"desktop_enabled": "no"},
     })
     assert hardened["ui"]["startup_mode"] == "remember"
     assert hardened["ui"]["start_page"] == "console"
     assert hardened["ui"]["start_minimized"] is False
     assert hardened["performance"]["profile"] == "auto"
+    assert hardened["notifications"]["desktop_enabled"] is True
 
 
 def test_business_preference_selects_real_performance_profile(tmp_path) -> None:

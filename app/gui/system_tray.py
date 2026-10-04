@@ -30,6 +30,7 @@ def install_system_tray(
     tray.activated.connect(
         lambda reason: _handle_activation(reason, window)
     )
+    tray.messageClicked.connect(lambda: show_jarvis_window(window))
     tray.show()
 
     # Qt objects without a lasting owner/reference can be collected early.
@@ -69,6 +70,26 @@ def quit_jarvis(app: QApplication, window: Any) -> None:
     app.quit()
 
 
+def notify_tray_event(window: Any, event: object) -> bool:
+    value = dict(event) if isinstance(event, dict) else {}
+    message = " ".join(str(value.get("message", "")).split())[:420]
+    config = dict(getattr(window, "business_config", {}) or {})
+    notifications = dict(config.get("notifications", {}) or {})
+    if not message or not bool(notifications.get("desktop_enabled", True)):
+        return False
+    tray = getattr(window, "_system_tray_icon", None)
+    if tray is None or not tray.supportsMessages():
+        return False
+    important = value.get("state") == "important"
+    icon = (
+        QSystemTrayIcon.MessageIcon.Warning
+        if important
+        else QSystemTrayIcon.MessageIcon.Information
+    )
+    tray.showMessage("JARVIS OS — Forex PAPER", message, icon, 10_000)
+    return True
+
+
 def _handle_activation(reason: object, window: Any) -> None:
     if reason in (
         QSystemTrayIcon.ActivationReason.Trigger,
@@ -79,6 +100,7 @@ def _handle_activation(reason: object, window: Any) -> None:
 
 __all__ = [
     "install_system_tray",
+    "notify_tray_event",
     "quit_jarvis",
     "should_start_in_tray",
     "show_jarvis_window",

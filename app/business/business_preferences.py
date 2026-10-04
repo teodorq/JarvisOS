@@ -37,5 +37,12 @@ def harden_user_preferences(config: dict[str, Any]) -> None:
     sound["effects_enabled"] = bool(sound.get("effects_enabled", True))
     config["sound"] = sound
 
+    notifications = dict(config.get("notifications", {}) or {})
+    desktop_enabled = notifications.get("desktop_enabled", True)
+    notifications["desktop_enabled"] = (
+        desktop_enabled if isinstance(desktop_enabled, bool) else True
+    )
+    config["notifications"] = notifications
+
 
 __all__ = ["harden_user_preferences"]

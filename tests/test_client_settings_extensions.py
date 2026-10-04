@@ -47,6 +47,9 @@ def test_client_settings_are_loaded_and_saved(tmp_path) -> None:
     window.client_sounds.setCurrentIndex(
         window.client_sounds.findData(False)
     )
+    window.client_desktop_notifications.setCurrentIndex(
+        window.client_desktop_notifications.findData(False)
+    )
     window.client_startup.setCurrentIndex(
         window.client_startup.findData("client")
     )
@@ -58,6 +61,7 @@ def test_client_settings_are_loaded_and_saved(tmp_path) -> None:
     saved = store.ensure()
     assert saved["performance"]["profile"] == "low_resource"
     assert saved["sound"]["effects_enabled"] is False
+    assert saved["notifications"]["desktop_enabled"] is False
     assert saved["ui"]["startup_mode"] == "client"
     assert saved["ui"]["start_minimized"] is True
     assert window.owner_window.business_config == saved

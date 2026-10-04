@@ -146,6 +146,26 @@ def test_owner_runtime_displays_and_forwards_activity() -> None:
     window.client_event_signal.emit.assert_called_once_with(event)
 
 
+def test_hidden_owner_routes_activity_to_windows_tray() -> None:
+    event = {"state": "important", "message": "Ochrona PAPER wymaga uwagi."}
+    window = SimpleNamespace(
+        isVisible=Mock(return_value=False),
+        assistant=SimpleNamespace(
+            trading=SimpleNamespace(
+                forex_activity=SimpleNamespace(poll=Mock(return_value=event))
+            )
+        ),
+        _interface_ready=False,
+        client_event_signal=SimpleNamespace(emit=Mock()),
+    )
+
+    with patch("app.gui.main_window_runtime.notify_tray_event") as notify:
+        _show_forex_paper_activity(window)
+
+    notify.assert_called_once_with(window, event)
+    window.client_event_signal.emit.assert_called_once_with(event)
+
+
 def test_owner_runtime_leaves_forex_feed_for_visible_client() -> None:
     feed = SimpleNamespace(poll=Mock())
     window = SimpleNamespace(
