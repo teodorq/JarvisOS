@@ -19,6 +19,7 @@ from app.core.runtime_maintenance import (
 )
 from app.core.windows_autostart import autostart_status, set_autostart
 from app.gui.client_background_reads import submit_client_read
+from app.gui.runtime_preferences import apply_runtime_preferences
 
 
 def install_client_settings_controls(window: Any, content: QVBoxLayout) -> None:
@@ -116,6 +117,9 @@ def save_client_settings_controls(window: Any) -> None:
     })
     if getattr(window, "owner_window", None) is not None:
         window.owner_window.business_config = config
+        apply_runtime_preferences(
+            window.owner_window, window.controller.project_root
+        )
 
 
 def _run_maintenance(window: Any, *, cleanup: bool) -> None:

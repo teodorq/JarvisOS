@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 import wave
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -12,6 +13,7 @@ from PySide6.QtCore import QObject
 from PySide6.QtWidgets import QApplication
 
 from app.gui.client_sound_theme import ClientSoundTheme
+from app.core.performance_profile import BALANCED, LOW_RESOURCE
 
 
 class TestB341B350CinematicSoundTheme(unittest.TestCase):
@@ -70,6 +72,19 @@ class TestB341B350CinematicSoundTheme(unittest.TestCase):
         self.assertEqual(theme.effects, {})
         theme.startup()
         theme.play("success")
+
+    def test_preferences_switch_sound_without_restart(self) -> None:
+        theme = ClientSoundTheme(QObject(), self.root)
+        with patch.dict(os.environ, {"QT_QPA_PLATFORM": ""}):
+            theme.apply_preferences(
+                enabled=True, performance_profile=BALANCED
+            )
+            self.assertTrue(theme.enabled)
+            self.assertIn("success", theme.effects)
+            theme.apply_preferences(
+                enabled=True, performance_profile=LOW_RESOURCE
+            )
+            self.assertFalse(theme.enabled)
 
     def test_theme_uses_lightweight_system_channel_instead_of_speech(self) -> None:
         source = (self.root / "app/gui/client_sound_theme.py").read_text(

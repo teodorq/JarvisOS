@@ -51,6 +51,23 @@ class ClientSoundTheme(QObject):
         if name:
             self._play(name)
 
+    def apply_preferences(
+        self,
+        *,
+        enabled: bool,
+        performance_profile: object,
+    ) -> None:
+        performance_enabled = bool(
+            getattr(performance_profile, "sound_theme_enabled", True)
+        )
+        self.enabled = (
+            bool(enabled)
+            and performance_enabled
+            and os.environ.get("QT_QPA_PLATFORM", "").casefold() != "offscreen"
+        )
+        if self.enabled and not self.effects:
+            self._prepare()
+
     def _play(self, name: str, *, force: bool = False) -> None:
         if not self.enabled:
             return

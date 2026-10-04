@@ -1,6 +1,5 @@
 from __future__ import annotations
 from time import perf_counter
-
 from PySide6.QtCore import QSize, QTimer
 from PySide6.QtWidgets import QWidget
 
@@ -8,6 +7,7 @@ from app.core.performance_profile import PerformanceProfile, load_performance_pr
 from app.gui.cinematic_orb_renderer import CinematicOrbRenderer
 from app.gui.orb_frame_budget import OrbFrameBudget
 from app.gui.orb_widget_painter import paint_orb_frame
+from app.gui.halo_performance_runtime import apply_halo_performance
 from app.gui.halo_visual_profile import ACCESSIBLE, COLORS, INTENSITY, SPEEDS
 
 class HaloWidget(QWidget):
@@ -75,6 +75,9 @@ class HaloWidget(QWidget):
             self.update()
             return
         self._timer.stop()
+
+    def set_performance_profile(self, profile: PerformanceProfile) -> None:
+        apply_halo_performance(self, profile)
 
     def set_state(self, state: object, progress: object | None = None) -> None:
         value = str(state or "idle").lower()

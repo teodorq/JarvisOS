@@ -53,8 +53,7 @@ def install_settings_extensions(page: Any, content: Any) -> None:
     form.addRow("Dźwięki interfejsu", page.sound_effects)
     runtime.content_layout.addLayout(form)
     note = QLabel(
-        "Zmiana wydajności i dźwięków zacznie w pełni działać po ponownym "
-        "uruchomieniu JARVIS OS."
+        "Zmiana wydajności i dźwięków działa od razu po zapisaniu."
     )
     note.setObjectName("Muted")
     note.setWordWrap(True)

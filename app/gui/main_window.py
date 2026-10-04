@@ -21,6 +21,7 @@ from app.gui.main_window_runtime import connect_main_runtime, prepare_owner_inte
 from app.gui.owner_page_loader import ensure_owner_page
 from app.gui.startup_mode import should_start_client
 from app.gui.settings_action_runtime import connect_settings_actions
+from app.gui.runtime_preferences import apply_runtime_preferences
 from app.system.monitor import SystemMonitor
 from app.voice.lazy_listener import LazyVoiceListener
 LEGACY_UI_LABELS = ("BUSINESS COMMAND CENTER", "COMMAND CONSOLE", "ORGANIZATION", "LICENSE & TRUST", "OWNER DEVELOPMENT LICENSE")
@@ -404,6 +405,7 @@ class MainWindow(BusinessCommandRuntimeMixin, QMainWindow):
         except Exception as error:
             self.settings_page.set_feedback(f"Błąd resetu: {error}", False)
     def _apply_runtime_config(self) -> None:
+        apply_runtime_preferences(self)
         self.setWindowTitle(str(self.business_config["product_name"]))
         self.organization_pill.setText(str(self.business_config["organization"]))
         self.environment_pill.setText(

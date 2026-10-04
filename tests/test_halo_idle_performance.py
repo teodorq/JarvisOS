@@ -12,7 +12,7 @@ try:
 
     from app.gui.halo_widget import HaloWidget
     from app.gui.orb_frame_budget import OrbFrameBudget
-    from app.core.performance_profile import LOW_RESOURCE
+    from app.core.performance_profile import BALANCED, LOW_RESOURCE
 
     HAS_QT = True
 except Exception:
@@ -20,6 +20,7 @@ except Exception:
     HaloWidget = None
     OrbFrameBudget = None
     LOW_RESOURCE = None
+    BALANCED = None
     HAS_QT = False
 
 
@@ -145,6 +146,20 @@ class HaloIdlePerformanceTests(unittest.TestCase):
             self.assertEqual(halo._timer.interval(), 80)  # noqa: SLF001
             halo.set_state("thinking")
             self.assertEqual(halo._timer.interval(), 50)  # noqa: SLF001
+        finally:
+            halo.set_animation_active(False)
+            halo.deleteLater()
+
+    def test_profile_can_switch_to_low_resource_without_restart(self) -> None:
+        halo = HaloWidget(performance_profile=BALANCED)
+        try:
+            halo.set_performance_profile(LOW_RESOURCE)
+            self.assertEqual(halo.performance_profile.name, "low_resource")
+            self.assertEqual(halo.particle_stride_multiplier, 2)
+            self.assertEqual(
+                halo._timer.interval(),  # noqa: SLF001
+                LOW_RESOURCE.idle_frame_interval_ms,
+            )
         finally:
             halo.set_animation_active(False)
             halo.deleteLater()

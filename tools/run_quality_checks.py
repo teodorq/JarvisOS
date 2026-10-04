@@ -13,6 +13,7 @@ QUICK_TESTS = (
     "tests/test_client_brain.py",
     "tests/test_client_ui_responsiveness.py",
     "tests/test_performance_profile.py",
+    "tests/test_runtime_preferences.py",
     "tests/test_settings_preferences.py",
     "tests/test_client_settings_extensions.py",
     "tests/test_windows_autostart.py",
