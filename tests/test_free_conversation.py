@@ -1,0 +1,141 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from types import SimpleNamespace
+
+from app.ai.client_brain import ClientBrain
+from app.assistant.free_conversation import FreeConversationService
+
+
+class _Model:
+    def __init__(self, answers: list[str] | None = None) -> None:
+        self.answers = list(answers or ["To jest naturalna odpowiedź."])
+        self.calls: list[tuple[list[dict[str, str]], str]] = []
+
+    def reply(self, messages, *, system):
+        self.calls.append((list(messages), system))
+        return self.answers.pop(0)
+
+    @staticmethod
+    def status():
+        return {"backend": "TEST_LOCAL", "remote": False, "tools": False}
+
+
+class _StandardAssistant:
+    @staticmethod
+    def resolve_command(command: str):
+        return SimpleNamespace(intent="standard", resolved=command)
+
+    @staticmethod
+    def matches(_command: object) -> bool:
+        return False
+
+
+def test_conversation_matches_questions_but_not_computer_commands(tmp_path) -> None:
+    service = FreeConversationService(tmp_path, model=_Model())
+
+    assert service.matches("Co myślisz o sztucznej inteligencji?") is True
+    assert service.matches("Dzisiaj było mi ciężko") is True
+    assert service.matches("Cześć JARVIS") is True
+    assert service.matches("Ostatnio dużo o tym myślę") is True
+    assert service.matches("Otwórz notatnik") is False
+    assert service.matches("Wyłącz komputer") is False
+
+    service.reply("Porozmawiajmy o planach")
+    assert service.matches("Napisz maila do Ani") is False
+    assert service.matches("Rozwijaj JARVIS dalej") is False
+
+
+def test_local_model_uses_bounded_cpu_profile(monkeypatch) -> None:
+    from app.assistant.local_chat_model import LocalChatModel
+
+    monkeypatch.setenv("JARVIS_OS_CHAT_CPU_THREADS", "200")
+    monkeypatch.setenv("JARVIS_OS_CHAT_GPU_LAYERS", "0")
+    model = LocalChatModel()
+
+    assert model.cpu_threads == 16
+    assert model.gpu_layers == 0
+    assert model.timeout == 30.0
+    assert model.status()["processor"] == "CPU"
+
+
+def test_local_model_sends_no_tools_to_local_ollama(monkeypatch) -> None:
+    from app.assistant import local_chat_model
+
+    captured = {}
+
+    class Response:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        @staticmethod
+        def read(_limit):
+            return json.dumps({"message": {"content": "Jasne, porozmawiajmy."}}).encode()
+
+    def fake_urlopen(request, timeout):
+        captured["url"] = request.full_url
+        captured["payload"] = json.loads(request.data.decode("utf-8"))
+        captured["timeout"] = timeout
+        return Response()
+
+    monkeypatch.setattr(local_chat_model.urllib.request, "urlopen", fake_urlopen)
+    model = local_chat_model.LocalChatModel()
+    answer = model.reply([{"role": "user", "content": "Cześć"}], system="test")
+
+    assert answer == "Jasne, porozmawiajmy."
+    assert captured["url"] == "http://127.0.0.1:11434/api/chat"
+    assert captured["payload"]["model"] == "qwen3:4b-instruct"
+    assert captured["payload"]["think"] is False
+    assert "tools" not in captured["payload"]
+    assert captured["timeout"] == 30.0
+
+
+def test_local_chat_keeps_only_bounded_conversation_context(tmp_path) -> None:
+    model = _Model(["Pierwsza odpowiedź.", "Druga odpowiedź."])
+    service = FreeConversationService(tmp_path, model=model)
+
+    assert service.reply("Porozmawiajmy o planach") == "Pierwsza odpowiedź."
+    assert service.reply("A co o tym myślisz?") == "Druga odpowiedź."
+
+    second_messages = model.calls[1][0]
+    assert second_messages[0] == {"role": "user", "content": "Porozmawiajmy o planach"}
+    assert second_messages[1] == {"role": "assistant", "content": "Pierwsza odpowiedź."}
+    assert second_messages[-1]["content"] == "A co o tym myślisz?"
+    assert service.status()["turn_count"] == 2
+
+
+def test_model_failure_has_a_natural_nontechnical_fallback(tmp_path) -> None:
+    class Broken:
+        def reply(self, *_args, **_kwargs):
+            raise TimeoutError
+
+    service = FreeConversationService(tmp_path, model=Broken())
+    answer = service.reply("Jestem zmęczony")
+
+    assert "chwila oddechu" in answer
+    assert "TimeoutError" not in answer
+
+
+def test_client_brain_routes_chat_without_loading_action_fallbacks(tmp_path) -> None:
+    brain = ClientBrain(Path(tmp_path))
+    brain.personal_assistant_controller = _StandardAssistant()
+    brain._free_conversation_service = FreeConversationService(
+        tmp_path, model=_Model(["Moim zdaniem warto zacząć spokojnie."])
+    )
+
+    thought = brain.think("Co myślisz o tym pomyśle?")
+    result = brain.execute(thought)
+
+    assert thought["handler"] == "free_conversation"
+    assert thought["read_only"] is True
+    assert thought["actions"] == []
+    assert result == "Moim zdaniem warto zacząć spokojnie."
+    assert brain._planner is None
+    assert brain._executor is None
+    assert brain._agent_loop is None

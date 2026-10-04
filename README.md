@@ -28,6 +28,7 @@ User memory, command history, Google tokens, voice models, logs, generated backu
 - Windows 10 or Windows 11
 - Python 3.13 (the checkpoint was verified with Python 3.13.7)
 - A microphone is optional
+- Ollama with `qwen3:4b-instruct` is optional for local free conversation
 - Azure and Google integrations are optional
 - Cartesia and ElevenLabs text-to-speech are optional
 - MetaTrader 5 desktop and its official Python package are optional for Forex PAPER data
@@ -36,9 +37,15 @@ User memory, command history, Google tokens, voice models, logs, generated backu
 
 1. Clone the repository and switch to the `develop` branch.
 2. Run `install.bat`.
-3. Run `start_jarvis.vbs` to start JARVIS OS without a console window.
+3. To enable local free conversation, install Ollama and run
+   `ollama pull qwen3:4b-instruct` once.
+4. Run `start_jarvis.vbs` to start JARVIS OS without a console window.
 
 The installer creates a local `.venv` environment. It uses `requirements-lock.txt` when available, so the verified package versions are reproducible.
+Free conversation stays on `127.0.0.1`, receives no tools and keeps only a
+bounded recent chat context. Ordinary actions, mail, calendar and trading keep
+their existing dedicated safety routes. If Ollama is unavailable, JARVIS uses a
+short nontechnical fallback instead of blocking the interface indefinitely.
 
 ## Tests
 

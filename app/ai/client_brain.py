@@ -5,6 +5,9 @@ from pathlib import Path
 from typing import Any
 
 from app.ai.cognitive_engine import CognitiveEngine
+from app.assistant.free_conversation_routing import (
+    execute_free_conversation, plan_free_conversation,
+)
 from app.core.project_paths import resolve_project_root
 from app.memory.memory import Memory
 
@@ -43,6 +46,9 @@ class ClientBrain:
                 thought["original_command"] = original
                 self.cognitive.after_plan(thought)
                 return thought
+        if (conversation := plan_free_conversation(self, normalized)) is not None:
+            self.cognitive.after_plan(conversation)
+            return conversation
         plan = self._get_planner().create_plan(normalized)
         self.cognitive.after_plan(plan)
         return {
@@ -61,6 +67,10 @@ class ClientBrain:
             from app.natural_actions.planned_execution import PlannedNaturalActionExecutor
 
             result = PlannedNaturalActionExecutor.execute(assistant, thought)
+            self._remember_execution(command, result)
+            return result
+        if thought.get("handler") == "free_conversation":
+            result = execute_free_conversation(self, command)
             self._remember_execution(command, result)
             return result
         actions = list(thought.get("actions", []) or [])

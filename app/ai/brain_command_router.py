@@ -4,6 +4,7 @@ from typing import Any
 from app.ai.actions import ActionTypes
 from app.assistant.controller import PersonalAssistantController
 from app.assistant.natural_language import normalize_user_command
+from app.assistant.free_conversation_routing import execute_free_conversation, plan_free_conversation
 from app.natural_actions.planned_execution import PlannedNaturalActionExecutor
 from app.ai.software_engineer.safe_autodev_preview_command import execute_safe_autodev_preview, plan_safe_autodev_preview
 from app.ai.software_engineer.safe_development_commands import execute_safe_development_command, plan_safe_development_command
@@ -81,6 +82,9 @@ class BrainCommandRouter:
             thought = {'command': command, 'goal': 'Obsłużyć polecenie AutoDev', 'plan': ['Przekazać polecenie do AutoDev Router', 'Wykonać operację AutoDev', 'Wygenerować raport'], 'actions': [], 'can_execute': True, 'handler': 'autodev'}
             brain.cognitive.after_plan(thought)
             return thought
+        if (conversation := plan_free_conversation(brain, command)) is not None:
+            brain.cognitive.after_plan(conversation)
+            return conversation
         plan = brain.planner.create_plan(command)
         brain.cognitive.after_plan(plan)
         return {'command': command, 'goal': plan.get('goal', ''), 'plan': plan.get('steps', []), 'actions': plan.get('actions', []), 'can_execute': plan.get('execute', False), 'handler': 'standard'}
@@ -114,6 +118,10 @@ class BrainCommandRouter:
                 if assistant is not None
                 else 'Asystent B96–B100 jest niedostępny.'
             )
+            brain._remember_execution(command, result)
+            return result
+        if handler == 'free_conversation':
+            result = execute_free_conversation(brain, command)
             brain._remember_execution(command, result)
             return result
         if handler == 'autonomous_software_engineer':
