@@ -272,7 +272,7 @@ class PersonalAssistantController:
             response = str(error).strip("'")
         except Exception as error:
             response = f"B96–B130: operacja nie powiodła się: {type(error).__name__}: {error}"
-        target = self.conversation.extract_target(text)
+        target = self._conversation_target(intent, text)
         if intent != "clear_context":
             self.conversation.context.update(
                 command=text,
@@ -286,6 +286,16 @@ class PersonalAssistantController:
             except Exception:
                 raise RuntimeError("AutoDev: przechwycony wyjątek")
         return response
+
+    def _conversation_target(self, intent: str, command: str) -> str:
+        if intent == "weather":
+            try:
+                return str(self.weather.parse_command(command).location)[:80]
+            except (ValueError, TypeError):
+                return ""
+            except Exception:
+                return ""
+        return self.conversation.extract_target(command)
     def set_progress_callback(self, callback: Any | None) -> None:
         self.assistant_v12.set_progress_callback(callback)
         self.online.set_progress_callback(callback)

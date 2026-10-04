@@ -202,6 +202,19 @@ class NaturalLanguageService:
                 )
 
         last_target = str(context.get("last_target", "")).strip()
+        weather_followup = self._weather_followup(
+            cleaned,
+            last_command=str(context.get("last_command", "")),
+            last_intent=str(context.get("last_intent", "")),
+            last_target=last_target,
+        )
+        if weather_followup:
+            return ResolvedCommand(
+                original=original,
+                resolved=weather_followup,
+                intent="weather",
+                used_context=True,
+            )
         temporal_determiner = bool(re.search(
             r"\b(?:ten|tego|te|to)\s+(?:tydzien|tygodnia|miesiac|miesiaca|rok|roku|kwartal|kwartalu|weekend|weekendu|dzien|dnia)\b",
             folded,
@@ -224,6 +237,26 @@ class NaturalLanguageService:
             intent=self.classify(cleaned),
             used_context=used_context,
         )
+
+    @staticmethod
+    def _weather_followup(
+        command: str,
+        *,
+        last_command: str,
+        last_intent: str,
+        last_target: str,
+    ) -> str:
+        if last_intent != "weather" or not last_target:
+            return ""
+        folded = fold_text(command).strip(" .,!?:;")
+        if folded in {"a jutro", "jutro", "a dzisiaj", "a dzis", "dzisiaj", "dzis"}:
+            day = "jutro" if "jutro" in folded else "dzisiaj"
+            return f"Jaka jest pogoda {day} w {last_target}?"
+        location = re.fullmatch(r"(?:a\s+)?w\s+([\w\s-]{2,80})", folded)
+        if location:
+            day = "jutro" if "jutro" in fold_text(last_command) else "dzisiaj"
+            return f"Jaka jest pogoda {day} w {location.group(1).strip()}?"
+        return ""
 
     @staticmethod
     def classify(command: object) -> str:
