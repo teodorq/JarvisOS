@@ -5,6 +5,7 @@ from pathlib import Path
 import re
 from typing import Any
 
+from app.assistant.conversation_reflexes import ConversationReflexService
 from app.assistant.local_chat_model import LocalChatModel
 from app.assistant.natural_language import fold_text, normalize_user_command
 from app.assistant.project_memory import ProjectMemoryService
@@ -73,6 +74,7 @@ class FreeConversationService:
     ) -> None:
         root = resolve_project_root(project_root)
         self.model = model or LocalChatModel()
+        self.reflexes = ConversationReflexService()
         self.memory = ProjectMemoryService(root)
         self.store = JsonStore(
             root / "data" / "assistant" / "free_conversation.json",
@@ -84,6 +86,8 @@ class FreeConversationService:
         folded = fold_text(text).strip(" .,!?:;")
         if not folded or any(folded.startswith(prefix) for prefix in _COMMAND_PREFIXES):
             return False
+        if self.reflexes.matches(text):
+            return True
         if any(signal in folded for signal in _CONVERSATION_SIGNALS):
             return True
         if folded.startswith(_QUESTION_STARTS) and len(folded.split()) >= 2:
@@ -109,7 +113,7 @@ class FreeConversationService:
 
     def reply(self, command: object) -> str:
         text = normalize_user_command(command)[:1_200]
-        answer = self._quick_reply(text)
+        answer = self.reflexes.reply(text)
         if not answer:
             answer = self._personal_memory_answer(text)
         if not answer:
@@ -139,6 +143,7 @@ class FreeConversationService:
             "personal_fact_count": len(
                 self.memory.list_preferences(category="personal_fact", limit=50)
             ),
+            "instant_reply_modes": self.reflexes.mode_count,
             "model": dict(model_status or {}),
         }
 
@@ -167,7 +172,7 @@ class FreeConversationService:
         folded = fold_text(text)
         memory_questions = (
             "co lubie", "co wole", "jak mam na imie", "co o mnie pamietasz",
-            "co pamietasz o mnie", "jakie sa moje preferencje",
+            "co pamietasz o mnie", "co o mnie wiesz", "jakie sa moje preferencje",
         )
         if not any(signal in folded for signal in memory_questions):
             return ""
@@ -223,22 +228,6 @@ class FreeConversationService:
     def _load(self) -> dict[str, Any]:
         data = self.store.load()
         return data if isinstance(data, dict) else {"turns": [], "updated_at": ""}
-
-    @staticmethod
-    def _quick_reply(text: str) -> str:
-        folded = fold_text(text).strip(" .,!?:;")
-        if re.fullmatch(
-            r"(?:czesc|hej|witaj|dzien dobry|dobry wieczor)(?: jarvis)?",
-            folded,
-        ):
-            return "Cześć Kacper. Jestem gotowy — o czym chcesz porozmawiać?"
-        if folded.startswith(("dziekuje", "dzieki")):
-            return "Nie ma za co. Jestem tutaj, gdy będziesz chciał porozmawiać albo coś zrobić."
-        if "jak sie masz" in folded or "co slychac" in folded:
-            return "Dobrze — działam i jestem gotowy do rozmowy. Co dziś chodzi Ci po głowie?"
-        if folded in {"dobranoc", "do zobaczenia", "na razie"}:
-            return "Do zobaczenia Kacper. Będę gotowy, gdy wrócisz."
-        return ""
 
     @staticmethod
     def _fallback(text: str) -> str:

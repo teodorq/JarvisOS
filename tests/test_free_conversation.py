@@ -181,6 +181,15 @@ def test_common_social_reply_is_instant_and_remembered(tmp_path) -> None:
     assert service.status()["turn_count"] == 1
 
 
+def test_asking_what_jarvis_knows_uses_explicit_memory(tmp_path) -> None:
+    ProjectMemoryService(tmp_path).remember_personal_fact("Lubię kawę")
+    model = _Model(["Nie powinno zostać użyte."])
+    service = FreeConversationService(tmp_path, model=model)
+
+    assert service.reply("Co o mnie wiesz?") == "Pamiętam: Lubię kawę."
+    assert model.calls == []
+
+
 def test_model_answer_is_bounded_and_internal_reasoning_is_rejected(tmp_path) -> None:
     model = _Model([
         "Pierwsze pełne zdanie. Drugie pełne zdanie! Trzecie zdanie.",
@@ -204,7 +213,7 @@ def test_model_failure_has_a_natural_nontechnical_fallback(tmp_path) -> None:
     service = FreeConversationService(tmp_path, model=Broken())
     answer = service.reply("Jestem zmęczony")
 
-    assert "chwila oddechu" in answer
+    assert "prosił o przerwę" in answer
     assert "TimeoutError" not in answer
 
 

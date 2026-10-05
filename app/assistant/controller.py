@@ -98,6 +98,7 @@ class PersonalAssistantController:
             "pamietaj, ze",
             "co o mnie pamietasz",
             "co pamietasz o mnie",
+            "co o mnie wiesz",
             "jakie moje informacje pamietasz",
             "jakie moje preferencje pamietasz",
             "zapomnij ze",

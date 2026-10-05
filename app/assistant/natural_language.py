@@ -270,7 +270,7 @@ class NaturalLanguageService:
             ("daily_status", ("centrum codziennej pracy", "status codziennej pracy")),
             ("remember_project", ("zapamietaj projekt", "dodaj projekt")),
             ("activate_project", ("ustaw aktywny projekt", "przelacz projekt")),
-            ("list_personal_memory", ("co o mnie pamietasz", "co pamietasz o mnie", "jakie moje informacje pamietasz", "jakie moje preferencje pamietasz")),
+            ("list_personal_memory", ("co o mnie pamietasz", "co pamietasz o mnie", "co o mnie wiesz", "jakie moje informacje pamietasz", "jakie moje preferencje pamietasz")),
             ("forget_personal_fact", ("zapomnij ze", "zapomnij, ze", "zapomnij o", "usun z pamieci")),
             ("remember_personal_fact", ("zapamietaj ze", "zapamietaj, ze", "zapamietaj sobie ze", "zapamietaj sobie, ze", "pamietaj ze", "pamietaj, ze")),
             ("remember_preference", ("zapamietaj preferencje", "ustaw preferencje")),
