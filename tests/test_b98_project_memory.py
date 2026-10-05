@@ -39,6 +39,34 @@ class B98ProjectMemoryTests(unittest.TestCase):
             self.assertEqual(resumed["title"], "Drugie")
             self.assertEqual(service.status()["interrupted_count"], 1)
 
+    def test_personal_facts_are_bounded_persistent_and_removable(self) -> None:
+        with TemporaryDirectory() as temporary:
+            service = ProjectMemoryService(temporary)
+            first = service.remember_personal_fact("Lubię kawę")
+            service.remember_personal_fact("Wolę krótkie odpowiedzi")
+
+            reloaded = ProjectMemoryService(temporary)
+            facts = reloaded.list_preferences(category="personal_fact")
+            self.assertEqual(len(facts), 2)
+            self.assertEqual(reloaded.find_personal_facts("kawie")[0]["value"], "Lubię kawę")
+            self.assertTrue(reloaded.remove_preference(first["key"]))
+            self.assertEqual(len(reloaded.list_preferences(category="personal_fact")), 1)
+
+    def test_regular_preferences_are_not_personal_facts(self) -> None:
+        with TemporaryDirectory() as temporary:
+            service = ProjectMemoryService(temporary)
+            service.set_preference("odpowiedzi", "krótkie")
+            self.assertEqual(service.list_preferences(category="personal_fact"), [])
+
+    def test_exact_fact_match_wins_over_similar_facts(self) -> None:
+        with TemporaryDirectory() as temporary:
+            service = ProjectMemoryService(temporary)
+            service.remember_personal_fact("Lubię kawę")
+            service.remember_personal_fact("Lubię herbatę")
+
+            matches = service.find_personal_facts("lubię kawę")
+            self.assertEqual([item["value"] for item in matches], ["Lubię kawę"])
+
 
 if __name__ == "__main__":
     unittest.main()

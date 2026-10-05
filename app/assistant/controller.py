@@ -89,6 +89,20 @@ class PersonalAssistantController:
             "przelacz projekt",
             "zapamietaj preferencje",
             "ustaw preferencje",
+            "zapamietaj ze",
+            "zapamietaj, ze",
+            "zapamietaj sobie ze",
+            "zapamietaj sobie, ze",
+            "pamietaj ze",
+            "pamietaj, ze",
+            "co o mnie pamietasz",
+            "co pamietasz o mnie",
+            "jakie moje informacje pamietasz",
+            "jakie moje preferencje pamietasz",
+            "zapomnij ze",
+            "zapomnij, ze",
+            "zapomnij o",
+            "usun z pamieci",
             "status glosu",
             "glos 2.0",
             "voice 2.0",
@@ -202,6 +216,7 @@ class PersonalAssistantController:
             "assistant_status",
             "conversation_status",
             "memory_status",
+            "list_personal_memory",
             "voice_status",
             "desktop_status",
             "daily_status",
@@ -358,6 +373,12 @@ class PersonalAssistantController:
             return self._activate_project(command)
         if intent == "remember_preference":
             return self._remember_preference(command)
+        if intent == "remember_personal_fact":
+            return self._remember_personal_fact(command)
+        if intent == "list_personal_memory":
+            return self._list_personal_memory()
+        if intent == "forget_personal_fact":
+            return self._forget_personal_fact(command)
         if intent == "add_workflow":
             title, steps = self.daily.parse_workflow_command(command)
             workflow = self.daily.create_workflow(title, steps)
@@ -435,6 +456,55 @@ class PersonalAssistantController:
             raise ValueError("Użyj: Zapamiętaj preferencję KLUCZ = WARTOŚĆ.")
         self.projects.set_preference(key, value)
         return f"B98: zapisano preferencję „{key}”."
+    def _remember_personal_fact(self, command: str) -> str:
+        match = re.match(
+            r"^(?:zapamiętaj|zapamietaj|pamiętaj|pamietaj)(?:\s+sobie)?\s*,?\s*(?:że|ze)\s+(.+)$",
+            command.strip(),
+            re.IGNORECASE,
+        )
+        if not match:
+            raise ValueError("Powiedz na przykład: Zapamiętaj, że lubię kawę.")
+        fact = " ".join(match.group(1).split()).strip(" .,:;")
+        if self._looks_sensitive(fact):
+            return (
+                "Nie zapiszę hasła, tokenu, kodu PIN ani danych płatniczych. "
+                "Takie informacje nie powinny trafiać do pamięci rozmowy."
+            )
+        saved = self.projects.remember_personal_fact(fact)
+        return f"Zapamiętam: {saved.get('value', fact)}."
+    def _list_personal_memory(self) -> str:
+        facts = self.projects.list_preferences(category="personal_fact", limit=10)
+        if not facts:
+            return "Nie mam jeszcze zapisanych informacji o Tobie."
+        values = [str(item.get("value", "")).strip() for item in facts]
+        return "Pamiętam:\n" + "\n".join(f"- {value}" for value in values if value)
+    def _forget_personal_fact(self, command: str) -> str:
+        query = re.sub(
+            r"^(?:zapomnij|usuń\s+z\s+pamięci|usun\s+z\s+pamieci)\s*"
+            r"(?:o\s+tym\s*)?(?:informacj(?:ę|e)\s*)?(?:,?\s*(?:że|ze|o)\s*)?",
+            "",
+            command.strip(),
+            flags=re.IGNORECASE,
+        ).strip(" .,:;")
+        if not query:
+            raise ValueError("Powiedz dokładnie, którą informację mam zapomnieć.")
+        matches = self.projects.find_personal_facts(query)
+        if not matches:
+            return "Nie znalazłem takiej informacji w pamięci."
+        if len(matches) > 1:
+            options = "; ".join(str(item.get("value", "")) for item in matches[:3])
+            return f"Znalazłem kilka podobnych informacji: {options}. Powiedz dokładniej, którą usunąć."
+        item = matches[0]
+        self.projects.remove_preference(item.get("key", ""))
+        return f"Zapomniałem: {item.get('value', query)}."
+    @staticmethod
+    def _looks_sensitive(value: object) -> bool:
+        text = fold_text(value)
+        markers = (
+            "haslo", "password", "token", "kod pin", "pin to", "cvv",
+            "numer karty", "klucz api", "api key", "sekret", "secret",
+        )
+        return any(marker in text for marker in markers)
     def _stability_runtime_status(self) -> dict[str, Any]:
         return {
             "conversation": self._conversation_status(),

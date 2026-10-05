@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from difflib import SequenceMatcher
+import hashlib
 from pathlib import Path
 import re
 from typing import Any
@@ -100,7 +102,9 @@ class ProjectMemoryService:
         self.store.save(data)
         return project
 
-    def set_preference(self, key: str, value: object) -> None:
+    def set_preference(
+        self, key: str, value: object, *, category: str = "preference",
+    ) -> None:
         clean_key = slug(key)
         if not clean_key:
             raise ValueError("Klucz preferencji nie może być pusty.")
@@ -109,6 +113,7 @@ class ProjectMemoryService:
         preferences[clean_key] = {
             "key": clean_key,
             "value": value,
+            "category": str(category).strip()[:40] or "preference",
             "updated_at": utc_now(),
         }
         data["preferences"] = preferences
@@ -118,6 +123,72 @@ class ProjectMemoryService:
     def get_preference(self, key: str, default: Any = None) -> Any:
         item = dict(self._load().get("preferences", {}).get(slug(key), {}) or {})
         return item.get("value", default)
+
+    def remember_personal_fact(self, fact: object) -> dict[str, Any]:
+        clean_fact = " ".join(str(fact).split()).strip(" .,:;")[:300]
+        if not clean_fact:
+            raise ValueError("Informacja do zapamiętania nie może być pusta.")
+        clean_fact = clean_fact[:1].upper() + clean_fact[1:]
+        digest = hashlib.sha256(clean_fact.casefold().encode("utf-8")).hexdigest()[:16]
+        key = f"personal-{digest}"
+        self.set_preference(key, clean_fact, category="personal_fact")
+        return dict(self._load().get("preferences", {}).get(key, {}) or {})
+
+    def list_preferences(
+        self, *, category: str | None = None, limit: int = 12,
+    ) -> list[dict[str, Any]]:
+        preferences = dict(self._load().get("preferences", {}) or {})
+        items = [dict(item or {}) for item in preferences.values()]
+        if category is not None:
+            items = [item for item in items if item.get("category") == category]
+        items.sort(key=lambda item: str(item.get("updated_at", "")), reverse=True)
+        return items[:max(0, min(int(limit), 50))]
+
+    def find_personal_facts(self, query: object) -> list[dict[str, Any]]:
+        needle = _search_text(query)
+        if not needle:
+            return []
+        matches: list[tuple[float, dict[str, Any]]] = []
+        for item in self.list_preferences(category="personal_fact", limit=50):
+            value = _search_text(item.get("value", ""))
+            if needle in value or value in needle:
+                score = 1.0
+            else:
+                score = SequenceMatcher(None, needle, value).ratio()
+                needle_words = [word for word in needle.split() if len(word) >= 4]
+                value_words = [word for word in value.split() if len(word) >= 4]
+                word_score = max(
+                    (
+                        SequenceMatcher(None, left, right).ratio()
+                        for left in needle_words
+                        for right in value_words
+                    ),
+                    default=0.0,
+                )
+                # A matching word helps with Polish inflection, but only a full
+                # fact match may receive the exact-match score.
+                score = max(score, word_score * 0.95)
+            if score >= 0.6:
+                matches.append((score, item))
+        matches.sort(
+            key=lambda match: (match[0], str(match[1].get("updated_at", ""))),
+            reverse=True,
+        )
+        if matches and matches[0][0] == 1.0:
+            matches = [match for match in matches if match[0] == 1.0]
+        return [item for _score, item in matches]
+
+    def remove_preference(self, key: object) -> bool:
+        clean_key = slug(key)
+        data = self._load()
+        preferences = dict(data.get("preferences", {}) or {})
+        if clean_key not in preferences:
+            return False
+        del preferences[clean_key]
+        data["preferences"] = preferences
+        data["updated_at"] = utc_now()
+        self.store.save(data)
+        return True
 
     def interrupt_task(
         self,
@@ -194,3 +265,7 @@ class ProjectMemoryService:
     def _load(self) -> dict[str, Any]:
         value = self.store.load()
         return value if isinstance(value, dict) else self._default()
+
+
+def _search_text(value: object) -> str:
+    return " ".join(slug(value).replace("-", " ").split())

@@ -83,6 +83,32 @@ class B96NaturalConversationTests(unittest.TestCase):
                 [],
             )
 
+    def test_user_controls_personal_conversation_memory(self) -> None:
+        with TemporaryDirectory() as temporary:
+            controller = PersonalAssistantController(temporary)
+            remember = controller.plan("Zapamiętaj, że lubię kawę")
+            self.assertEqual(remember["assistant_intent"], "remember_personal_fact")
+            self.assertFalse(remember["read_only"])
+            self.assertIn(
+                "lubię kawę",
+                controller.handle("Zapamiętaj, że lubię kawę").casefold(),
+            )
+
+            listing = controller.plan("Co o mnie pamiętasz?")
+            self.assertTrue(listing["read_only"])
+            self.assertIn("Lubię kawę", controller.handle("Co o mnie pamiętasz?"))
+            self.assertIn("Zapomniałem", controller.handle("Zapomnij o kawie"))
+            self.assertIn("Nie mam jeszcze", controller.handle("Co o mnie pamiętasz?"))
+
+    def test_sensitive_fact_is_not_saved(self) -> None:
+        with TemporaryDirectory() as temporary:
+            controller = PersonalAssistantController(temporary)
+            answer = controller.handle("Zapamiętaj, że hasło to sekret123")
+            self.assertIn("Nie zapiszę", answer)
+            self.assertEqual(
+                controller.projects.list_preferences(category="personal_fact"), []
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

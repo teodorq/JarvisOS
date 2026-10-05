@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 from app.ai.client_brain import ClientBrain
 from app.assistant.free_conversation import FreeConversationService
+from app.assistant.project_memory import ProjectMemoryService
 
 
 class _Model:
@@ -110,6 +111,36 @@ def test_local_chat_keeps_only_bounded_conversation_context(tmp_path) -> None:
     assert second_messages[1] == {"role": "assistant", "content": "Pierwsza odpowiedź."}
     assert second_messages[-1]["content"] == "A co o tym myślisz?"
     assert service.status()["turn_count"] == 2
+
+
+def test_only_explicit_personal_facts_are_shared_with_local_chat(tmp_path) -> None:
+    memory = ProjectMemoryService(tmp_path)
+    memory.set_preference("internal-setting", "nie pokazuj tego")
+    memory.remember_personal_fact("Lubię kawę")
+    model = _Model(["Pamiętam, że lubisz kawę."])
+    service = FreeConversationService(tmp_path, model=model)
+
+    assert service.reply("Porozmawiajmy o moich preferencjach") == (
+        "Pamiętam, że lubisz kawę."
+    )
+
+    messages, system = model.calls[0]
+    assert messages[0]["role"] == "user"
+    assert "Lubię kawę" in messages[0]["content"]
+    assert "nie pokazuj tego" not in str(messages)
+    assert "Lubię kawę" not in system
+    assert "nigdy nie dopowiadaj" in system
+    assert service.status()["personal_fact_count"] == 1
+
+
+def test_personal_memory_question_never_lets_model_invent_preferences(tmp_path) -> None:
+    memory = ProjectMemoryService(tmp_path)
+    memory.remember_personal_fact("Lubię kawę")
+    model = _Model(["Lubię też herbatę."])
+    service = FreeConversationService(tmp_path, model=model)
+
+    assert service.reply("Co lubię pić?") == "Pamiętam: Lubię kawę."
+    assert model.calls == []
 
 
 def test_common_social_reply_is_instant_and_remembered(tmp_path) -> None:
