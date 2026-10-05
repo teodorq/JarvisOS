@@ -5,7 +5,18 @@ from tempfile import TemporaryDirectory
 import unittest
 
 from app.assistant.controller import PersonalAssistantController
+from app.assistant.free_conversation import FreeConversationService
 from app.assistant.natural_language import NaturalLanguageService, normalize_user_command
+
+
+class _Model:
+    @staticmethod
+    def reply(_messages, *, system):
+        return "Porozmawiajmy spokojnie."
+
+    @staticmethod
+    def status():
+        return {"backend": "TEST_LOCAL"}
 
 
 class B96NaturalConversationTests(unittest.TestCase):
@@ -76,12 +87,16 @@ class B96NaturalConversationTests(unittest.TestCase):
     def test_clear_context_does_not_reinsert_the_clear_command(self) -> None:
         with TemporaryDirectory() as temporary:
             controller = PersonalAssistantController(temporary)
+            conversation = FreeConversationService(temporary, model=_Model())
+            conversation.reply("Porozmawiajmy o planach")
             controller.handle("Pokaż status asystenta")
-            controller.handle("Wyczyść kontekst rozmowy")
+            response = controller.handle("Wyczyść historię rozmowy")
             self.assertEqual(
                 controller.conversation.context.load()["turns"],
                 [],
             )
+            self.assertEqual(conversation.status()["turn_count"], 0)
+            self.assertIn("historię rozmowy", response)
 
     def test_user_controls_personal_conversation_memory(self) -> None:
         with TemporaryDirectory() as temporary:

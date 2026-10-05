@@ -113,6 +113,33 @@ def test_local_chat_keeps_only_bounded_conversation_context(tmp_path) -> None:
     assert service.status()["turn_count"] == 2
 
 
+def test_context_budget_keeps_personal_memory_after_longer_chat(tmp_path) -> None:
+    memory = ProjectMemoryService(tmp_path)
+    memory.remember_personal_fact("Lubię kawę")
+    model = _Model([f"Odpowiedź {index}." for index in range(6)])
+    service = FreeConversationService(tmp_path, model=model)
+
+    for index in range(5):
+        service.reply(f"Co myślisz o planie numer {index}?")
+    service.reply("Jak myślisz, co będzie dalej?")
+
+    messages, _system = model.calls[-1]
+    assert len(messages) <= 8
+    assert "Lubię kawę" in messages[0]["content"]
+    assert all(len(message["content"]) <= 800 for message in messages)
+
+
+def test_clear_history_preserves_explicit_personal_memory(tmp_path) -> None:
+    memory = ProjectMemoryService(tmp_path)
+    memory.remember_personal_fact("Lubię kawę")
+    service = FreeConversationService(tmp_path, model=_Model())
+    service.reply("Porozmawiajmy o planach")
+
+    assert service.clear_history() == 1
+    assert service.status()["turn_count"] == 0
+    assert service.status()["personal_fact_count"] == 1
+
+
 def test_only_explicit_personal_facts_are_shared_with_local_chat(tmp_path) -> None:
     memory = ProjectMemoryService(tmp_path)
     memory.set_preference("internal-setting", "nie pokazuj tego")

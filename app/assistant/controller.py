@@ -7,6 +7,7 @@ from typing import Any
 from app.assistant.daily_work import DailyWorkService
 from app.assistant.capability_guide import CapabilityGuideService
 from app.assistant.contextual_greeting import ContextualGreetingService
+from app.assistant.free_conversation import FreeConversationService
 from app.assistant.natural_language import NaturalLanguageService, ResolvedCommand, fold_text
 from app.assistant.project_memory import ProjectMemoryService
 from app.assistant.reliable_desktop import ReliableDesktopService
@@ -133,6 +134,8 @@ class PersonalAssistantController:
             "przypomnij mi",
             "eksportuj raport codziennej pracy",
             "wyczysc kontekst rozmowy",
+            "wyczysc historie rozmowy",
+            "zapomnij te rozmowe",
             "kontynuuj ostatnie zadanie",
             "jeszcze raz",
             "powtorz",
@@ -410,7 +413,12 @@ class PersonalAssistantController:
             return f"B100: zapisano przypomnienie na {reminder['due_at']}: {reminder['text']}"
         if intent == "clear_context":
             self.conversation.context.clear()
-            return "B96: wyczyszczono ograniczony kontekst rozmowy."
+            removed = FreeConversationService(self.project_root).clear_history()
+            return (
+                f"Wyczyszczono bieżący kontekst i historię rozmowy "
+                f"({removed} zapisanych wymian). Informacje, które kazałeś "
+                "zapamiętać na stałe, pozostały bez zmian."
+            )
         if "eksportuj raport codziennej pracy" in fold_text(command):
             report = self.daily.export_report()
             return f"B100: raport zapisany: {report['path']}"

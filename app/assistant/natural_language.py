@@ -253,7 +253,7 @@ class NaturalLanguageService:
         if exact in _GREETING_PHRASES:
             return "contextual_greeting"
         patterns = (
-            ("clear_context", ("wyczysc kontekst rozmowy",)),
+            ("clear_context", ("wyczysc kontekst rozmowy", "wyczysc historie rozmowy", "zapomnij te rozmowe")),
             ("capability_help", ("co potrafisz", "co umiesz", "co mozesz zrobic", "jakie masz funkcje", "pokaz pomoc", "pomoc jarvis", "jak z ciebie korzystac", "przyklady polecen", "lista polecen", "centrum mozliwosci")),
             ("current_time", ("ktora jest godzina", "jaka jest godzina", "podaj godzine", "powiedz mi godzine", "aktualna godzina", "jaka jest data", "podaj date", "podaj dzisiejsza date", "dzisiejsza data", "jaki mamy dzis dzien", "jaki mamy dzisiaj dzien", "jaki dzisiaj jest dzien", "jaki jest dzis dzien", "dzien tygodnia", "data i godzina", "date and time")),
             ("device_status", ("status komputera", "stan komputera", "obciazenie komputera", "ile mam baterii", "stan baterii", "poziom baterii", "jak dlugo dziala komputer", "czas pracy komputera", "uzycie procesora", "uzycie pamieci ram")),
