@@ -124,6 +124,33 @@ class B96NaturalConversationTests(unittest.TestCase):
                 controller.projects.list_preferences(category="personal_fact"), []
             )
 
+    def test_conversation_style_is_persistent_and_user_controlled(self) -> None:
+        with TemporaryDirectory() as temporary:
+            controller = PersonalAssistantController(temporary)
+            change = controller.plan("Mów krócej")
+            self.assertEqual(change["assistant_intent"], "conversation_style")
+            self.assertFalse(change["read_only"])
+            self.assertIn("krótki", controller.handle("Mów krócej"))
+
+            status = controller.plan("Jaki jest tryb rozmowy?")
+            self.assertTrue(status["read_only"])
+            self.assertIn("krótki", controller.handle("Jaki jest tryb rozmowy?"))
+            reloaded = PersonalAssistantController(temporary)
+            self.assertEqual(
+                reloaded.projects.get_preference("conversation_style"),
+                "concise",
+            )
+
+    def test_conversation_options_are_available_as_a_read_only_command(self) -> None:
+        with TemporaryDirectory() as temporary:
+            controller = PersonalAssistantController(temporary)
+            thought = controller.plan("Pokaż opcje rozmowy")
+
+            self.assertTrue(thought["read_only"])
+            answer = controller.handle("Pokaż opcje rozmowy")
+            self.assertIn("mów dokładniej", answer)
+            self.assertIn("rozmawiaj luźniej", answer)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -50,11 +50,33 @@ _INTERNAL_MARKERS = (
 )
 _ROLE_PREFIX = re.compile(r"^(?:jarvis(?: os)?|assistant|asystent)\s*:\s*", re.I)
 _ABBREVIATIONS = {"np.", "itp.", "itd.", "tj.", "dr.", "prof."}
+_STYLE_PROFILES = {
+    "concise": {
+        "sentences": 1,
+        "characters": 220,
+        "instruction": "Odpowiadaj jednym krótkim, konkretnym zdaniem.",
+    },
+    "neutral": {
+        "sentences": 2,
+        "characters": 320,
+        "instruction": "Odpowiadaj najwyżej w 2 krótkich, pełnych zdaniach.",
+    },
+    "detailed": {
+        "sentences": 4,
+        "characters": 640,
+        "instruction": "Odpowiadaj rzeczowo w maksymalnie 4 pełnych zdaniach i dodaj użyteczny szczegół.",
+    },
+    "casual": {
+        "sentences": 2,
+        "characters": 360,
+        "instruction": "Mów swobodnie i ciepło, najwyżej w 2 pełnych zdaniach, bez urzędowego tonu.",
+    },
+}
 _SYSTEM = (
     "Jesteś JARVIS OS, prywatnym asystentem Kacpra. Rozmawiaj swobodnie, "
     "życzliwie i konkretnie, jak naturalny rozmówca z Polski, a nie instrukcja "
     "obsługi. Używaj prostego, poprawnego języka i nie powtarzaj pytania. "
-    "Odpowiadaj najwyżej w 2 krótkich, pełnych zdaniach i zawsze dokończ ostatnie. "
+    "Zawsze dokończ ostatnie zdanie i stosuj ustawiony poniżej styl odpowiedzi. "
     "Pamiętaj kontekst podanej rozmowy, ale nie wymyślaj faktów ani danych "
     "bieżących. O użytkowniku uznawaj za prawdziwe wyłącznie informacje "
     "podane w bieżącej wiadomości albo w sekcji lokalnej pamięci; nigdy nie "
@@ -113,6 +135,7 @@ class FreeConversationService:
 
     def reply(self, command: object) -> str:
         text = normalize_user_command(command)[:1_200]
+        style = self._conversation_style()
         answer = self.reflexes.reply(text)
         if not answer:
             answer = self._personal_memory_answer(text)
@@ -123,12 +146,21 @@ class FreeConversationService:
                 messages.insert(0, {"role": "user", "content": memory_message})
             messages.append({"role": "user", "content": text})
             try:
-                raw = self.model.reply(messages, system=_SYSTEM)
+                raw = self.model.reply(messages, system=self._system_prompt(style))
             except Exception:
                 raw = ""
-            answer = _sanitize_model_answer(raw)
+            profile = _STYLE_PROFILES[style]
+            answer = _sanitize_model_answer(
+                raw,
+                max_sentences=int(profile["sentences"]),
+                max_characters=int(profile["characters"]),
+            )
         if not answer:
             answer = self._fallback(text)
+        if style == "concise":
+            answer = _sanitize_model_answer(
+                answer, max_sentences=1, max_characters=220,
+            )
         answer = " ".join(answer.split())[:1_200]
         self._remember(text, answer)
         return answer
@@ -144,8 +176,18 @@ class FreeConversationService:
                 self.memory.list_preferences(category="personal_fact", limit=50)
             ),
             "instant_reply_modes": self.reflexes.mode_count,
+            "conversation_style": self._conversation_style(),
             "model": dict(model_status or {}),
         }
+
+    def _conversation_style(self) -> str:
+        style = str(self.memory.get_preference("conversation_style", "neutral"))
+        return style if style in _STYLE_PROFILES else "neutral"
+
+    @staticmethod
+    def _system_prompt(style: str) -> str:
+        profile = _STYLE_PROFILES.get(style, _STYLE_PROFILES["neutral"])
+        return f"{_SYSTEM} {profile['instruction']}"
 
     def clear_history(self) -> int:
         count = len(list(self._load().get("turns", []) or []))
@@ -244,7 +286,9 @@ class FreeConversationService:
         )
 
 
-def _sanitize_model_answer(value: object) -> str:
+def _sanitize_model_answer(
+    value: object, *, max_sentences: int = 2, max_characters: int = 320,
+) -> str:
     text = str(value or "").strip()
     text = re.sub(r"<think>.*?</think>", "", text, flags=re.I | re.S).strip()
     text = _ROLE_PREFIX.sub("", text)
@@ -258,14 +302,20 @@ def _sanitize_model_answer(value: object) -> str:
         if word in _ABBREVIATIONS:
             continue
         sentence_ends.append(match.end())
-        if len(sentence_ends) == 2:
+        if len(sentence_ends) == max(1, max_sentences):
             return text[:match.end()]
 
     if sentence_ends:
-        end = sentence_ends[0]
-        if text[end:].strip():
-            return text[:end]
-    if len(text) > 320:
+        if len(text) > max(80, max_characters):
+            fitting = [
+                end for end in sentence_ends[:max_sentences]
+                if end <= max_characters
+            ]
+            return text[:fitting[-1]] if fitting else ""
+        if text[sentence_ends[-1]:].strip():
+            return text[:sentence_ends[-1]]
+        return text
+    if len(text) > max(80, max_characters):
         return ""
     return text if text.endswith((".", "!", "?")) else text.rstrip(" ,;:-") + "."
 

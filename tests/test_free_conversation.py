@@ -205,6 +205,41 @@ def test_model_answer_is_bounded_and_internal_reasoning_is_rejected(tmp_path) ->
     assert "lokalny model rozmowy" in fallback
 
 
+def test_persistent_conversation_styles_control_model_answer_length(tmp_path) -> None:
+    memory = ProjectMemoryService(tmp_path)
+    memory.set_preference(
+        "conversation_style", "concise", category="assistant_setting",
+    )
+    concise_model = _Model(["Pierwsze zdanie. Drugie zdanie. Trzecie zdanie."])
+    concise = FreeConversationService(tmp_path, model=concise_model)
+
+    assert concise.reply("Co myślisz o planowaniu?") == "Pierwsze zdanie."
+    assert "jednym krótkim" in concise_model.calls[0][1]
+    assert concise.status()["conversation_style"] == "concise"
+
+    memory.set_preference(
+        "conversation_style", "detailed", category="assistant_setting",
+    )
+    detailed_model = _Model(["Pierwsze. Drugie. Trzecie."])
+    detailed = FreeConversationService(tmp_path, model=detailed_model)
+
+    assert detailed.reply("Jak oceniasz ten pomysł?") == "Pierwsze. Drugie. Trzecie."
+    assert "maksymalnie 4" in detailed_model.calls[0][1]
+    assert detailed.status()["conversation_style"] == "detailed"
+
+
+def test_concise_style_also_shortens_instant_replies(tmp_path) -> None:
+    ProjectMemoryService(tmp_path).set_preference(
+        "conversation_style", "concise", category="assistant_setting",
+    )
+    service = FreeConversationService(tmp_path, model=_Model())
+
+    answer = service.reply("Jestem zestresowany")
+
+    assert answer.count(".") == 1
+    assert "Zatrzymajmy się" in answer
+
+
 def test_model_failure_has_a_natural_nontechnical_fallback(tmp_path) -> None:
     class Broken:
         def reply(self, *_args, **_kwargs):

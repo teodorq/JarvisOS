@@ -72,6 +72,22 @@ class PersonalAssistantController:
             "przyklady polecen",
             "lista polecen",
             "centrum mozliwosci",
+            "pokaz opcje rozmowy",
+            "jakie sa opcje rozmowy",
+            "jak mozemy rozmawiac",
+            "jaki jest tryb rozmowy",
+            "jaki tryb rozmowy",
+            "jak teraz odpowiadasz",
+            "mow krocej",
+            "odpowiadaj krotko",
+            "tryb rozmowy krotki",
+            "mow dokladniej",
+            "odpowiadaj dokladniej",
+            "tryb rozmowy dokladny",
+            "rozmawiaj luzniej",
+            "tryb rozmowy luzny",
+            "odpowiadaj normalnie",
+            "tryb rozmowy normalny",
             "status asystenta",
             "status b96",
             "status b97",
@@ -219,6 +235,8 @@ class PersonalAssistantController:
             "capability_help",
             "assistant_status",
             "conversation_status",
+            "conversation_options",
+            "conversation_style_status",
             "memory_status",
             "list_personal_memory",
             "voice_status",
@@ -358,6 +376,12 @@ class PersonalAssistantController:
             return self._format_full_status()
         if intent == "conversation_status":
             return self._format_conversation_status()
+        if intent == "conversation_options":
+            return self._format_conversation_options()
+        if intent == "conversation_style_status":
+            return self._format_conversation_style()
+        if intent == "conversation_style":
+            return self._set_conversation_style(command)
         if intent == "desktop_status":
             return self._format_desktop_status()
         if intent == "memory_status":
@@ -465,6 +489,41 @@ class PersonalAssistantController:
             raise ValueError("Użyj: Zapamiętaj preferencję KLUCZ = WARTOŚĆ.")
         self.projects.set_preference(key, value)
         return f"B98: zapisano preferencję „{key}”."
+    def _set_conversation_style(self, command: str) -> str:
+        text = fold_text(command)
+        if any(value in text for value in ("krocej", "krotko", "krotki")):
+            style, label = "concise", "krótki"
+        elif any(value in text for value in ("dokladniej", "dokladny")):
+            style, label = "detailed", "dokładny"
+        elif any(value in text for value in ("luzniej", "luzny")):
+            style, label = "casual", "luźny"
+        elif any(value in text for value in ("normalnie", "normalny")):
+            style, label = "neutral", "normalny"
+        else:
+            raise ValueError(
+                "Dostępne style rozmowy: krótki, dokładny, luźny i normalny."
+            )
+        self.projects.set_preference(
+            "conversation_style", style, category="assistant_setting",
+        )
+        return f"Ustawiłem {label} styl rozmowy."
+    def _format_conversation_style(self) -> str:
+        style = str(self.projects.get_preference("conversation_style", "neutral"))
+        labels = {
+            "concise": "krótki",
+            "detailed": "dokładny",
+            "casual": "luźny",
+            "neutral": "normalny",
+        }
+        return f"Aktualny styl rozmowy: {labels.get(style, 'normalny')}."
+    @staticmethod
+    def _format_conversation_options() -> str:
+        return (
+            "Możemy rozmawiać swobodnie, omawiać pomysły, decyzje, emocje, "
+            "plany, motywację i zapamiętane informacje. Style odpowiedzi: "
+            "„mów krócej”, „mów dokładniej”, „rozmawiaj luźniej” albo "
+            "„odpowiadaj normalnie”."
+        )
     def _remember_personal_fact(self, command: str) -> str:
         match = re.match(
             r"^(?:zapamiętaj|zapamietaj|pamiętaj|pamietaj)(?:\s+sobie)?\s*,?\s*(?:że|ze)\s+(.+)$",
