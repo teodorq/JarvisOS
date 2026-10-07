@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from app.assistant.free_conversation import FreeConversationService
+from app.assistant.conversation_topics import ConversationTopicBank
 
 
 class _NoModel:
@@ -82,3 +83,46 @@ def test_acknowledgements_are_marked_as_context_sensitive(tmp_path) -> None:
     assert service.reflexes.is_context_sensitive("Okej") is True
     assert service.reflexes.is_context_sensitive("Jestem zestresowany") is True
     assert service.reflexes.is_context_sensitive("Kim jesteś?") is False
+
+
+def test_topic_bank_provides_two_thousand_unique_conversation_starters() -> None:
+    bank = ConversationTopicBank()
+
+    suggestions = {
+        bank.suggestion(seed="test", variant=index)
+        for index in range(bank.variant_count)
+    }
+
+    assert bank.variant_count == 2_000
+    assert len(suggestions) == 2_000
+    assert all(suggestion.endswith("?") for suggestion in suggestions)
+
+
+@pytest.mark.parametrize(
+    "message",
+    (
+        "Podaj temat",
+        "O czym pogadamy?",
+        "O czym porozmawiamy?",
+        "Rzuć jakiś temat",
+        "Daj temat do rozmowy",
+        "Powiedz coś ciekawego",
+    ),
+)
+def test_more_natural_topic_requests_are_understood(
+    tmp_path, message: str,
+) -> None:
+    service = FreeConversationService(tmp_path, model=_NoModel())
+
+    assert service.matches(message) is True
+    assert service.reply(message).endswith("?")
+
+
+def test_repeated_topic_request_returns_a_fresh_suggestion(tmp_path) -> None:
+    service = FreeConversationService(tmp_path, model=_NoModel())
+
+    first = service.reply("Zaproponuj temat")
+    second = service.reply("Zaproponuj temat")
+
+    assert first != second
+    assert service.status()["conversation_starter_variants"] == 2_000

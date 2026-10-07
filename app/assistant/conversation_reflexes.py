@@ -3,10 +3,14 @@ from __future__ import annotations
 import re
 
 from app.assistant.natural_language import fold_text
+from app.assistant.conversation_topics import ConversationTopicBank
 
 
 class ConversationReflexService:
     """Instant, deterministic replies for common Polish conversation moments."""
+
+    def __init__(self) -> None:
+        self.topics = ConversationTopicBank()
 
     _RULES = (
         (
@@ -126,7 +130,13 @@ class ConversationReflexService:
         ),
         (
             "topic",
-            ("zaproponuj temat", "o czym mozemy porozmawiac", "wybierz temat rozmowy"),
+            (
+                "zaproponuj temat", "o czym mozemy porozmawiac",
+                "wybierz temat rozmowy", "podaj temat", "o czym pogadamy",
+                "o czym porozmawiamy", "rzuc jakis temat",
+                "daj temat do rozmowy", "zacznij rozmowe",
+                "powiedz cos ciekawego",
+            ),
             "Możemy porozmawiać o planach JARVIS-a, technologii, treningu, finansach albo czymś zupełnie luźnym. Wybierz nastrój: praktyczny, ciekawy czy zabawny?",
         ),
         (
@@ -160,6 +170,10 @@ class ConversationReflexService:
     def mode_count(self) -> int:
         return len(self._RULES) + len(self._ACKNOWLEDGEMENTS) + 4
 
+    @property
+    def conversation_variant_count(self) -> int:
+        return self.topics.variant_count
+
     def matches(self, value: object) -> bool:
         return bool(self.reply(value))
 
@@ -191,7 +205,7 @@ class ConversationReflexService:
             "success", "compliment",
         }
 
-    def reply(self, value: object) -> str:
+    def reply(self, value: object, *, variant: int = 0) -> str:
         folded = fold_text(value).strip(" .,!?:;")
         if not folded:
             return ""
@@ -208,8 +222,10 @@ class ConversationReflexService:
             return "Do zobaczenia Kacper. Będę gotowy, gdy wrócisz."
         if folded in self._ACKNOWLEDGEMENTS:
             return self._ACKNOWLEDGEMENTS[folded]
-        for _intent, signals, response in self._RULES:
+        for intent, signals, response in self._RULES:
             if any(signal in folded for signal in signals):
+                if intent == "topic":
+                    return self.topics.suggestion(seed=folded, variant=variant)
                 return response
         return ""
 

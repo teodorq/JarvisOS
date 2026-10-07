@@ -210,6 +210,7 @@ class FreeConversationService:
         if starts_new_topic:
             self.clear_history()
         recent_history = False if starts_new_topic else self._has_recent_history()
+        reflex_variant = len(list(self._load().get("turns", []) or []))
         if starts_new_topic and folded in _NEW_TOPIC_MARKERS:
             answer = "Jasne, zaczynamy nowy temat. O czym chcesz teraz porozmawiać?"
         elif folded in _CONVERSATION_FOLLOWUPS and not recent_history:
@@ -220,7 +221,7 @@ class FreeConversationService:
         elif starts_new_topic:
             answer = ""
         else:
-            reflex_answer = self.reflexes.reply(text)
+            reflex_answer = self.reflexes.reply(text, variant=reflex_variant)
             context_sensitive = self.reflexes.is_context_sensitive(text)
             needs_personalized_reply = context_sensitive and (
                 recent_history or len(folded.split()) > 7
@@ -252,7 +253,7 @@ class FreeConversationService:
                 max_characters=int(profile["characters"]),
             )
         if not answer and self.reflexes.is_context_sensitive(text):
-            answer = self.reflexes.reply(text)
+            answer = self.reflexes.reply(text, variant=reflex_variant)
         if not answer:
             answer = self._fallback(text)
         if style == "concise":
@@ -274,6 +275,9 @@ class FreeConversationService:
                 self.memory.list_preferences(category="personal_fact", limit=50)
             ),
             "instant_reply_modes": self.reflexes.mode_count,
+            "conversation_starter_variants": (
+                self.reflexes.conversation_variant_count
+            ),
             "conversation_style": self._conversation_style(),
             "model": dict(model_status or {}),
         }
