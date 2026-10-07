@@ -371,6 +371,33 @@ def test_default_natural_style_keeps_a_longer_complete_reply(tmp_path) -> None:
     assert service.status()["conversation_style"] == "natural"
 
 
+def test_long_answer_preserves_readable_paragraphs_and_list(tmp_path) -> None:
+    answer = (
+        "Najpierw ustalmy cel.\n\n"
+        "Potem podzielmy pracę na krótkie etapy.\n\n"
+        "- Pierwszy etap ma być prosty.\n"
+        "- Drugi etap powinien dać widoczny efekt."
+    )
+    model = _Model([answer])
+    service = FreeConversationService(tmp_path, model=model)
+
+    result = service.reply("Pomóż mi dobrze zaplanować ten projekt")
+
+    assert result == answer
+    assert "\n\n" in result
+    assert "\n- Pierwszy etap" in result
+    assert "krótkie, czytelne akapity" in model.calls[0][1]
+
+
+def test_answer_collapses_excess_blank_lines_without_flattening_text(tmp_path) -> None:
+    model = _Model(["Pierwszy akapit.\n\n\n\nDrugi akapit."])
+    service = FreeConversationService(tmp_path, model=model)
+
+    result = service.reply("Opowiedz mi o dobrym planie")
+
+    assert result == "Pierwszy akapit.\n\nDrugi akapit."
+
+
 def test_followup_answer_does_not_start_with_dangling_ellipsis(tmp_path) -> None:
     model = _Model(["...rozbijmy ten temat na mniejsze części. Od czego zaczynamy?"])
     service = FreeConversationService(tmp_path, model=model)
