@@ -49,6 +49,22 @@ _FOLLOWUP_PROMPTS = {
     "rozwin ostatnia odpowiedz": (
         "Rozwiń poprzednią odpowiedź, zachowując jej temat i dodając nowe szczegóły."
     ),
+    "wrocmy do poprzedniego tematu": (
+        "Kontynuuj przywrócony poprzedni temat dokładnie od miejsca, w którym "
+        "rozmowa została przerwana."
+    ),
+    "wroc do poprzedniego tematu": (
+        "Kontynuuj przywrócony poprzedni temat dokładnie od miejsca, w którym "
+        "rozmowa została przerwana."
+    ),
+    "wrocmy do wczesniejszej rozmowy": (
+        "Kontynuuj przywrócony poprzedni temat dokładnie od miejsca, w którym "
+        "rozmowa została przerwana."
+    ),
+    "przywroc poprzedni temat": (
+        "Kontynuuj przywrócony poprzedni temat dokładnie od miejsca, w którym "
+        "rozmowa została przerwana."
+    ),
 }
 _CONVERSATION_FOLLOWUPS = set(_FOLLOWUP_PROMPTS) | {
     "kontynuuj rozmowe", "rozwin to", "opowiedz wiecej", "powiedz wiecej",
@@ -56,6 +72,12 @@ _CONVERSATION_FOLLOWUPS = set(_FOLLOWUP_PROMPTS) | {
 }
 _STANDALONE_QUESTION_COMMANDS = {
     "zadaj mi pytanie", "zapytaj mnie o cos", "zadaj ciekawe pytanie",
+}
+_RETURN_TOPIC_COMMANDS = {
+    "wrocmy do poprzedniego tematu",
+    "wroc do poprzedniego tematu",
+    "wrocmy do wczesniejszej rozmowy",
+    "przywroc poprzedni temat",
 }
 _NEW_TOPIC_MARKERS = {
     "zmienmy temat",
@@ -169,7 +191,11 @@ class FreeConversationService:
         self.store = JsonStore(
             root / "data" / "assistant" / "free_conversation.json",
             lambda: {
-                "version": "1.1", "turns": [], "updated_at": "", "sequence": 0,
+                "version": "1.2",
+                "turns": [],
+                "previous_turns": [],
+                "updated_at": "",
+                "sequence": 0,
             },
         )
 
@@ -212,11 +238,25 @@ class FreeConversationService:
         style = self._conversation_style()
         folded = fold_text(text).strip(" .,!?:;")
         starts_new_topic = _starts_new_topic(folded)
+        restores_topic = folded in _RETURN_TOPIC_COMMANDS
+        restored_topic = False
         if starts_new_topic:
-            self.clear_history()
-        recent_history = False if starts_new_topic else self._has_recent_history()
+            self._begin_new_topic()
+        elif restores_topic:
+            restored_topic = self._restore_previous_topic()
+        if restores_topic:
+            recent_history = restored_topic
+        elif starts_new_topic:
+            recent_history = False
+        else:
+            recent_history = self._has_recent_history()
         reflex_variant = self._conversation_sequence()
-        if (
+        if restores_topic and not restored_topic:
+            answer = (
+                "Nie mam zapisanego poprzedniego tematu. Zacznij nowy wątek, "
+                "a później będziemy mogli do niego wrócić."
+            )
+        elif (
             folded in _STANDALONE_QUESTION_COMMANDS
             and not recent_history
         ):
@@ -294,6 +334,9 @@ class FreeConversationService:
                 self.reflexes.conversation_category_count
             ),
             "conversation_sequence": self._conversation_sequence(),
+            "previous_topic_available": bool(
+                self._load().get("previous_turns", [])
+            ),
             "conversation_style": self._conversation_style(),
             "model": dict(model_status or {}),
         }
@@ -313,12 +356,44 @@ class FreeConversationService:
         data = self._load()
         count = len(list(data.get("turns", []) or []))
         self.store.save({
-            "version": "1.1",
+            "version": "1.2",
             "turns": [],
+            "previous_turns": [],
             "updated_at": datetime.now(timezone.utc).isoformat(),
             "sequence": self._conversation_sequence(data),
         })
         return count
+
+    def _begin_new_topic(self) -> None:
+        data = self._load()
+        current = list(data.get("turns", []) or [])[-20:]
+        previous = (
+            current
+            if current
+            else list(data.get("previous_turns", []) or [])[-20:]
+        )
+        self.store.save({
+            "version": "1.2",
+            "turns": [],
+            "previous_turns": previous,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "sequence": self._conversation_sequence(data),
+        })
+
+    def _restore_previous_topic(self) -> bool:
+        data = self._load()
+        previous = list(data.get("previous_turns", []) or [])[-20:]
+        if not previous:
+            return False
+        current = list(data.get("turns", []) or [])[-20:]
+        self.store.save({
+            "version": "1.2",
+            "turns": previous,
+            "previous_turns": current,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "sequence": self._conversation_sequence(data),
+        })
+        return True
 
     def has_recent_history(self) -> bool:
         return self._has_recent_history()
@@ -416,7 +491,7 @@ class FreeConversationService:
             "user": user[:1_200], "assistant": assistant[:2_600],
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
-        data["version"] = "1.1"
+        data["version"] = "1.2"
         data["turns"] = turns[-20:]
         data["sequence"] = previous_sequence + 1
         data["updated_at"] = datetime.now(timezone.utc).isoformat()
@@ -449,7 +524,11 @@ class FreeConversationService:
     def _load(self) -> dict[str, Any]:
         data = self.store.load()
         return data if isinstance(data, dict) else {
-            "version": "1.1", "turns": [], "updated_at": "", "sequence": 0,
+            "version": "1.2",
+            "turns": [],
+            "previous_turns": [],
+            "updated_at": "",
+            "sequence": 0,
         }
 
     @staticmethod

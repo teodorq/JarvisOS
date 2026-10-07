@@ -215,6 +215,60 @@ def test_explicit_new_topic_discards_old_chat_context(tmp_path) -> None:
     assert "rozwoju projektu" not in service.recap()
 
 
+def test_previous_topic_can_be_restored_with_its_original_context(tmp_path) -> None:
+    model = _Model([
+        "Plan projektu zaczniemy od celu.",
+        "Podróż zacznijmy planować od terminu.",
+        "Wróćmy więc do ustalania celu projektu.",
+    ])
+    service = FreeConversationService(tmp_path, model=model)
+    service.reply("Porozmawiajmy o rozwoju projektu")
+    service.reply("Zmieńmy temat. Porozmawiajmy o podróżach")
+
+    answer = service.reply("Wróćmy do poprzedniego tematu")
+
+    messages = model.calls[2][0]
+    assert "ustalania celu projektu" in answer
+    assert "rozwoju projektu" in str(messages)
+    assert "Podróż zacznijmy" not in str(messages)
+    assert "przywrócony poprzedni temat" in messages[-1]["content"]
+    assert service.status()["previous_topic_available"] is True
+
+
+def test_return_to_missing_previous_topic_is_honest_and_instant(tmp_path) -> None:
+    model = _Model(["Nie powinno zostać użyte."])
+    service = FreeConversationService(tmp_path, model=model)
+
+    answer = service.reply("Przywróć poprzedni temat")
+
+    assert "Nie mam zapisanego poprzedniego tematu" in answer
+    assert model.calls == []
+
+
+def test_legacy_conversation_store_gains_previous_topic_without_data_loss(
+    tmp_path,
+) -> None:
+    path = tmp_path / "data" / "assistant" / "free_conversation.json"
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps({
+        "version": "1.1",
+        "turns": [{
+            "user": "Porozmawiajmy o starym projekcie",
+            "assistant": "Zacznijmy od jego celu.",
+            "created_at": "",
+        }],
+        "updated_at": "",
+        "sequence": 7,
+    }), encoding="utf-8")
+    service = FreeConversationService(tmp_path, model=_Model())
+
+    service.reply("Zmieńmy temat")
+
+    assert service.status()["previous_topic_available"] is True
+    assert service.status()["conversation_sequence"] == 8
+    assert "starym projekcie" not in service.recap()
+
+
 @pytest.mark.parametrize(
     "command",
     (
@@ -313,6 +367,7 @@ def test_clear_history_preserves_explicit_personal_memory(tmp_path) -> None:
     assert service.clear_history() == 1
     assert service.status()["turn_count"] == 0
     assert service.status()["conversation_sequence"] == 1
+    assert service.status()["previous_topic_available"] is False
     assert service.status()["personal_fact_count"] == 1
 
 
