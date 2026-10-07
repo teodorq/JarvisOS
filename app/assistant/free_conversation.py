@@ -156,6 +156,37 @@ _STYLE_PROFILES = {
         ),
     },
 }
+_QUESTION_MODE_INSTRUCTIONS = {
+    "balanced": (
+        "Pytanie na końcu zadawaj tylko wtedy, gdy naturalnie pomaga ono "
+        "rozwinąć rozmowę; nie rób tego mechanicznie w każdej odpowiedzi."
+    ),
+    "engaged": (
+        "Częściej podtrzymuj rozmowę: gdy to możliwe, zakończ dokładnie jednym "
+        "krótkim i trafnym pytaniem związanym z bieżącym tematem."
+    ),
+    "none": (
+        "Nie kończ odpowiedzi pytaniem i nie proś użytkownika o dalsze "
+        "wyjaśnienia. Przekaż możliwie pełną odpowiedź oznajmującą."
+    ),
+}
+_QUESTION_MODE_SIGNALS = {
+    "none": (
+        "nie zadawaj mi pytan",
+        "nie koncz odpowiedzi pytaniem",
+        "odpowiadaj bez pytan",
+    ),
+    "engaged": (
+        "zadawaj mi wiecej pytan",
+        "pytaj mnie czesciej",
+        "podtrzymuj rozmowe pytaniami",
+    ),
+    "balanced": (
+        "pytaj naturalnie",
+        "zadawaj pytania tylko gdy maja sens",
+        "normalny tryb pytan",
+    ),
+}
 _SYSTEM = (
     "Jesteś JARVIS OS, prywatnym asystentem Kacpra. Rozmawiaj swobodnie, "
     "życzliwie i konkretnie, jak naturalny rozmówca z Polski, a nie instrukcja "
@@ -202,6 +233,8 @@ class FreeConversationService:
     def matches(self, command: object) -> bool:
         text = normalize_user_command(command)
         folded = fold_text(text).strip(" .,!?:;")
+        if _requested_question_mode(folded):
+            return True
         if _starts_new_topic(folded):
             return True
         if folded in _CONVERSATION_FOLLOWUPS:
@@ -235,7 +268,11 @@ class FreeConversationService:
 
     def reply(self, command: object) -> str:
         text = normalize_user_command(command)[:1_200]
+        requested_question_mode = _requested_question_mode(text)
+        if requested_question_mode:
+            return self.set_question_mode(text)
         style = self._conversation_style()
+        question_mode = self._question_mode()
         folded = fold_text(text).strip(" .,!?:;")
         starts_new_topic = _starts_new_topic(folded)
         restores_topic = folded in _RETURN_TOPIC_COMMANDS
@@ -312,6 +349,7 @@ class FreeConversationService:
             answer = _sanitize_model_answer(
                 answer, max_sentences=1, max_characters=220,
             )
+        answer = _apply_question_mode(answer, question_mode)
         answer = _normalize_output_whitespace(answer)
         self._remember(text, answer)
         return answer
@@ -338,6 +376,7 @@ class FreeConversationService:
                 self._load().get("previous_turns", [])
             ),
             "conversation_style": self._conversation_style(),
+            "conversation_question_mode": self._question_mode(),
             "model": dict(model_status or {}),
         }
 
@@ -347,10 +386,43 @@ class FreeConversationService:
             return "natural"
         return style if style in _STYLE_PROFILES else "natural"
 
-    @staticmethod
-    def _system_prompt(style: str) -> str:
+    def _question_mode(self) -> str:
+        mode = str(
+            self.memory.get_preference("conversation_question_mode", "balanced")
+        )
+        return mode if mode in _QUESTION_MODE_INSTRUCTIONS else "balanced"
+
+    def set_question_mode(self, command: object) -> str:
+        mode = _requested_question_mode(command)
+        if not mode:
+            raise ValueError(
+                "Dostępne tryby pytań: bez pytań, naturalny i częstsze pytania."
+            )
+        self.memory.set_preference(
+            "conversation_question_mode", mode, category="assistant_setting",
+        )
+        labels = {
+            "none": "Nie będę kończyć odpowiedzi pytaniami.",
+            "balanced": "Będę zadawać pytania tylko wtedy, gdy naturalnie pomagają.",
+            "engaged": "Będę częściej podtrzymywać rozmowę jednym trafnym pytaniem.",
+        }
+        return labels[mode]
+
+    def question_mode_status(self) -> str:
+        labels = {
+            "none": "bez pytań",
+            "balanced": "naturalny",
+            "engaged": "pytaj częściej",
+        }
+        return f"Aktualny tryb pytań: {labels[self._question_mode()]}."
+
+    def _system_prompt(self, style: str) -> str:
         profile = _STYLE_PROFILES.get(style, _STYLE_PROFILES["natural"])
-        return f"{_SYSTEM} {profile['instruction']}"
+        question_instruction = _QUESTION_MODE_INSTRUCTIONS[self._question_mode()]
+        return (
+            f"{_SYSTEM} {profile['instruction']} "
+            f"Nadrzędna preferencja użytkownika: {question_instruction}"
+        )
 
     def clear_history(self) -> int:
         data = self._load()
@@ -570,6 +642,26 @@ def _starts_new_topic(folded: str) -> bool:
         if any(folded.startswith(marker + separator) for separator in (" ", ".", ":", "-")):
             return True
     return False
+
+
+def _requested_question_mode(value: object) -> str:
+    folded = fold_text(value).strip(" .,!?:;")
+    for mode, signals in _QUESTION_MODE_SIGNALS.items():
+        if any(signal in folded for signal in signals):
+            return mode
+    return ""
+
+
+def _apply_question_mode(value: object, mode: str) -> str:
+    text = _normalize_output_whitespace(value)
+    if mode == "none" and text.endswith("?"):
+        without_question = re.sub(
+            r"(?:\s+[^.!?]*\?)+\s*$", "", text,
+        ).strip()
+        return without_question or "Jestem tutaj i uważnie słucham."
+    if mode == "engaged" and not text.endswith("?"):
+        return text.rstrip() + " Chcesz powiedzieć o tym trochę więcej?"
+    return text
 
 
 def _sanitize_model_answer(

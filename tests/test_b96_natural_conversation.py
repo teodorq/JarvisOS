@@ -161,6 +161,31 @@ class B96NaturalConversationTests(unittest.TestCase):
                 "natural",
             )
 
+    def test_conversation_question_mode_is_persistent_and_user_controlled(
+        self,
+    ) -> None:
+        with TemporaryDirectory() as temporary:
+            controller = PersonalAssistantController(temporary)
+            change = controller.plan("Nie zadawaj mi pytań")
+            self.assertEqual(
+                change["assistant_intent"], "conversation_question_mode",
+            )
+            self.assertFalse(change["read_only"])
+            self.assertIn(
+                "Nie będę", controller.handle("Nie zadawaj mi pytań"),
+            )
+
+            status = controller.plan("Jaki jest tryb pytań?")
+            self.assertTrue(status["read_only"])
+            self.assertIn(
+                "bez pytań", controller.handle("Jaki jest tryb pytań?"),
+            )
+            reloaded = PersonalAssistantController(temporary)
+            self.assertEqual(
+                reloaded.projects.get_preference("conversation_question_mode"),
+                "none",
+            )
+
     def test_explicit_conversation_followup_routes_back_to_local_chat(self) -> None:
         with TemporaryDirectory() as temporary:
             controller = PersonalAssistantController(temporary)

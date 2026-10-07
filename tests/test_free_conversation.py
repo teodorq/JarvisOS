@@ -472,6 +472,60 @@ def test_default_natural_style_keeps_a_longer_complete_reply(tmp_path) -> None:
     assert service.status()["conversation_style"] == "natural"
 
 
+def test_question_mode_controls_model_prompt_and_instant_replies(tmp_path) -> None:
+    memory = ProjectMemoryService(tmp_path)
+    memory.set_preference(
+        "conversation_question_mode", "none", category="assistant_setting",
+    )
+    no_questions_model = _Model(["To jest pełna odpowiedź. Co myślisz?"])
+    no_questions = FreeConversationService(tmp_path, model=no_questions_model)
+
+    assert no_questions.reply("Opowiedz mi o tym") == "To jest pełna odpowiedź."
+    assert "Nie kończ odpowiedzi pytaniem" in no_questions_model.calls[0][1]
+    assert no_questions.status()["conversation_question_mode"] == "none"
+
+    memory.set_preference(
+        "conversation_question_mode", "engaged", category="assistant_setting",
+    )
+    engaged = FreeConversationService(tmp_path, model=_Model())
+    instant = engaged.reply("Kim jesteś?")
+
+    assert instant.endswith("?")
+    assert "Chcesz powiedzieć o tym trochę więcej?" in instant
+
+
+def test_question_mode_can_be_changed_directly_without_calling_model(
+    tmp_path,
+) -> None:
+    model = _Model(["Nie powinno zostać użyte."])
+    service = FreeConversationService(tmp_path, model=model)
+
+    answer = service.reply("Pytaj mnie częściej")
+
+    assert "częściej" in answer
+    assert service.status()["conversation_question_mode"] == "engaged"
+    assert model.calls == []
+
+
+def test_engaged_questions_still_work_with_concise_style(tmp_path) -> None:
+    memory = ProjectMemoryService(tmp_path)
+    memory.set_preference(
+        "conversation_style", "concise", category="assistant_setting",
+    )
+    memory.set_preference(
+        "conversation_question_mode", "engaged", category="assistant_setting",
+    )
+    service = FreeConversationService(
+        tmp_path, model=_Model(["Krótka odpowiedź. Dalszy szczegół."]),
+    )
+
+    answer = service.reply("Co myślisz o tym pomyśle?")
+
+    assert answer == (
+        "Krótka odpowiedź. Chcesz powiedzieć o tym trochę więcej?"
+    )
+
+
 def test_long_answer_preserves_readable_paragraphs_and_list(tmp_path) -> None:
     answer = (
         "Najpierw ustalmy cel.\n\n"

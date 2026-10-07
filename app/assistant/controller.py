@@ -267,6 +267,7 @@ class PersonalAssistantController:
             "conversation_status",
             "conversation_options",
             "conversation_style_status",
+            "conversation_question_mode_status",
             "conversation_followup",
             "conversation_recap",
             "memory_status",
@@ -414,6 +415,14 @@ class PersonalAssistantController:
             return self._format_conversation_style()
         if intent == "conversation_style":
             return self._set_conversation_style(command)
+        if intent == "conversation_question_mode_status":
+            return FreeConversationService(
+                self.project_root
+            ).question_mode_status()
+        if intent == "conversation_question_mode":
+            return FreeConversationService(
+                self.project_root
+            ).set_question_mode(command)
         if intent == "conversation_followup":
             return FreeConversationService(self.project_root).reply(command)
         if intent == "conversation_recap":
@@ -560,7 +569,9 @@ class PersonalAssistantController:
             "plany, motywację i zapamiętane informacje. Style odpowiedzi: "
             "„mów krócej”, „mów dokładniej”, „rozmawiaj luźniej” albo "
             "„rozmawiaj naturalnie”. Domyślny tryb naturalny nie kończy "
-            "odpowiedzi po kilku zdaniach, jeśli temat wymaga rozwinięcia."
+            "odpowiedzi po kilku zdaniach, jeśli temat wymaga rozwinięcia. "
+            "Pytania kontrolujesz poleceniami: „nie zadawaj mi pytań”, "
+            "„pytaj naturalnie” albo „pytaj mnie częściej”."
         )
     def _remember_personal_fact(self, command: str) -> str:
         match = re.match(
