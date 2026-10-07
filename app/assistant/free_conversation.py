@@ -54,6 +54,13 @@ _CONVERSATION_FOLLOWUPS = set(_FOLLOWUP_PROMPTS) | {
     "kontynuuj rozmowe", "rozwin to", "opowiedz wiecej", "powiedz wiecej",
     "wroc do naszego tematu", "a dalej", "i co dalej",
 }
+_NEW_TOPIC_MARKERS = {
+    "zmienmy temat",
+    "nowy temat",
+    "zacznijmy nowy temat",
+    "porozmawiajmy o czyms innym",
+    "zacznijmy od nowa",
+}
 _COMMAND_PREFIXES = (
     "otworz ", "uruchom ", "zamknij ", "kliknij ", "wpisz ", "wyslij ",
     "usun ", "dodaj ", "ustaw ", "przypomnij ", "kup ", "zaplac ",
@@ -164,6 +171,8 @@ class FreeConversationService:
     def matches(self, command: object) -> bool:
         text = normalize_user_command(command)
         folded = fold_text(text).strip(" .,!?:;")
+        if _starts_new_topic(folded):
+            return True
         if folded in _CONVERSATION_FOLLOWUPS:
             return True
         if not folded or any(folded.startswith(prefix) for prefix in _COMMAND_PREFIXES):
@@ -197,12 +206,19 @@ class FreeConversationService:
         text = normalize_user_command(command)[:1_200]
         style = self._conversation_style()
         folded = fold_text(text).strip(" .,!?:;")
-        recent_history = self._has_recent_history()
-        if folded in _CONVERSATION_FOLLOWUPS and not recent_history:
+        starts_new_topic = _starts_new_topic(folded)
+        if starts_new_topic:
+            self.clear_history()
+        recent_history = False if starts_new_topic else self._has_recent_history()
+        if starts_new_topic and folded in _NEW_TOPIC_MARKERS:
+            answer = "Jasne, zaczynamy nowy temat. O czym chcesz teraz porozmawiać?"
+        elif folded in _CONVERSATION_FOLLOWUPS and not recent_history:
             answer = (
                 "Nie mam teraz aktywnego wątku rozmowy. Zacznij temat jednym "
                 "zdaniem, a będę go dalej rozwijać."
             )
+        elif starts_new_topic:
+            answer = ""
         else:
             reflex_answer = self.reflexes.reply(text)
             context_sensitive = self.reflexes.is_context_sensitive(text)
@@ -428,6 +444,15 @@ def _normalize_output_whitespace(value: object) -> str:
         lines.append(line)
         previous_was_blank = False
     return "\n".join(lines).strip()
+
+
+def _starts_new_topic(folded: str) -> bool:
+    for marker in _NEW_TOPIC_MARKERS:
+        if folded == marker:
+            return True
+        if any(folded.startswith(marker + separator) for separator in (" ", ".", ":", "-")):
+            return True
+    return False
 
 
 def _sanitize_model_answer(

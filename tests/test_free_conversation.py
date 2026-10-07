@@ -194,6 +194,50 @@ def test_explicit_followup_without_context_does_not_invent_a_topic(tmp_path) -> 
     assert model.calls == []
 
 
+def test_explicit_new_topic_discards_old_chat_context(tmp_path) -> None:
+    model = _Model([
+        "Najpierw omówmy plan projektu.",
+        "Podróże najlepiej zacząć planować od terminu i budżetu.",
+    ])
+    service = FreeConversationService(tmp_path, model=model)
+    service.reply("Porozmawiajmy o rozwoju projektu")
+
+    answer = service.reply(
+        "Zmieńmy temat. Porozmawiajmy teraz o planowaniu podróży"
+    )
+
+    assert "Podróże" in answer
+    assert model.calls[1][0] == [{
+        "role": "user",
+        "content": "Zmieńmy temat. Porozmawiajmy teraz o planowaniu podróży",
+    }]
+    assert service.status()["turn_count"] == 1
+    assert "rozwoju projektu" not in service.recap()
+
+
+@pytest.mark.parametrize(
+    "command",
+    (
+        "Zmieńmy temat",
+        "Nowy temat",
+        "Zacznijmy nowy temat",
+        "Porozmawiajmy o czymś innym",
+        "Zacznijmy od nowa",
+    ),
+)
+def test_new_topic_command_is_instant_and_needs_no_previous_chat(
+    tmp_path, command: str,
+) -> None:
+    model = _Model(["Nie powinno zostać użyte."])
+    service = FreeConversationService(tmp_path, model=model)
+
+    assert service.matches(command) is True
+    assert service.reply(command) == (
+        "Jasne, zaczynamy nowy temat. O czym chcesz teraz porozmawiać?"
+    )
+    assert model.calls == []
+
+
 @pytest.mark.parametrize(
     ("command", "instruction_fragment"),
     (
