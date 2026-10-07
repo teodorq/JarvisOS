@@ -140,6 +140,11 @@ class ConversationReflexService:
                 "rozpocznij rozmowe", "zaskocz mnie tematem",
                 "zapytaj mnie o cos",
                 "zadaj ciekawe pytanie",
+                "luzny temat", "lekki temat", "zabawny temat",
+                "gleboki temat", "powazny temat", "refleksyjny temat",
+                "praktyczny temat", "konkretny temat",
+                "kreatywny temat", "nietypowy temat",
+                "technologiczny temat", "temat o technologii",
             ),
             "Możemy porozmawiać o planach JARVIS-a, technologii, treningu, finansach albo czymś zupełnie luźnym. Wybierz nastrój: praktyczny, ciekawy czy zabawny?",
         ),
@@ -178,8 +183,15 @@ class ConversationReflexService:
     def conversation_variant_count(self) -> int:
         return self.topics.variant_count
 
+    @property
+    def conversation_category_count(self) -> int:
+        return self.topics.category_count
+
     def conversation_starter(self, value: object, *, variant: int = 0) -> str:
-        return self.topics.suggestion(seed=value, variant=variant)
+        category = self.topics.detect_category(value)
+        return self.topics.suggestion(
+            seed=value, variant=variant, category=category,
+        )
 
     def matches(self, value: object) -> bool:
         return bool(self.reply(value))
@@ -232,7 +244,9 @@ class ConversationReflexService:
         for intent, signals, response in self._RULES:
             if any(signal in folded for signal in signals):
                 if intent == "topic":
-                    return self.topics.suggestion(seed=folded, variant=variant)
+                    return self.conversation_starter(
+                        folded, variant=variant,
+                    )
                 return response
         return ""
 

@@ -168,7 +168,9 @@ class FreeConversationService:
         self.memory = ProjectMemoryService(root)
         self.store = JsonStore(
             root / "data" / "assistant" / "free_conversation.json",
-            lambda: {"version": "1.0", "turns": [], "updated_at": ""},
+            lambda: {
+                "version": "1.1", "turns": [], "updated_at": "", "sequence": 0,
+            },
         )
 
     def matches(self, command: object) -> bool:
@@ -213,7 +215,7 @@ class FreeConversationService:
         if starts_new_topic:
             self.clear_history()
         recent_history = False if starts_new_topic else self._has_recent_history()
-        reflex_variant = len(list(self._load().get("turns", []) or []))
+        reflex_variant = self._conversation_sequence()
         if (
             folded in _STANDALONE_QUESTION_COMMANDS
             and not recent_history
@@ -288,6 +290,10 @@ class FreeConversationService:
             "conversation_starter_variants": (
                 self.reflexes.conversation_variant_count
             ),
+            "conversation_topic_categories": (
+                self.reflexes.conversation_category_count
+            ),
+            "conversation_sequence": self._conversation_sequence(),
             "conversation_style": self._conversation_style(),
             "model": dict(model_status or {}),
         }
@@ -304,11 +310,13 @@ class FreeConversationService:
         return f"{_SYSTEM} {profile['instruction']}"
 
     def clear_history(self) -> int:
-        count = len(list(self._load().get("turns", []) or []))
+        data = self._load()
+        count = len(list(data.get("turns", []) or []))
         self.store.save({
-            "version": "1.0",
+            "version": "1.1",
             "turns": [],
             "updated_at": datetime.now(timezone.utc).isoformat(),
+            "sequence": self._conversation_sequence(data),
         })
         return count
 
@@ -402,14 +410,28 @@ class FreeConversationService:
 
     def _remember(self, user: str, assistant: str) -> None:
         data = self._load()
+        previous_sequence = self._conversation_sequence(data)
         turns = list(data.get("turns", []) or [])
         turns.append({
             "user": user[:1_200], "assistant": assistant[:2_600],
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
+        data["version"] = "1.1"
         data["turns"] = turns[-20:]
+        data["sequence"] = previous_sequence + 1
         data["updated_at"] = datetime.now(timezone.utc).isoformat()
         self.store.save(data)
+
+    def _conversation_sequence(
+        self, data: dict[str, Any] | None = None,
+    ) -> int:
+        current = data if isinstance(data, dict) else self._load()
+        turns = list(current.get("turns", []) or [])
+        try:
+            sequence = int(current.get("sequence", len(turns)))
+        except (TypeError, ValueError):
+            sequence = len(turns)
+        return max(len(turns), sequence, 0)
 
     def _has_recent_history(self) -> bool:
         data = self._load()
@@ -426,7 +448,9 @@ class FreeConversationService:
 
     def _load(self) -> dict[str, Any]:
         data = self.store.load()
-        return data if isinstance(data, dict) else {"turns": [], "updated_at": ""}
+        return data if isinstance(data, dict) else {
+            "version": "1.1", "turns": [], "updated_at": "", "sequence": 0,
+        }
 
     @staticmethod
     def _fallback(text: str) -> str:

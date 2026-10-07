@@ -143,3 +143,38 @@ def test_standalone_question_works_without_previous_conversation(tmp_path) -> No
     assert "Nie mam teraz aktywnego wątku" not in answer
     assert answer.endswith("?")
     assert service.status()["conversation_starter_variants"] == 10_000
+
+
+@pytest.mark.parametrize(
+    ("message", "category"),
+    (
+        ("Daj luźny temat", "light"),
+        ("Zaproponuj głęboki temat", "deep"),
+        ("Podaj praktyczny temat", "practical"),
+        ("Wymyśl kreatywny temat", "creative"),
+        ("Daj technologiczny temat", "technology"),
+    ),
+)
+def test_topic_kind_is_detected_and_answered_without_model(
+    tmp_path, message: str, category: str,
+) -> None:
+    service = FreeConversationService(tmp_path, model=_NoModel())
+
+    assert service.reflexes.topics.detect_category(message) == category
+    assert service.reply(message).endswith("?")
+    assert service.status()["conversation_topic_categories"] == 5
+
+
+def test_topic_rotation_survives_history_limit_and_service_restart(tmp_path) -> None:
+    service = FreeConversationService(tmp_path, model=_NoModel())
+    answers = [service.reply("Zaproponuj temat") for _index in range(25)]
+
+    assert len(set(answers)) == 25
+    assert service.status()["turn_count"] == 20
+    assert service.status()["conversation_sequence"] == 25
+
+    reloaded = FreeConversationService(tmp_path, model=_NoModel())
+    next_answer = reloaded.reply("Zaproponuj temat")
+
+    assert next_answer not in answers
+    assert reloaded.status()["conversation_sequence"] == 26

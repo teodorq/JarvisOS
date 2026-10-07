@@ -94,22 +94,56 @@ class ConversationTopicBank:
         "Jak wyglądałaby najbardziej realistyczna wersja?",
         "Co sprawiłoby, że ten temat stałby się dla Ciebie ważniejszy?",
     )
+    _CATEGORY_INDEXES = {
+        "light": (4, 8, 9, 16, 23, 28, 30, 34, 35, 40, 46),
+        "deep": (10, 17, 19, 20, 21, 22, 24, 26, 32, 36, 41, 43, 45, 49),
+        "practical": (3, 5, 6, 7, 11, 12, 14, 15, 25, 29, 31, 38, 39, 47),
+        "creative": (2, 10, 19, 20, 23, 27, 28, 33, 40, 44, 48),
+        "technology": (0, 1, 13, 18, 27, 38, 42, 48),
+    }
+    _CATEGORY_SIGNALS = (
+        ("technology", ("technolog", "sztuczna inteligencja", " ai ")),
+        ("deep", ("glebok", "powazn", "refleksyj")),
+        ("practical", ("praktycz", "konkretn", "rozwojow")),
+        ("creative", ("kreatywn", "nietypow", "wyobraz")),
+        ("light", ("luzn", "lekki", "zabawn")),
+    )
 
     @property
     def variant_count(self) -> int:
         return len(self._TOPICS) * len(self._OPENINGS) * len(self._FOLLOWUPS)
 
-    def suggestion(self, *, seed: object = "", variant: int = 0) -> str:
+    @property
+    def category_count(self) -> int:
+        return len(self._CATEGORY_INDEXES)
+
+    def detect_category(self, value: object) -> str:
+        folded = f" {fold_text(value)} "
+        for category, signals in self._CATEGORY_SIGNALS:
+            if any(signal in folded for signal in signals):
+                return category
+        return ""
+
+    def suggestion(
+        self, *, seed: object = "", variant: int = 0, category: str = "",
+    ) -> str:
         folded = fold_text(seed)
         digest = hashlib.blake2s(
             folded.encode("utf-8"), digest_size=4,
         ).digest()
         offset = int.from_bytes(digest, "big")
-        index = (offset + max(0, int(variant))) % self.variant_count
+        indexes = self._CATEGORY_INDEXES.get(
+            str(category), tuple(range(len(self._TOPICS))),
+        )
+        topics = tuple(self._TOPICS[index] for index in indexes)
+        available_variants = (
+            len(topics) * len(self._OPENINGS) * len(self._FOLLOWUPS)
+        )
+        index = (offset + max(0, int(variant))) % available_variants
 
-        topic_count = len(self._TOPICS)
+        topic_count = len(topics)
         opening_count = len(self._OPENINGS)
-        topic = self._TOPICS[index % topic_count]
+        topic = topics[index % topic_count]
         opening = self._OPENINGS[(index // topic_count) % opening_count]
         followup = self._FOLLOWUPS[
             (index // (topic_count * opening_count)) % len(self._FOLLOWUPS)

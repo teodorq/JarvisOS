@@ -309,8 +309,10 @@ def test_clear_history_preserves_explicit_personal_memory(tmp_path) -> None:
     service = FreeConversationService(tmp_path, model=_Model())
     service.reply("Porozmawiajmy o planach")
 
+    assert service.status()["conversation_sequence"] == 1
     assert service.clear_history() == 1
     assert service.status()["turn_count"] == 0
+    assert service.status()["conversation_sequence"] == 1
     assert service.status()["personal_fact_count"] == 1
 
 
