@@ -161,6 +161,19 @@ class B96NaturalConversationTests(unittest.TestCase):
                 "natural",
             )
 
+    def test_explicit_conversation_followup_routes_back_to_local_chat(self) -> None:
+        with TemporaryDirectory() as temporary:
+            controller = PersonalAssistantController(temporary)
+            thought = controller.plan("Kontynuuj rozmowę")
+
+            self.assertEqual(thought["handler"], "free_conversation")
+            self.assertTrue(thought["read_only"])
+            self.assertTrue(thought["conversation_followup"])
+            self.assertIn(
+                "Nie mam teraz aktywnego wątku",
+                controller.handle("Kontynuuj rozmowę"),
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

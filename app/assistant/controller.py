@@ -89,6 +89,13 @@ class PersonalAssistantController:
             "rozmawiaj naturalnie",
             "odpowiadaj normalnie",
             "tryb rozmowy normalny",
+            "kontynuuj rozmowe",
+            "rozwin to",
+            "opowiedz wiecej",
+            "powiedz wiecej",
+            "wroc do naszego tematu",
+            "a dalej",
+            "i co dalej",
             "status asystenta",
             "status b96",
             "status b97",
@@ -184,6 +191,14 @@ class PersonalAssistantController:
         return resolved.intent != "standard" or self.matches(resolved.resolved)
     def plan(self, command: object) -> dict[str, Any]:
         resolved = self.resolve_command(command)
+        if resolved.intent == "conversation_followup":
+            thought = FreeConversationService(self.project_root).plan(resolved.resolved)
+            thought.update({
+                "original_command": resolved.original,
+                "used_context": True,
+                "conversation_followup": True,
+            })
+            return thought
         if resolved.intent == "natural_action":
             return self.natural_actions.plan(resolved.resolved)
         if self.online.matches(resolved.resolved):
@@ -238,6 +253,7 @@ class PersonalAssistantController:
             "conversation_status",
             "conversation_options",
             "conversation_style_status",
+            "conversation_followup",
             "memory_status",
             "list_personal_memory",
             "voice_status",
@@ -383,6 +399,8 @@ class PersonalAssistantController:
             return self._format_conversation_style()
         if intent == "conversation_style":
             return self._set_conversation_style(command)
+        if intent == "conversation_followup":
+            return FreeConversationService(self.project_root).reply(command)
         if intent == "desktop_status":
             return self._format_desktop_status()
         if intent == "memory_status":

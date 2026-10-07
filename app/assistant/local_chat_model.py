@@ -58,7 +58,7 @@ class LocalChatModel:
             return ""
         safe_messages = [
             {"role": item["role"], "content": str(item["content"])[:2_000]}
-            for item in messages[-9:]
+            for item in messages[-15:]
             if item.get("role") in {"user", "assistant"} and item.get("content")
         ]
         payload = {

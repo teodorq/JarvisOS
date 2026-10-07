@@ -163,6 +163,34 @@ class ConversationReflexService:
     def matches(self, value: object) -> bool:
         return bool(self.reply(value))
 
+    def intent(self, value: object) -> str:
+        folded = fold_text(value).strip(" .,!?:;")
+        if folded in self._ACKNOWLEDGEMENTS:
+            return "acknowledgement"
+        if re.fullmatch(
+            r"(?:czesc|hej|hejka|witaj|dzien dobry|dobry wieczor)(?: jarvis)?",
+            folded,
+        ):
+            return "greeting"
+        if folded.startswith(("dziekuje", "dzieki")):
+            return "thanks"
+        if "jak sie masz" in folded or "co slychac" in folded:
+            return "wellbeing"
+        if folded in {"dobranoc", "do zobaczenia", "na razie", "do jutra"}:
+            return "farewell"
+        for intent, signals, _response in self._RULES:
+            if any(signal in folded for signal in signals):
+                return intent
+        return ""
+
+    def is_context_sensitive(self, value: object) -> bool:
+        return self.intent(value) in {
+            "acknowledgement", "confusion", "support", "loneliness", "sadness",
+            "stress", "anger", "fear", "tiredness", "sleep", "motivation_low",
+            "motivate", "calm", "boredom", "uncertainty", "good_mood",
+            "success", "compliment",
+        }
+
     def reply(self, value: object) -> str:
         folded = fold_text(value).strip(" .,!?:;")
         if not folded:

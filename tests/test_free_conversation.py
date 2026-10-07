@@ -123,17 +123,46 @@ def test_local_chat_keeps_only_bounded_conversation_context(tmp_path) -> None:
 def test_context_budget_keeps_personal_memory_after_longer_chat(tmp_path) -> None:
     memory = ProjectMemoryService(tmp_path)
     memory.remember_personal_fact("Lubię kawę")
-    model = _Model([f"Odpowiedź {index}." for index in range(6)])
+    model = _Model([f"Odpowiedź {index}." for index in range(10)])
     service = FreeConversationService(tmp_path, model=model)
 
-    for index in range(5):
+    for index in range(8):
         service.reply(f"Co myślisz o planie numer {index}?")
     service.reply("Jak myślisz, co będzie dalej?")
 
     messages, _system = model.calls[-1]
-    assert len(messages) <= 8
+    assert len(messages) <= 14
     assert "Lubię kawę" in messages[0]["content"]
+    assert "planie numer 2" in str(messages)
+    assert "planie numer 1" not in str(messages)
     assert all(len(message["content"]) <= 800 for message in messages)
+
+
+def test_short_acknowledgement_uses_active_conversation_context(tmp_path) -> None:
+    model = _Model([
+        "Najpierw ustalmy cel. Co chcesz osiągnąć?",
+        "W takim razie rozwińmy ten cel krok po kroku.",
+    ])
+    service = FreeConversationService(tmp_path, model=model)
+
+    service.reply("Porozmawiajmy o moim nowym projekcie")
+    answer = service.reply("Okej")
+
+    assert answer == "W takim razie rozwińmy ten cel krok po kroku."
+    assert len(model.calls) == 2
+    assert model.calls[1][0][0]["content"] == (
+        "Porozmawiajmy o moim nowym projekcie"
+    )
+    assert model.calls[1][0][-1]["content"] == "Okej"
+
+
+def test_explicit_followup_without_context_does_not_invent_a_topic(tmp_path) -> None:
+    model = _Model(["Nie powinno zostać użyte."])
+    service = FreeConversationService(tmp_path, model=model)
+
+    assert service.matches("Kontynuuj rozmowę") is True
+    assert "Nie mam teraz aktywnego wątku" in service.reply("Kontynuuj rozmowę")
+    assert model.calls == []
 
 
 def test_clear_history_preserves_explicit_personal_memory(tmp_path) -> None:
@@ -246,6 +275,16 @@ def test_default_natural_style_keeps_a_longer_complete_reply(tmp_path) -> None:
     assert "2–8 zdaniach" in model.calls[0][1]
     assert model.response_budgets == [220]
     assert service.status()["conversation_style"] == "natural"
+
+
+def test_followup_answer_does_not_start_with_dangling_ellipsis(tmp_path) -> None:
+    model = _Model(["...rozbijmy ten temat na mniejsze części. Od czego zaczynamy?"])
+    service = FreeConversationService(tmp_path, model=model)
+
+    answer = service.reply("Opowiedz więcej o tym pomyśle")
+
+    assert answer.startswith("Rozbijmy")
+    assert not answer.startswith(("...", "…"))
 
 
 def test_concise_style_also_shortens_instant_replies(tmp_path) -> None:

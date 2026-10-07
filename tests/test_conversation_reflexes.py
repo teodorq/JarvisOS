@@ -74,3 +74,11 @@ def test_specific_identity_question_is_not_shadowed_by_presence(tmp_path) -> Non
 
     assert "programem" in service.reply("Czy jesteś człowiekiem?")
     assert "przejrzystości" in service.reply("Czy mogę ci zaufać?")
+
+
+def test_acknowledgements_are_marked_as_context_sensitive(tmp_path) -> None:
+    service = FreeConversationService(tmp_path, model=_NoModel())
+
+    assert service.reflexes.is_context_sensitive("Okej") is True
+    assert service.reflexes.is_context_sensitive("Jestem zestresowany") is True
+    assert service.reflexes.is_context_sensitive("Kim jesteś?") is False
