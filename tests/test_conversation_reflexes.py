@@ -85,7 +85,7 @@ def test_acknowledgements_are_marked_as_context_sensitive(tmp_path) -> None:
     assert service.reflexes.is_context_sensitive("Kim jesteś?") is False
 
 
-def test_topic_bank_provides_two_thousand_unique_conversation_starters() -> None:
+def test_topic_bank_provides_ten_thousand_unique_conversation_starters() -> None:
     bank = ConversationTopicBank()
 
     suggestions = {
@@ -93,8 +93,8 @@ def test_topic_bank_provides_two_thousand_unique_conversation_starters() -> None
         for index in range(bank.variant_count)
     }
 
-    assert bank.variant_count == 2_000
-    assert len(suggestions) == 2_000
+    assert bank.variant_count == 10_000
+    assert len(suggestions) == 10_000
     assert all(suggestion.endswith("?") for suggestion in suggestions)
 
 
@@ -107,6 +107,13 @@ def test_topic_bank_provides_two_thousand_unique_conversation_starters() -> None
         "Rzuć jakiś temat",
         "Daj temat do rozmowy",
         "Powiedz coś ciekawego",
+        "Wymyśl temat",
+        "Pogadajmy o czymś",
+        "Masz jakiś temat?",
+        "Rozpocznij rozmowę",
+        "Zaskocz mnie tematem",
+        "Zapytaj mnie o coś",
+        "Zadaj ciekawe pytanie",
     ),
 )
 def test_more_natural_topic_requests_are_understood(
@@ -125,4 +132,14 @@ def test_repeated_topic_request_returns_a_fresh_suggestion(tmp_path) -> None:
     second = service.reply("Zaproponuj temat")
 
     assert first != second
-    assert service.status()["conversation_starter_variants"] == 2_000
+    assert service.status()["conversation_starter_variants"] == 10_000
+
+
+def test_standalone_question_works_without_previous_conversation(tmp_path) -> None:
+    service = FreeConversationService(tmp_path, model=_NoModel())
+
+    answer = service.reply("Zadaj mi pytanie")
+
+    assert "Nie mam teraz aktywnego wątku" not in answer
+    assert answer.endswith("?")
+    assert service.status()["conversation_starter_variants"] == 10_000

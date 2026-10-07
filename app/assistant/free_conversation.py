@@ -54,6 +54,9 @@ _CONVERSATION_FOLLOWUPS = set(_FOLLOWUP_PROMPTS) | {
     "kontynuuj rozmowe", "rozwin to", "opowiedz wiecej", "powiedz wiecej",
     "wroc do naszego tematu", "a dalej", "i co dalej",
 }
+_STANDALONE_QUESTION_COMMANDS = {
+    "zadaj mi pytanie", "zapytaj mnie o cos", "zadaj ciekawe pytanie",
+}
 _NEW_TOPIC_MARKERS = {
     "zmienmy temat",
     "nowy temat",
@@ -211,7 +214,14 @@ class FreeConversationService:
             self.clear_history()
         recent_history = False if starts_new_topic else self._has_recent_history()
         reflex_variant = len(list(self._load().get("turns", []) or []))
-        if starts_new_topic and folded in _NEW_TOPIC_MARKERS:
+        if (
+            folded in _STANDALONE_QUESTION_COMMANDS
+            and not recent_history
+        ):
+            answer = self.reflexes.conversation_starter(
+                text, variant=reflex_variant,
+            )
+        elif starts_new_topic and folded in _NEW_TOPIC_MARKERS:
             answer = "Jasne, zaczynamy nowy temat. O czym chcesz teraz porozmawiać?"
         elif folded in _CONVERSATION_FOLLOWUPS and not recent_history:
             answer = (
