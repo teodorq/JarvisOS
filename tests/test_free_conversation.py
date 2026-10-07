@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from app.ai.client_brain import ClientBrain
 from app.assistant.free_conversation import FreeConversationService
 from app.assistant.project_memory import ProjectMemoryService
@@ -189,6 +191,48 @@ def test_explicit_followup_without_context_does_not_invent_a_topic(tmp_path) -> 
 
     assert service.matches("Kontynuuj rozmowę") is True
     assert "Nie mam teraz aktywnego wątku" in service.reply("Kontynuuj rozmowę")
+    assert model.calls == []
+
+
+@pytest.mark.parametrize(
+    ("command", "instruction_fragment"),
+    (
+        ("Powiedz to prościej", "prostym językiem"),
+        ("Wyjaśnij inaczej", "innymi słowami"),
+        ("Nie o to mi chodziło", "Zadaj jedno konkretne pytanie"),
+        ("To było za długie", "dwóch najważniejszych zdań"),
+        ("To było za krótkie", "jeden konkretny szczegół"),
+        ("Podaj przykład", "jeden konkretny, prosty przykład"),
+        ("Spróbuj jeszcze raz", "jeszcze raz, ale inaczej"),
+        ("Zadaj mi pytanie", "jedno trafne pytanie"),
+    ),
+)
+def test_feedback_rewrites_the_previous_answer_in_context(
+    tmp_path, command: str, instruction_fragment: str,
+) -> None:
+    model = _Model([
+        "Pierwsza odpowiedź o planowaniu.",
+        "Poprawiona odpowiedź dotycząca tego samego tematu.",
+    ])
+    service = FreeConversationService(tmp_path, model=model)
+    service.reply("Porozmawiajmy o planowaniu projektu")
+
+    answer = service.reply(command)
+
+    assert answer == "Poprawiona odpowiedź dotycząca tego samego tematu."
+    second_messages = model.calls[1][0]
+    assert second_messages[-2]["content"] == "Pierwsza odpowiedź o planowaniu."
+    assert instruction_fragment in second_messages[-1]["content"]
+    assert "wykonaj ją teraz" in second_messages[-1]["content"]
+
+
+def test_feedback_without_previous_answer_is_honest(tmp_path) -> None:
+    model = _Model(["Nie powinno zostać użyte."])
+    service = FreeConversationService(tmp_path, model=model)
+
+    assert "Nie mam teraz aktywnego wątku" in service.reply(
+        "Powiedz to prościej"
+    )
     assert model.calls == []
 
 

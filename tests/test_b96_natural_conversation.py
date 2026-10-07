@@ -187,6 +187,21 @@ class B96NaturalConversationTests(unittest.TestCase):
                 controller.handle("O czym rozmawialiśmy?"),
             )
 
+    def test_answer_revision_commands_route_to_active_conversation(self) -> None:
+        with TemporaryDirectory() as temporary:
+            controller = PersonalAssistantController(temporary)
+            for command in (
+                "Powiedz to prościej",
+                "Wyjaśnij inaczej",
+                "To było za długie",
+                "Podaj przykład",
+                "Nie o to mi chodziło",
+            ):
+                thought = controller.plan(command)
+                self.assertEqual(thought["handler"], "free_conversation")
+                self.assertTrue(thought["conversation_followup"])
+                self.assertTrue(thought["read_only"])
+
 
 if __name__ == "__main__":
     unittest.main()
