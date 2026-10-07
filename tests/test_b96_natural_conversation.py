@@ -174,6 +174,19 @@ class B96NaturalConversationTests(unittest.TestCase):
                 controller.handle("Kontynuuj rozmowę"),
             )
 
+    def test_conversation_recap_is_read_only_and_uses_saved_chat(self) -> None:
+        with TemporaryDirectory() as temporary:
+            conversation = FreeConversationService(temporary, model=_Model())
+            conversation.reply("Porozmawiajmy o rozwoju JARVIS-a")
+            controller = PersonalAssistantController(temporary)
+
+            thought = controller.plan("O czym rozmawialiśmy?")
+            self.assertTrue(thought["read_only"])
+            self.assertIn(
+                "rozwoju JARVIS-a",
+                controller.handle("O czym rozmawialiśmy?"),
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

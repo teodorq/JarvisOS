@@ -165,10 +165,12 @@ class FreeConversationService:
                 "zdaniem, a będę go dalej rozwijać."
             )
         else:
-            contextual_reflex = (
-                recent_history and self.reflexes.is_context_sensitive(text)
+            reflex_answer = self.reflexes.reply(text)
+            context_sensitive = self.reflexes.is_context_sensitive(text)
+            needs_personalized_reply = context_sensitive and (
+                recent_history or len(folded.split()) > 7
             )
-            answer = "" if contextual_reflex else self.reflexes.reply(text)
+            answer = "" if needs_personalized_reply else reflex_answer
         if not answer:
             answer = self._personal_memory_answer(text)
         if not answer:
@@ -190,7 +192,7 @@ class FreeConversationService:
                 max_sentences=int(profile["sentences"]),
                 max_characters=int(profile["characters"]),
             )
-        if not answer and recent_history and self.reflexes.is_context_sensitive(text):
+        if not answer and self.reflexes.is_context_sensitive(text):
             answer = self.reflexes.reply(text)
         if not answer:
             answer = self._fallback(text)
@@ -239,6 +241,36 @@ class FreeConversationService:
 
     def has_recent_history(self) -> bool:
         return self._has_recent_history()
+
+    def recap(self, *, limit: int = 4) -> str:
+        turns = list(self._load().get("turns", []) or [])
+        topics: list[str] = []
+        seen: set[str] = set()
+        for item in reversed(turns):
+            user_text = " ".join(str(item.get("user", "")).split()).strip()
+            folded = fold_text(user_text).strip(" .,!?:;")
+            if (
+                not user_text
+                or folded in _CONVERSATION_FOLLOWUPS
+                or self.reflexes.intent(user_text) in {
+                    "acknowledgement", "greeting", "thanks", "farewell",
+                }
+            ):
+                continue
+            key = folded[:160]
+            if key in seen:
+                continue
+            seen.add(key)
+            topics.append(user_text[:180])
+            if len(topics) >= max(1, min(int(limit), 6)):
+                break
+        if not topics:
+            return "Nie mam jeszcze zapisanej rozmowy do przypomnienia."
+        topics.reverse()
+        if len(topics) == 1:
+            return f"Ostatni temat rozmowy: „{topics[0]}”."
+        listed = "; ".join(f"„{topic}”" for topic in topics)
+        return f"Ostatnio rozmawialiśmy kolejno o: {listed}."
 
     def _personal_memory_message(self) -> str:
         facts = self.memory.list_preferences(category="personal_fact", limit=5)

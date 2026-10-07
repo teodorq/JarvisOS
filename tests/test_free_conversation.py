@@ -156,6 +156,33 @@ def test_short_acknowledgement_uses_active_conversation_context(tmp_path) -> Non
     assert model.calls[1][0][-1]["content"] == "Okej"
 
 
+def test_long_emotional_message_gets_a_personalized_model_reply(tmp_path) -> None:
+    model = _Model([
+        "Rozumiem, że martwi Cię skala projektu. Zacznijmy od części, która blokuje Cię najbardziej.",
+    ])
+    service = FreeConversationService(tmp_path, model=model)
+
+    answer = service.reply(
+        "Jestem zestresowany, bo nie wiem, czy dam radę dokończyć cały duży projekt"
+    )
+
+    assert "skala projektu" in answer
+    assert len(model.calls) == 1
+
+
+def test_long_emotional_message_uses_safe_reflex_when_model_fails(tmp_path) -> None:
+    class Broken:
+        def reply(self, *_args, **_kwargs):
+            raise TimeoutError
+
+    service = FreeConversationService(tmp_path, model=Broken())
+    answer = service.reply(
+        "Jestem zestresowany, bo nie wiem, czy dam radę dokończyć cały duży projekt"
+    )
+
+    assert "Zatrzymajmy się" in answer
+
+
 def test_explicit_followup_without_context_does_not_invent_a_topic(tmp_path) -> None:
     model = _Model(["Nie powinno zostać użyte."])
     service = FreeConversationService(tmp_path, model=model)
@@ -163,6 +190,29 @@ def test_explicit_followup_without_context_does_not_invent_a_topic(tmp_path) -> 
     assert service.matches("Kontynuuj rozmowę") is True
     assert "Nie mam teraz aktywnego wątku" in service.reply("Kontynuuj rozmowę")
     assert model.calls == []
+
+
+def test_conversation_recap_survives_service_restart_and_skips_small_talk(
+    tmp_path,
+) -> None:
+    model = _Model(["Pierwsza.", "Druga.", "Trzecia."])
+    service = FreeConversationService(tmp_path, model=model)
+    service.reply("Porozmawiajmy o motywacji")
+    service.reply("Okej")
+    service.reply("Co zrobić z dużym zadaniem?")
+
+    reloaded = FreeConversationService(tmp_path, model=_Model())
+    recap = reloaded.recap()
+
+    assert "Porozmawiajmy o motywacji" in recap
+    assert "Co zrobić z dużym zadaniem?" in recap
+    assert "Okej" not in recap
+
+
+def test_empty_conversation_has_an_honest_recap(tmp_path) -> None:
+    service = FreeConversationService(tmp_path, model=_Model())
+
+    assert "Nie mam jeszcze zapisanej rozmowy" in service.recap()
 
 
 def test_clear_history_preserves_explicit_personal_memory(tmp_path) -> None:

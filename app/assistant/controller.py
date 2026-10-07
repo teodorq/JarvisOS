@@ -96,6 +96,10 @@ class PersonalAssistantController:
             "wroc do naszego tematu",
             "a dalej",
             "i co dalej",
+            "o czym rozmawialismy",
+            "przypomnij nasza rozmowe",
+            "jaki byl ostatni temat",
+            "co ostatnio omawialismy",
             "status asystenta",
             "status b96",
             "status b97",
@@ -254,6 +258,7 @@ class PersonalAssistantController:
             "conversation_options",
             "conversation_style_status",
             "conversation_followup",
+            "conversation_recap",
             "memory_status",
             "list_personal_memory",
             "voice_status",
@@ -401,6 +406,8 @@ class PersonalAssistantController:
             return self._set_conversation_style(command)
         if intent == "conversation_followup":
             return FreeConversationService(self.project_root).reply(command)
+        if intent == "conversation_recap":
+            return FreeConversationService(self.project_root).recap()
         if intent == "desktop_status":
             return self._format_desktop_status()
         if intent == "memory_status":
