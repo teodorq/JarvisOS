@@ -151,6 +151,16 @@ class B96NaturalConversationTests(unittest.TestCase):
             self.assertIn("mów dokładniej", answer)
             self.assertIn("rozmawiaj luźniej", answer)
 
+    def test_natural_conversation_style_can_be_restored(self) -> None:
+        with TemporaryDirectory() as temporary:
+            controller = PersonalAssistantController(temporary)
+
+            self.assertIn("naturalny", controller.handle("Rozmawiaj naturalnie"))
+            self.assertEqual(
+                controller.projects.get_preference("conversation_style"),
+                "natural",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

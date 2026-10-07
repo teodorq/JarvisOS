@@ -54,22 +54,36 @@ _STYLE_PROFILES = {
     "concise": {
         "sentences": 1,
         "characters": 220,
+        "tokens": 80,
         "instruction": "Odpowiadaj jednym krótkim, konkretnym zdaniem.",
     },
-    "neutral": {
-        "sentences": 2,
-        "characters": 320,
-        "instruction": "Odpowiadaj najwyżej w 2 krótkich, pełnych zdaniach.",
+    "natural": {
+        "sentences": 8,
+        "characters": 1_600,
+        "tokens": 220,
+        "instruction": (
+            "Odpowiadaj naturalnie i wyczerpująco, zwykle w 2–8 zdaniach zależnie "
+            "od tematu. Nie skracaj sztucznie wypowiedzi; gdy pomaga to podtrzymać "
+            "rozmowę, zakończ jednym trafnym pytaniem."
+        ),
     },
     "detailed": {
-        "sentences": 4,
-        "characters": 640,
-        "instruction": "Odpowiadaj rzeczowo w maksymalnie 4 pełnych zdaniach i dodaj użyteczny szczegół.",
+        "sentences": 12,
+        "characters": 2_600,
+        "tokens": 360,
+        "instruction": (
+            "Odpowiadaj dokładnie i naturalnie, maksymalnie w 12 pełnych zdaniach. "
+            "Rozwijaj uzasadnienie, podawaj użyteczne szczegóły i nie urywaj wątku."
+        ),
     },
     "casual": {
-        "sentences": 2,
-        "characters": 360,
-        "instruction": "Mów swobodnie i ciepło, najwyżej w 2 pełnych zdaniach, bez urzędowego tonu.",
+        "sentences": 8,
+        "characters": 1_800,
+        "tokens": 240,
+        "instruction": (
+            "Mów swobodnie, ciepło i naturalnie, bez urzędowego tonu. Możesz "
+            "rozwinąć myśl do 8 zdań i zadać pytanie podtrzymujące rozmowę."
+        ),
     },
 }
 _SYSTEM = (
@@ -145,11 +159,14 @@ class FreeConversationService:
             if memory_message:
                 messages.insert(0, {"role": "user", "content": memory_message})
             messages.append({"role": "user", "content": text})
+            profile = _STYLE_PROFILES[style]
+            budget_setter = getattr(self.model, "set_response_budget", None)
+            if callable(budget_setter):
+                budget_setter(profile["tokens"])
             try:
                 raw = self.model.reply(messages, system=self._system_prompt(style))
             except Exception:
                 raw = ""
-            profile = _STYLE_PROFILES[style]
             answer = _sanitize_model_answer(
                 raw,
                 max_sentences=int(profile["sentences"]),
@@ -161,7 +178,7 @@ class FreeConversationService:
             answer = _sanitize_model_answer(
                 answer, max_sentences=1, max_characters=220,
             )
-        answer = " ".join(answer.split())[:1_200]
+        answer = " ".join(answer.split())
         self._remember(text, answer)
         return answer
 
@@ -181,12 +198,14 @@ class FreeConversationService:
         }
 
     def _conversation_style(self) -> str:
-        style = str(self.memory.get_preference("conversation_style", "neutral"))
-        return style if style in _STYLE_PROFILES else "neutral"
+        style = str(self.memory.get_preference("conversation_style", "natural"))
+        if style == "neutral":
+            return "natural"
+        return style if style in _STYLE_PROFILES else "natural"
 
     @staticmethod
     def _system_prompt(style: str) -> str:
-        profile = _STYLE_PROFILES.get(style, _STYLE_PROFILES["neutral"])
+        profile = _STYLE_PROFILES.get(style, _STYLE_PROFILES["natural"])
         return f"{_SYSTEM} {profile['instruction']}"
 
     def clear_history(self) -> int:
@@ -247,7 +266,7 @@ class FreeConversationService:
         data = self._load()
         turns = list(data.get("turns", []) or [])
         turns.append({
-            "user": user[:1_200], "assistant": assistant[:1_200],
+            "user": user[:1_200], "assistant": assistant[:2_600],
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
         data["turns"] = turns[-20:]

@@ -256,7 +256,7 @@ class NaturalLanguageService:
             ("clear_context", ("wyczysc kontekst rozmowy", "wyczysc historie rozmowy", "zapomnij te rozmowe")),
             ("conversation_options", ("pokaz opcje rozmowy", "jakie sa opcje rozmowy", "jak mozemy rozmawiac")),
             ("conversation_style_status", ("jaki jest tryb rozmowy", "jaki tryb rozmowy", "jak teraz odpowiadasz")),
-            ("conversation_style", ("mow krocej", "odpowiadaj krotko", "tryb rozmowy krotki", "mow dokladniej", "odpowiadaj dokladniej", "tryb rozmowy dokladny", "rozmawiaj luzniej", "tryb rozmowy luzny", "odpowiadaj normalnie", "tryb rozmowy normalny")),
+            ("conversation_style", ("mow krocej", "odpowiadaj krotko", "tryb rozmowy krotki", "mow dokladniej", "odpowiadaj dokladniej", "tryb rozmowy dokladny", "rozmawiaj luzniej", "tryb rozmowy luzny", "rozmawiaj naturalnie", "odpowiadaj normalnie", "tryb rozmowy normalny")),
             ("capability_help", ("co potrafisz", "co umiesz", "co mozesz zrobic", "jakie masz funkcje", "pokaz pomoc", "pomoc jarvis", "jak z ciebie korzystac", "przyklady polecen", "lista polecen", "centrum mozliwosci")),
             ("current_time", ("ktora jest godzina", "jaka jest godzina", "podaj godzine", "powiedz mi godzine", "aktualna godzina", "jaka jest data", "podaj date", "podaj dzisiejsza date", "dzisiejsza data", "jaki mamy dzis dzien", "jaki mamy dzisiaj dzien", "jaki dzisiaj jest dzien", "jaki jest dzis dzien", "dzien tygodnia", "data i godzina", "date and time")),
             ("device_status", ("status komputera", "stan komputera", "obciazenie komputera", "ile mam baterii", "stan baterii", "poziom baterii", "jak dlugo dziala komputer", "czas pracy komputera", "uzycie procesora", "uzycie pamieci ram")),

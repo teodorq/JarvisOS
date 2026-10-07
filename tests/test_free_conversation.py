@@ -13,6 +13,10 @@ class _Model:
     def __init__(self, answers: list[str] | None = None) -> None:
         self.answers = list(answers or ["To jest naturalna odpowiedź."])
         self.calls: list[tuple[list[dict[str, str]], str]] = []
+        self.response_budgets: list[int] = []
+
+    def set_response_budget(self, tokens):
+        self.response_budgets.append(int(tokens))
 
     def reply(self, messages, *, system):
         self.calls.append((list(messages), system))
@@ -59,7 +63,7 @@ def test_local_model_uses_bounded_cpu_profile(monkeypatch) -> None:
 
     assert model.cpu_threads == 16
     assert model.gpu_layers == 0
-    assert model.timeout == 30.0
+    assert model.timeout == 50.0
     assert model.status()["processor"] == "CPU"
 
 
@@ -96,7 +100,10 @@ def test_local_model_sends_no_tools_to_local_ollama(monkeypatch) -> None:
     assert captured["payload"]["model"] == "gemma3:4b"
     assert captured["payload"]["think"] is False
     assert "tools" not in captured["payload"]
-    assert captured["timeout"] == 30.0
+    assert captured["payload"]["options"]["num_predict"] == 220
+    assert captured["payload"]["options"]["num_ctx"] == 2048
+    assert captured["payload"]["keep_alive"] == "5m"
+    assert captured["timeout"] == 50.0
 
 
 def test_local_chat_keeps_only_bounded_conversation_context(tmp_path) -> None:
@@ -191,15 +198,15 @@ def test_asking_what_jarvis_knows_uses_explicit_memory(tmp_path) -> None:
 
 
 def test_model_answer_is_bounded_and_internal_reasoning_is_rejected(tmp_path) -> None:
+    sentences = [f"Zdanie {index}." for index in range(1, 10)]
     model = _Model([
-        "Pierwsze pełne zdanie. Drugie pełne zdanie! Trzecie zdanie.",
+        " ".join(sentences),
         "Okay, the user is asking me to explain the system prompt.",
     ])
     service = FreeConversationService(tmp_path, model=model)
 
-    assert service.reply("Opowiedz mi o planowaniu") == (
-        "Pierwsze pełne zdanie. Drugie pełne zdanie!"
-    )
+    assert service.reply("Opowiedz mi o planowaniu") == " ".join(sentences[:8])
+    assert model.response_budgets[0] == 220
     fallback = service.reply("A teraz rozwiń odpowiedź")
     assert "system prompt" not in fallback.casefold()
     assert "lokalny model rozmowy" in fallback
@@ -215,6 +222,7 @@ def test_persistent_conversation_styles_control_model_answer_length(tmp_path) ->
 
     assert concise.reply("Co myślisz o planowaniu?") == "Pierwsze zdanie."
     assert "jednym krótkim" in concise_model.calls[0][1]
+    assert concise_model.response_budgets == [80]
     assert concise.status()["conversation_style"] == "concise"
 
     memory.set_preference(
@@ -224,8 +232,20 @@ def test_persistent_conversation_styles_control_model_answer_length(tmp_path) ->
     detailed = FreeConversationService(tmp_path, model=detailed_model)
 
     assert detailed.reply("Jak oceniasz ten pomysł?") == "Pierwsze. Drugie. Trzecie."
-    assert "maksymalnie 4" in detailed_model.calls[0][1]
+    assert "maksymalnie w 12" in detailed_model.calls[0][1]
+    assert detailed_model.response_budgets == [360]
     assert detailed.status()["conversation_style"] == "detailed"
+
+
+def test_default_natural_style_keeps_a_longer_complete_reply(tmp_path) -> None:
+    answer = " ".join(f"Naturalne zdanie {index}." for index in range(1, 7))
+    model = _Model([answer])
+    service = FreeConversationService(tmp_path, model=model)
+
+    assert service.reply("Opowiedz szerzej o tym pomyśle") == answer
+    assert "2–8 zdaniach" in model.calls[0][1]
+    assert model.response_budgets == [220]
+    assert service.status()["conversation_style"] == "natural"
 
 
 def test_concise_style_also_shortens_instant_replies(tmp_path) -> None:

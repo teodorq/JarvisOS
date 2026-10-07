@@ -86,6 +86,7 @@ class PersonalAssistantController:
             "tryb rozmowy dokladny",
             "rozmawiaj luzniej",
             "tryb rozmowy luzny",
+            "rozmawiaj naturalnie",
             "odpowiadaj normalnie",
             "tryb rozmowy normalny",
             "status asystenta",
@@ -497,8 +498,8 @@ class PersonalAssistantController:
             style, label = "detailed", "dokładny"
         elif any(value in text for value in ("luzniej", "luzny")):
             style, label = "casual", "luźny"
-        elif any(value in text for value in ("normalnie", "normalny")):
-            style, label = "neutral", "normalny"
+        elif any(value in text for value in ("naturalnie", "normalnie", "normalny")):
+            style, label = "natural", "naturalny"
         else:
             raise ValueError(
                 "Dostępne style rozmowy: krótki, dokładny, luźny i normalny."
@@ -508,21 +509,23 @@ class PersonalAssistantController:
         )
         return f"Ustawiłem {label} styl rozmowy."
     def _format_conversation_style(self) -> str:
-        style = str(self.projects.get_preference("conversation_style", "neutral"))
+        style = str(self.projects.get_preference("conversation_style", "natural"))
         labels = {
             "concise": "krótki",
             "detailed": "dokładny",
             "casual": "luźny",
-            "neutral": "normalny",
+            "natural": "naturalny",
+            "neutral": "naturalny",
         }
-        return f"Aktualny styl rozmowy: {labels.get(style, 'normalny')}."
+        return f"Aktualny styl rozmowy: {labels.get(style, 'naturalny')}."
     @staticmethod
     def _format_conversation_options() -> str:
         return (
             "Możemy rozmawiać swobodnie, omawiać pomysły, decyzje, emocje, "
             "plany, motywację i zapamiętane informacje. Style odpowiedzi: "
             "„mów krócej”, „mów dokładniej”, „rozmawiaj luźniej” albo "
-            "„odpowiadaj normalnie”."
+            "„rozmawiaj naturalnie”. Domyślny tryb naturalny nie kończy "
+            "odpowiedzi po kilku zdaniach, jeśli temat wymaga rozwinięcia."
         )
     def _remember_personal_fact(self, command: str) -> str:
         match = re.match(

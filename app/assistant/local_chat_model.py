@@ -25,7 +25,7 @@ class LocalChatModel:
             selected if _MODEL_NAME.fullmatch(selected) else "gemma3:4b"
         )
         self.timeout = _bounded_timeout(
-            timeout if timeout is not None else os.getenv("JARVIS_OS_CHAT_TIMEOUT_SECONDS", "30")
+            timeout if timeout is not None else os.getenv("JARVIS_OS_CHAT_TIMEOUT_SECONDS", "50")
         )
         self.cpu_threads = _bounded_int(
             os.getenv("JARVIS_OS_CHAT_CPU_THREADS", "6"), minimum=1, maximum=16, fallback=6
@@ -33,8 +33,25 @@ class LocalChatModel:
         self.gpu_layers = _bounded_int(
             os.getenv("JARVIS_OS_CHAT_GPU_LAYERS", "0"), minimum=0, maximum=999, fallback=0
         )
+        self.response_tokens = _bounded_int(
+            os.getenv("JARVIS_OS_CHAT_RESPONSE_TOKENS", "220"),
+            minimum=48,
+            maximum=512,
+            fallback=220,
+        )
+        self.context_tokens = _bounded_int(
+            os.getenv("JARVIS_OS_CHAT_CONTEXT_TOKENS", "2048"),
+            minimum=1024,
+            maximum=4096,
+            fallback=2048,
+        )
         flag = os.getenv("JARVIS_OS_LOCAL_CHAT_ENABLED", "true")
         self.enabled = str(flag).strip().casefold() in _TRUE
+
+    def set_response_budget(self, tokens: object) -> None:
+        self.response_tokens = _bounded_int(
+            tokens, minimum=48, maximum=512, fallback=220,
+        )
 
     def reply(self, messages: list[dict[str, str]], *, system: str) -> str:
         if not self.enabled:
@@ -48,14 +65,14 @@ class LocalChatModel:
             "model": self.model,
             "stream": False,
             "think": False,
-            "keep_alive": "2m",
+            "keep_alive": "5m",
             "messages": [{"role": "system", "content": system[:4_000]}, *safe_messages],
             "options": {
                 "temperature": 0.45,
                 "top_p": 0.85,
                 "repeat_penalty": 1.1,
-                "num_predict": 72,
-                "num_ctx": 1536,
+                "num_predict": self.response_tokens,
+                "num_ctx": self.context_tokens,
                 "num_thread": self.cpu_threads,
                 "num_gpu": self.gpu_layers,
             },
@@ -76,7 +93,7 @@ class LocalChatModel:
         message = dict(result.get("message", {}) or {}) if isinstance(result, dict) else {}
         text = str(message.get("content", "") or "").strip()
         text = re.sub(r"<think>.*?</think>", "", text, flags=re.I | re.S).strip()
-        return text[:1_600]
+        return text[:3_200]
 
     def status(self) -> dict[str, object]:
         return {
@@ -86,6 +103,8 @@ class LocalChatModel:
             "remote": False,
             "tools": False,
             "timeout_seconds": self.timeout,
+            "response_tokens": self.response_tokens,
+            "context_tokens": self.context_tokens,
             "processor": "CPU" if self.gpu_layers == 0 else "GPU",
         }
 
@@ -94,7 +113,7 @@ def _bounded_timeout(value: object) -> float:
     try:
         return min(60.0, max(5.0, float(value)))
     except (TypeError, ValueError):
-        return 30.0
+        return 50.0
 
 
 def _bounded_int(
