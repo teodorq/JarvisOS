@@ -16,6 +16,14 @@ param buildSha string = 'development'
 @description('Bearer token shared only by the desktop client and Container App.')
 param apiToken string
 
+@secure()
+@description('Read-only Twelve Data key used by the Azure PAPER job.')
+param twelveDataApiKey string
+
+@secure()
+@description('Read-only FMP key used only for an independent price cross-check.')
+param fmpApiKey string
+
 @description('Microsoft Entra application client ID used by the phone page.')
 param phoneEntraClientId string
 
@@ -56,6 +64,8 @@ module cloudPlanner './main.bicep' = {
     containerImage: containerImage
     buildSha: buildSha
     apiToken: apiToken
+    twelveDataApiKey: twelveDataApiKey
+    fmpApiKey: fmpApiKey
     phoneEntraClientId: phoneEntraClientId
     phoneEntraClientSecret: phoneEntraClientSecret
     phoneOwnerPrincipalId: phoneOwnerPrincipalId
@@ -67,4 +77,6 @@ output endpoint string = cloudPlanner.outputs.endpoint
 output healthUrl string = cloudPlanner.outputs.healthUrl
 output phoneUrl string = cloudPlanner.outputs.phoneUrl
 output remoteStorageAccountName string = cloudPlanner.outputs.remoteStorageAccountName
+output paperJobName string = cloudPlanner.outputs.paperJobName
+output paperStateContainerName string = cloudPlanner.outputs.paperStateContainerName
 output budgetResourceId string = costGuardrail.outputs.budgetResourceId

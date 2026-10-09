@@ -192,6 +192,171 @@ class TwelveDataReadOnlySource:
         return rates
 
 
+class TwelveDataCloudMarketSource:
+    """Read closed M15 bars and build conservative PAPER-only quotes."""
+
+    HOST = TwelveDataReadOnlySource.HOST
+    INTERVAL_MINUTES = 15
+    SYNTHETIC_SPREAD_PIPS = Decimal("2.5")
+
+    def __init__(self, api_key: str, transport: JsonTransport | None = None) -> None:
+        if not api_key or len(api_key) > 4096 or any(
+            char.isspace() for char in api_key
+        ):
+            raise TradingValidationError("twelve_data: invalid_api_key")
+        self._api_key = api_key
+        self._transport = transport or JsonHttpTransport()
+
+    def fetch_market(
+        self,
+        pairs: Iterable[ForexPair],
+        *,
+        bar_count: int,
+        now: datetime,
+    ) -> tuple[dict[str, ForexQuote], dict[str, tuple[ForexBar, ...]]]:
+        selected = tuple(pairs)
+        if (
+            not selected
+            or len({pair.symbol for pair in selected}) != len(selected)
+            or not 31 <= bar_count <= 499
+        ):
+            raise TradingValidationError("twelve_data: invalid_market_request")
+        selected_now = aware_utc(now, "now")
+        quotes: dict[str, ForexQuote] = {}
+        histories: dict[str, tuple[ForexBar, ...]] = {}
+        for pair in selected:
+            request = PreparedJsonRequest.build(
+                host=self.HOST,
+                path="/time_series",
+                query=(
+                    ("symbol", pair.symbol.replace("_", "/")),
+                    ("interval", "15min"),
+                    ("outputsize", str(bar_count + 2)),
+                    ("timezone", "UTC"),
+                    ("order", "ASC"),
+                ),
+                headers={
+                    "Accept": "application/json",
+                    "Authorization": f"apikey {self._api_key}",
+                },
+            )
+            payload = _mapping(
+                self._transport(request),
+                "twelve_data: invalid_response",
+            )
+            if str(payload.get("status", "ok")).casefold() == "error":
+                raise TradingValidationError("twelve_data: provider_error")
+            meta = _mapping(payload.get("meta"), "twelve_data: meta_missing")
+            returned = str(meta.get("symbol", "")).replace("/", "_").upper()
+            if returned != pair.symbol:
+                raise TradingValidationError("twelve_data: pair_mismatch")
+            values = payload.get("values")
+            if not isinstance(values, list):
+                raise TradingValidationError("twelve_data: values_missing")
+            bars: list[ForexBar] = []
+            for raw in values:
+                row = _mapping(raw, "twelve_data: invalid_bar")
+                timestamp = _source_datetime(
+                    row.get("datetime"),
+                    "twelve_data: invalid_time",
+                )
+                timestamp = aware_utc(timestamp, "bar_time")
+                if timestamp + timedelta(minutes=self.INTERVAL_MINUTES) > selected_now:
+                    continue
+                bars.append(ForexBar.create(
+                    pair=pair,
+                    timestamp=timestamp,
+                    open=row.get("open"),
+                    high=row.get("high"),
+                    low=row.get("low"),
+                    close=row.get("close"),
+                    tick_volume=row.get("volume") or 0,
+                ))
+            bars.sort(key=lambda item: item.timestamp)
+            if len(bars) < bar_count:
+                raise TradingValidationError("twelve_data: incomplete_candles")
+            closed = tuple(bars[-bar_count:])
+            midpoint = closed[-1].close
+            half_spread = (
+                pair.pip_size * self.SYNTHETIC_SPREAD_PIPS / Decimal("2")
+            )
+            quotes[pair.symbol] = ForexQuote.create(
+                pair=pair,
+                bid=midpoint - half_spread,
+                ask=midpoint + half_spread,
+                timestamp=closed[-1].timestamp + timedelta(
+                    minutes=self.INTERVAL_MINUTES
+                ),
+            )
+            histories[pair.symbol] = closed
+        return quotes, histories
+
+
+class FmpForexReadOnlySource:
+    """Use FMP only as an independent midpoint cross-check."""
+
+    HOST = "financialmodelingprep.com"
+
+    def __init__(self, api_key: str, transport: JsonTransport | None = None) -> None:
+        if not api_key or len(api_key) > 4096 or any(
+            char.isspace() for char in api_key
+        ):
+            raise TradingValidationError("fmp_forex: invalid_api_key")
+        self._api_key = api_key
+        self._transport = transport or JsonHttpTransport()
+
+    def fetch_rates(
+        self,
+        pairs: Iterable[ForexPair],
+        *,
+        fetched_at: datetime | None = None,
+    ) -> dict[str, IndependentRate]:
+        selected = tuple(pairs)
+        selected_time = aware_utc(
+            fetched_at or datetime.now(timezone.utc),
+            "fetched_at",
+        )
+        expected = {pair.symbol.replace("_", ""): pair for pair in selected}
+        if not expected or len(expected) != len(selected):
+            raise TradingValidationError("fmp_forex: invalid_universe")
+        request = PreparedJsonRequest.build(
+            host=self.HOST,
+            path="/stable/batch-forex-quotes",
+            query=(("short", "true"), ("apikey", self._api_key)),
+            headers={"Accept": "application/json"},
+        )
+        payload = self._transport(request)
+        if not isinstance(payload, list):
+            raise TradingValidationError("fmp_forex: invalid_response")
+        rates: dict[str, IndependentRate] = {}
+        for raw in payload:
+            row = _mapping(raw, "fmp_forex: invalid_quote")
+            compact = str(row.get("symbol", "")).upper()
+            pair = expected.get(compact)
+            if pair is None:
+                continue
+            timestamp = selected_time
+            if row.get("timestamp") not in (None, ""):
+                try:
+                    timestamp = datetime.fromtimestamp(
+                        int(row["timestamp"]),
+                        tz=timezone.utc,
+                    )
+                except (TypeError, ValueError, OSError) as error:
+                    raise TradingValidationError(
+                        "fmp_forex: invalid_timestamp"
+                    ) from error
+            rates[pair.symbol] = IndependentRate(
+                pair=pair,
+                midpoint=row.get("price"),
+                timestamp=timestamp,
+                source="FMP",
+            )
+        if set(rates) != {pair.symbol for pair in selected}:
+            raise TradingValidationError("fmp_forex: incomplete_prices")
+        return rates
+
+
 class NbpPlnReadOnlySource:
     HOST = "api.nbp.pl"
 
@@ -355,10 +520,12 @@ class FmpEconomicCalendarReadOnlySource:
 
 __all__ = [
     "FmpEconomicCalendarReadOnlySource",
+    "FmpForexReadOnlySource",
     "ForexFactoryEconomicCalendarReadOnlySource",
     "JsonTransport",
     "MarketDataTransportError",
     "NbpPlnReadOnlySource",
     "OandaPracticeReadOnlySource",
+    "TwelveDataCloudMarketSource",
     "TwelveDataReadOnlySource",
 ]

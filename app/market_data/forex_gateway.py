@@ -11,10 +11,12 @@ from app.market_data.forex_environment import ForexDataSettings
 from app.market_data.forex_models import EconomicCalendarSnapshot, ForexDataBundle, IndependentRate
 from app.market_data.mt5_demo import Mt5DemoReadOnlySource
 from app.market_data.forex_sources import (
+    FmpForexReadOnlySource,
     ForexFactoryEconomicCalendarReadOnlySource,
     JsonTransport,
     NbpPlnReadOnlySource,
     OandaPracticeReadOnlySource,
+    TwelveDataCloudMarketSource,
     TwelveDataReadOnlySource,
 )
 from app.trading.forex_models import (
@@ -95,16 +97,31 @@ class ForexReadOnlyDataGateway:
         selected_now = aware_utc(now or datetime.now(timezone.utc), "now")
         if not self.settings.readiness()["complete"]:
             raise TradingValidationError("forex_data_gate: configuration_incomplete")
-        independent_source = TwelveDataReadOnlySource(
-            self.settings.twelve_data_api_key, self._transport
-        )
+        if self.settings.primary_provider == "TWELVE_DATA_CLOUD":
+            independent_source = FmpForexReadOnlySource(
+                self.settings.fmp_api_key,
+                self._transport,
+            )
+            independent_name = "FMP"
+        else:
+            independent_source = TwelveDataReadOnlySource(
+                self.settings.twelve_data_api_key,
+                self._transport,
+            )
+            independent_name = "TWELVE_DATA"
         calendar_source = ForexFactoryEconomicCalendarReadOnlySource(
             self._transport
         )
         nbp_source = NbpPlnReadOnlySource(self._transport)
 
         quotes, bars = self._primary_market(selected_now)
-        independent = independent_source.fetch_rates(self.universe)
+        if isinstance(independent_source, FmpForexReadOnlySource):
+            independent = independent_source.fetch_rates(
+                self.universe,
+                fetched_at=selected_now,
+            )
+        else:
+            independent = independent_source.fetch_rates(self.universe)
         pln_reference = nbp_source.fetch_usd_pln(fetched_at=selected_now)
         calendar = calendar_source.fetch_calendar(now=selected_now)
 
@@ -148,6 +165,7 @@ class ForexReadOnlyDataGateway:
             diagnostics={
                 "mode": "READ_ONLY_PAPER_INPUT",
                 "primary_provider": self.settings.primary_provider,
+                "independent_provider": independent_name,
                 "collected_at": selected_now.isoformat(),
                 "primary_pair_count": len(quotes),
                 "primary_closed_bar_count": self.policy.primary_closed_bar_count,
@@ -169,6 +187,15 @@ class ForexReadOnlyDataGateway:
             return Mt5DemoReadOnlySource(
                 symbol_suffix=self.settings.mt5_symbol_suffix,
                 module=self._mt5_module,
+            ).fetch_market(
+                self.universe,
+                bar_count=self.policy.primary_closed_bar_count,
+                now=now,
+            )
+        if self.settings.primary_provider == "TWELVE_DATA_CLOUD":
+            return TwelveDataCloudMarketSource(
+                self.settings.twelve_data_api_key,
+                self._transport,
             ).fetch_market(
                 self.universe,
                 bar_count=self.policy.primary_closed_bar_count,
@@ -199,7 +226,10 @@ class ForexReadOnlyDataGateway:
             return False
         primary_age = (now - primary.timestamp).total_seconds()
         independent_age = (now - independent.timestamp).total_seconds()
-        if not -2 <= primary_age <= self.policy.max_primary_age_seconds:
+        max_primary_age = self.policy.max_primary_age_seconds
+        if self.settings.primary_provider == "TWELVE_DATA_CLOUD":
+            max_primary_age = 20 * 60
+        if not -2 <= primary_age <= max_primary_age:
             return False
         if not -2 <= independent_age <= self.policy.max_independent_age_seconds:
             return False

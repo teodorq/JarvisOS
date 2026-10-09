@@ -29,7 +29,7 @@ from app.trading.models import TradingValidationError, aware_utc
 
 
 class ForexDemoPaperRuntime:
-    """Observe once and then apply the same inputs to the local PAPER ledger."""
+    """Observe once and apply the same inputs to a PAPER-only ledger."""
 
     def __init__(
         self,
@@ -79,8 +79,11 @@ class ForexDemoPaperRuntime:
         selected_now = aware_utc(now or datetime.now(timezone.utc), "now")
         if not self.settings.paper_autopilot_enabled:
             return self._blocked(selected_id, "PAPER_AUTOPILOT_NOT_ENABLED")
-        if self.settings.primary_provider != "MT5_DEMO":
-            return self._blocked(selected_id, "MT5_DEMO_PRIMARY_REQUIRED")
+        if self.settings.primary_provider not in {
+            "MT5_DEMO",
+            "TWELVE_DATA_CLOUD",
+        }:
+            return self._blocked(selected_id, "PAPER_PRIMARY_NOT_APPROVED")
         try:
             bundle = self.gateway.collect(now=selected_now)
             observation = ForexObservationService(
@@ -152,10 +155,10 @@ class ForexDemoPaperRuntime:
             )
         return {
             "status": "PAPER_CYCLE_COMPLETED",
-            "mode": "AUTONOMOUS_LOCAL_FOREX_PAPER",
+            "mode": self._runtime_mode(),
             "cycle_id": selected_id,
             "observed_at": selected_now.isoformat(),
-            "primary_provider": "MT5_DEMO",
+            "primary_provider": self.settings.primary_provider,
             "strategy": "PAPER_BASE_SCANNER_10_30",
             "unvalidated_strategy_demo_override": True,
             "observation": observation,
@@ -329,8 +332,8 @@ class ForexDemoPaperRuntime:
             for item in instructions
         )
 
-    @staticmethod
     def _blocked(
+        self,
         cycle_id: str,
         reason: str,
         *,
@@ -342,7 +345,7 @@ class ForexDemoPaperRuntime:
     ) -> dict[str, Any]:
         return {
             "status": "PAPER_CYCLE_BLOCKED",
-            "mode": "AUTONOMOUS_LOCAL_FOREX_PAPER",
+            "mode": self._runtime_mode(),
             "cycle_id": cycle_id,
             "reason": reason,
             "observation": observation or {},
@@ -356,6 +359,11 @@ class ForexDemoPaperRuntime:
             "live_orders_sent": False,
             "real_money_access": False,
         }
+
+    def _runtime_mode(self) -> str:
+        if self.settings.primary_provider == "TWELVE_DATA_CLOUD":
+            return "AUTONOMOUS_AZURE_FOREX_PAPER"
+        return "AUTONOMOUS_LOCAL_FOREX_PAPER"
 
 
 __all__ = ["ForexDemoPaperRuntime"]

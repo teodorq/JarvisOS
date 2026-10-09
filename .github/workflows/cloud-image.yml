@@ -6,10 +6,7 @@ on:
       - develop
     paths:
       - cloud_service/**
-      - app/cloud/**
-      - app/ai/actions.py
-      - app/ai/planner_llm.py
-      - app/ai/commands/**
+      - app/**
       - tests/test_cloud*.py
       - tests/test_remote_command_bridge.py
       - tests/test_remote_power_control.py
@@ -85,6 +82,9 @@ jobs:
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.13"
+
+      - name: Install cloud runtime dependencies
+        run: python -m pip install --requirement cloud_service/requirements.txt
 
       - name: Test cloud boundary
         run: python -m unittest discover -s tests -p "test_cloud*.py" -v
@@ -246,6 +246,27 @@ jobs:
           done
           echo "Azure Container App update failed after 5 attempts."
           exit 1
+
+      - name: Update PAPER job image when provisioned
+        shell: bash
+        run: |
+          if az containerapp job show \
+            --name jarvis-os-forex-paper \
+            --resource-group rg-jarvis-os-cloud \
+            --only-show-errors \
+            --output none 2>/dev/null; then
+            az containerapp job update \
+              --name jarvis-os-forex-paper \
+              --resource-group rg-jarvis-os-cloud \
+              --image "ghcr.io/${{ github.repository_owner }}/jarvis-os-cloud:sha-${{ github.sha }}" \
+              --cpu 0.25 \
+              --memory 0.5Gi \
+              --set-env-vars "JARVIS_OS_BUILD_SHA=${{ github.sha }}" \
+              --only-show-errors \
+              --output none
+          else
+            echo "PAPER job is not provisioned yet; Bicep deployment is required once."
+          fi
 
       - name: Verify declared Azure configuration
         shell: bash

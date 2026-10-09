@@ -1,8 +1,9 @@
 # JARVIS OS Cloud
 
-This architecture moves safe planning and a durable phone command relay to Azure. The
-GUI, microphone, Windows action execution, user confirmations, memory, and
-Google tokens remain on the desktop computer.
+This architecture moves safe planning, a durable phone command relay, and
+scheduled Forex PAPER simulation to Azure. The GUI, microphone, Windows action
+execution, user confirmations, memory, and Google tokens remain on the desktop
+computer.
 
 The cloud boundary adds a privacy gate on both sides of the connection. Commands that
 look like they contain passwords, API keys, bearer tokens, private keys, or
@@ -22,6 +23,16 @@ paid service.
   messages. Shared Key authorization is disabled. The Container App uses its
   managed identity, while the owner receives message-processing access only to
   the `commands` queue.
+- A scheduled Container Apps Job runs at minutes 02, 17, 32, and 47 UTC. It
+  stops after each PAPER cycle, so it incurs no job compute charge between
+  executions. The job uses 0.25 vCPU and 0.5 GiB, with one replica and one
+  retry. Its tamper-evident PAPER state is stored in a private Blob container.
+  Shared Key access stays disabled; only the job's managed identity receives
+  Blob Data Contributor on that one container.
+- The cloud PAPER path uses closed M15 bars from Twelve Data and FMP only as an
+  independent midpoint check. It applies a conservative synthetic spread and
+  exposes no broker-order method, OANDA order endpoint, LIVE promotion, or
+  real-money credential.
 - Commands containing likely credentials never leave the desktop; the cloud
   service rejects them as a second line of defense.
 - The subscription has a 4.60 EUR monthly budget with alerts at 50%, 80%,
@@ -63,10 +74,24 @@ automatically uses the local planner.
 4. Register the phone page in Microsoft Entra with the Container Apps callback
    URL, create a client secret, and note the owner's Entra object ID.
 5. Deploy subscription.bicep with the image, desktop API token, Entra client
-   ID and secret, owner object ID, and `budgetAlertEmail` passed as secure
-   parameters. Never store those private values in a file or Git.
+   ID and secret, owner object ID, read-only Twelve Data and FMP keys, and
+   `budgetAlertEmail` passed as secure parameters. Never store those private
+   values in a file or Git.
 6. Check the returned /health URL before configuring JARVIS_OS_CLOUD_URL and
    JARVIS_OS_CLOUD_API_TOKEN on the desktop.
+
+After the immutable cloud image containing the PAPER job has been published,
+the job can also be deployed independently of the phone authentication stack:
+
+~~~powershell
+az login
+.\tools\deploy_cloud_forex_paper.ps1 -StartNow
+~~~
+
+The script reads the already ignored `config/forex.env`, never prints the two
+market-data keys, reuses the exact immutable image served by the planner, and
+fails if the Git SHA, Storage account, managed identity, schedule, or image is
+not the expected value.
 
 Only the JARVIS_OS_CLOUD_* names are accepted. The temporary JARVIS_CLOUD_*
 migration aliases were removed after the live deployment moved to JARVIS OS.
@@ -79,7 +104,9 @@ checks the injected provider and exact owner object ID again before accepting
 commands. The page supports PWA installation, logout, lost-device session
 review, and restoration of the last command status after refresh. It stores
 only command and device identifiers in `sessionStorage`, never command text or
-results. The desktop must remain running to receive commands. The phone cannot
+results. The desktop must remain running to receive desktop commands. The Azure
+Forex PAPER job is independent and continues on schedule while the computer is
+off. The phone cannot
 approve actions: anything protected by the normal confirmation policy still
 waits for local confirmation on the computer.
 

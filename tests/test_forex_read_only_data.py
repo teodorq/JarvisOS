@@ -14,9 +14,11 @@ from urllib.parse import parse_qs, urlsplit
 from app.market_data.forex_environment import ForexDataSettings, load_forex_environment
 from app.market_data.forex_gateway import ForexReadOnlyDataGateway
 from app.market_data.forex_sources import (
+    FmpForexReadOnlySource,
     ForexFactoryEconomicCalendarReadOnlySource,
     NbpPlnReadOnlySource,
     OandaPracticeReadOnlySource,
+    TwelveDataCloudMarketSource,
     TwelveDataReadOnlySource,
 )
 from app.market_data.http_json import MarketDataTransportError, PreparedJsonRequest
@@ -75,11 +77,33 @@ class FakeForexTransport:
             rate = PRICES[symbol]
             if symbol == self.divergent_pair:
                 rate *= Decimal("1.01")
+            if parsed.path == "/time_series":
+                count = int(query["outputsize"][0])
+                return {
+                    "status": "ok",
+                    "meta": {"symbol": symbol.replace("_", "/")},
+                    "values": [{
+                        "datetime": (
+                            NOW - timedelta(minutes=(count - index) * 15)
+                        ).replace(tzinfo=None).isoformat(sep=" "),
+                        "open": str(PRICES[symbol]),
+                        "high": str(PRICES[symbol] + major_pair(symbol).pip_size),
+                        "low": str(PRICES[symbol] - major_pair(symbol).pip_size),
+                        "close": str(PRICES[symbol]),
+                        "volume": "100",
+                    } for index in range(count)],
+                }
             return {
                 "symbol": symbol.replace("_", "/"),
                 "rate": str(rate),
                 "timestamp": int(NOW.timestamp()),
             }
+        if parsed.hostname == FmpForexReadOnlySource.HOST:
+            return [{
+                "symbol": pair.symbol.replace("_", ""),
+                "price": str(PRICES[pair.symbol]),
+                "timestamp": int(NOW.timestamp()),
+            } for pair in MAJOR_FOREX_PAIRS]
         if parsed.hostname == NbpPlnReadOnlySource.HOST:
             return {
                 "table": "A",
@@ -163,6 +187,16 @@ def mt5_settings() -> ForexDataSettings:
     return ForexDataSettings(
         enabled=True,
         primary_provider="MT5_DEMO",
+        twelve_data_api_key="twelve-secret",
+        fmp_api_key="fmp-secret",
+    )
+
+
+def cloud_settings() -> ForexDataSettings:
+    return ForexDataSettings(
+        enabled=True,
+        paper_autopilot_enabled=True,
+        primary_provider="TWELVE_DATA_CLOUD",
         twelve_data_api_key="twelve-secret",
         fmp_api_key="fmp-secret",
     )
@@ -430,6 +464,40 @@ class ProviderParserTests(unittest.TestCase):
         self.assertEqual(calendar.events[0].importance, 3)
         self.assertEqual(calendar.provider, "FOREX_FACTORY")
 
+    def test_cloud_market_uses_closed_bars_and_conservative_spread(self) -> None:
+        fake = FakeForexTransport()
+        pair = major_pair("EUR_USD")
+        quotes, histories = TwelveDataCloudMarketSource(
+            "key",
+            fake,
+        ).fetch_market((pair,), bar_count=31, now=NOW)
+        quote = quotes[pair.symbol]
+        self.assertEqual(len(histories[pair.symbol]), 31)
+        self.assertEqual(quote.timestamp, NOW)
+        self.assertEqual(quote.spread_pips, Decimal("2.5"))
+        self.assertLessEqual(histories[pair.symbol][-1].timestamp, NOW)
+
+    def test_fmp_cloud_cross_check_requires_complete_universe(self) -> None:
+        rates = FmpForexReadOnlySource(
+            "key",
+            FakeForexTransport(),
+        ).fetch_rates(MAJOR_FOREX_PAIRS, fetched_at=NOW)
+        self.assertEqual(set(rates), {pair.symbol for pair in MAJOR_FOREX_PAIRS})
+        self.assertTrue(all(rate.source == "FMP" for rate in rates.values()))
+
+    def test_fmp_short_payload_uses_bounded_fetch_timestamp(self) -> None:
+        def transport(_request: PreparedJsonRequest) -> object:
+            return [{
+                "symbol": pair.symbol.replace("_", ""),
+                "price": str(PRICES[pair.symbol]),
+            } for pair in MAJOR_FOREX_PAIRS]
+
+        rates = FmpForexReadOnlySource("key", transport).fetch_rates(
+            MAJOR_FOREX_PAIRS,
+            fetched_at=NOW,
+        )
+        self.assertTrue(all(rate.timestamp == NOW for rate in rates.values()))
+
     def test_forex_factory_calendar_fails_closed_on_empty_feed(self) -> None:
         source = ForexFactoryEconomicCalendarReadOnlySource(lambda request: [])
         with self.assertRaisesRegex(TradingValidationError, "invalid_response"):
@@ -469,6 +537,23 @@ class ProviderParserTests(unittest.TestCase):
 
 
 class ForexDataGatewayTests(unittest.TestCase):
+    def test_cloud_sources_form_complete_fail_closed_bundle(self) -> None:
+        bundle = ForexReadOnlyDataGateway(
+            cloud_settings(),
+            transport=FakeForexTransport(),
+        ).collect(now=NOW)
+        self.assertEqual(
+            bundle.diagnostics["primary_provider"],
+            "TWELVE_DATA_CLOUD",
+        )
+        self.assertEqual(bundle.diagnostics["independent_provider"], "FMP")
+        self.assertEqual(len(bundle.quotes), 7)
+        self.assertTrue(all(len(series) == 211 for series in bundle.bars.values()))
+        self.assertTrue(all(
+            context.independent_source_count == 2
+            for context in bundle.contexts.values()
+        ))
+
     def test_mt5_demo_can_be_selected_as_primary_source(self) -> None:
         fake_mt5 = FakeMt5Module()
         bundle = ForexReadOnlyDataGateway(

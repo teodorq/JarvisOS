@@ -11,7 +11,6 @@ from app.ai.software_engineer.safe_development_commands import execute_safe_deve
 from app.ai.software_engineer.autonomous_cycle_commands import execute_autonomous_cycle_command, plan_autonomous_cycle_command
 from app.ai.software_engineer.autonomous_work_commands import execute_autonomous_work_command, plan_autonomous_work_command
 class BrainCommandRouter:
-    """Stateless command planning and execution routing for Brain."""
     def think(self, brain: Any, command: str) -> dict:
         original_command, command = str(command), normalize_user_command(command)
         brain.cognitive.before_think(command)
@@ -91,17 +90,12 @@ class BrainCommandRouter:
     @staticmethod
     def _assistant_controller(brain: Any, *, create: bool) -> Any:
         controller = getattr(brain, "personal_assistant_controller", None)
-        if controller is not None or not create:
-            return controller
+        if controller is not None or not create: return controller
         try:
-            controller = PersonalAssistantController(
-                getattr(brain, "project_root", None),
-                memory=getattr(brain, "memory", None),
-            )
+            controller = PersonalAssistantController(getattr(brain, "project_root", None), memory=getattr(brain, "memory", None))
             setattr(brain, "personal_assistant_controller", controller)
-            return controller
-        except Exception:
-            return None
+        except Exception: return None
+        return controller
     def execute(self, brain: Any, thought: dict) -> Any:
         command = thought.get('command', '')
         handler = thought.get('handler', 'standard')

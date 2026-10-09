@@ -216,7 +216,7 @@ class ForexPaperRuntimeTests(unittest.TestCase):
         self.assertEqual(gateway.calls, 0)
         self.assertFalse((self.root / "data/trading/forex_paper_ledger.json").exists())
 
-    def test_non_mt5_primary_is_blocked_before_market_read(self) -> None:
+    def test_unapproved_primary_is_blocked_before_market_read(self) -> None:
         gateway = FakeGateway()
         result = ForexDemoPaperRuntime(
             self.root,
@@ -224,8 +224,33 @@ class ForexPaperRuntimeTests(unittest.TestCase):
             gateway=gateway,  # type: ignore[arg-type]
         ).run_once(cycle_id="wrong-provider", now=NOW)
 
-        self.assertEqual(result["reason"], "MT5_DEMO_PRIMARY_REQUIRED")
+        self.assertEqual(result["reason"], "PAPER_PRIMARY_NOT_APPROVED")
         self.assertEqual(gateway.calls, 0)
+
+    def test_approved_cloud_primary_runs_without_mt5(self) -> None:
+        gateway = FakeGateway()
+        result = ForexDemoPaperRuntime(
+            self.root,
+            settings=self.settings(provider="TWELVE_DATA_CLOUD"),
+            gateway=gateway,  # type: ignore[arg-type]
+            journal=_ready_journal(self.root),
+        ).run_once(
+            cycle_id="azure-cloud-cycle",
+            now=NOW,
+            capture_origin="AZURE_SCHEDULED",
+        )
+
+        self.assertEqual(result["status"], "PAPER_CYCLE_COMPLETED")
+        self.assertEqual(result["mode"], "AUTONOMOUS_AZURE_FOREX_PAPER")
+        self.assertEqual(result["primary_provider"], "TWELVE_DATA_CLOUD")
+        self.assertEqual(
+            result["observation"]["capture_origin"],
+            "AZURE_SCHEDULED",
+        )
+        self.assertEqual(gateway.calls, 1)
+        self.assertFalse(result["broker_orders_sent"])
+        self.assertFalse(result["live_orders_sent"])
+        self.assertFalse(result["real_money_access"])
 
     def test_ready_runtime_observes_once_and_opens_local_paper_only(self) -> None:
         gateway = FakeGateway()

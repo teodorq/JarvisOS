@@ -60,29 +60,20 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-_POLISH_FOLD_TRANSLATION = str.maketrans({
-    "ł": "l",
-    "Ł": "l",
-})
+_POLISH_FOLD_TRANSLATION = str.maketrans({"ł": "l", "Ł": "l"})
 
 
 def fold_text(value: object) -> str:
     text = str(value).casefold().translate(_POLISH_FOLD_TRANSLATION)
     text = unicodedata.normalize("NFKD", text)
-    return "".join(
-        char for char in text
-        if not unicodedata.combining(char)
-    )
+    return "".join(char for char in text if not unicodedata.combining(char))
 
 
 def normalize_user_command(value: object) -> str:
     text = " ".join(str(value).strip().split())
     lowered = text.casefold()
     for wake_word in _WAKE_WORDS:
-        wake_match = re.match(
-            rf"^{re.escape(wake_word)}(?:[\s,;:!?.-]+|$)",
-            lowered,
-        )
+        wake_match = re.match(rf"^{re.escape(wake_word)}(?:[\s,;:!?.-]+|$)", lowered)
         if wake_match:
             if wake_match.end() >= len(text):
                 return wake_word

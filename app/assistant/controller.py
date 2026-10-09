@@ -1,6 +1,8 @@
 from __future__ import annotations
 from app.assistant.local_clock import format_local_clock
 from app.assistant.local_device_status import format_local_device_status
+from app.assistant.command_matches import matches_personal_assistant
+from app.assistant.personalization import AssistantPersonalizationService
 from pathlib import Path
 import re
 from typing import Any
@@ -35,6 +37,7 @@ class PersonalAssistantController:
         self.capabilities = CapabilityGuideService()
         self.desktop = ReliableDesktopService(self.project_root)
         self.projects = ProjectMemoryService(self.project_root)
+        self.personalization = AssistantPersonalizationService(self.projects)
         self.voice = VoiceRuntimeService(self.project_root)
         self.weather = WeatherService()
         self.daily = DailyWorkService(self.project_root)
@@ -52,141 +55,7 @@ class PersonalAssistantController:
         self.trading = LazyTradingRuntime(self.project_root)
     @staticmethod
     def matches(command: object) -> bool:
-        text = fold_text(command)
-        phrases = (
-            "ktora jest godzina",
-            "jaka jest godzina",
-            "podaj godzine",
-            "powiedz mi godzine",
-            "aktualna godzina",
-            "jaka jest data", "podaj date", "podaj dzisiejsza date", "dzisiejsza data", "jaki mamy dzis dzien", "jaki mamy dzisiaj dzien", "jaki dzisiaj jest dzien", "jaki jest dzis dzien", "dzien tygodnia", "data i godzina", "date and time",
-            "status komputera", "stan komputera", "obciazenie komputera", "ile mam baterii", "stan baterii", "poziom baterii", "jak dlugo dziala komputer", "czas pracy komputera", "uzycie procesora", "uzycie pamieci ram",
-            "pogoda", "pogode", "pogody", "weather", "forecast",
-            "co potrafisz",
-            "co umiesz",
-            "co mozesz zrobic",
-            "jakie masz funkcje",
-            "pokaz pomoc",
-            "pomoc jarvis",
-            "jak z ciebie korzystac",
-            "przyklady polecen",
-            "lista polecen",
-            "centrum mozliwosci",
-            "pokaz opcje rozmowy",
-            "jakie sa opcje rozmowy",
-            "jak mozemy rozmawiac",
-            "jaki jest tryb rozmowy",
-            "jaki tryb rozmowy",
-            "jak teraz odpowiadasz",
-            "mow krocej",
-            "odpowiadaj krotko",
-            "tryb rozmowy krotki",
-            "mow dokladniej",
-            "odpowiadaj dokladniej",
-            "tryb rozmowy dokladny",
-            "rozmawiaj luzniej",
-            "tryb rozmowy luzny",
-            "rozmawiaj naturalnie",
-            "odpowiadaj normalnie",
-            "tryb rozmowy normalny",
-            "kontynuuj rozmowe",
-            "rozwin to",
-            "opowiedz wiecej",
-            "powiedz wiecej",
-            "wroc do naszego tematu",
-            "a dalej",
-            "i co dalej",
-            "powiedz to prosciej",
-            "wyjasnij inaczej",
-            "nie o to mi chodzilo",
-            "to bylo za dlugie",
-            "to bylo za krotkie",
-            "podaj przyklad",
-            "daj przyklad",
-            "sprobuj jeszcze raz",
-            "zadaj mi pytanie",
-            "rozwin ostatnia odpowiedz",
-            "o czym rozmawialismy",
-            "przypomnij nasza rozmowe",
-            "jaki byl ostatni temat",
-            "co ostatnio omawialismy",
-            "status asystenta",
-            "status b96",
-            "status b97",
-            "status b98",
-            "status b99",
-            "status b100",
-            "status rozmowy",
-            "kontekst rozmowy",
-            "status sterowania pulpitem",
-            "niezawodne sterowanie",
-            "status pamieci projektow",
-            "pamiec projektow",
-            "zapamietaj projekt",
-            "dodaj projekt",
-            "ustaw aktywny projekt",
-            "przelacz projekt",
-            "zapamietaj preferencje",
-            "ustaw preferencje",
-            "zapamietaj ze",
-            "zapamietaj, ze",
-            "zapamietaj sobie ze",
-            "zapamietaj sobie, ze",
-            "pamietaj ze",
-            "pamietaj, ze",
-            "co o mnie pamietasz",
-            "co pamietasz o mnie",
-            "co o mnie wiesz",
-            "jakie moje informacje pamietasz",
-            "jakie moje preferencje pamietasz",
-            "zapomnij ze",
-            "zapomnij, ze",
-            "zapomnij o",
-            "usun z pamieci",
-            "status glosu",
-            "glos 2.0",
-            "voice 2.0",
-            "status integracji",
-            "pokaz integracje",
-            "jakie integracje",
-            "polaczenia zewnetrzne",
-            "status revenuecat",
-            "status meta ads",
-            "status claude",
-            "status cartesia",
-            "status elevenlabs",
-            "status paper tradingu", "stan paper tradingu", "status tradingu", "gotowosc tradingu", "gotowosc do tradingu", "zabezpieczenia tradingu", "audyt tradingu", "status silnika tradingowego", "status forex", "gotowosc forex", "skaner forex", "status obserwatora forex", "ile obserwacji forex", "postep obserwacji forex", "czy paper gotowy", "czy paper jest gotowy",
-            "raport obserwacji forex", "przejrzyj obserwacje forex", "audyt obserwacji forex", "jakosc obserwacji forex",
-            "przygotuj portfel v3 shadow", "zainicjalizuj portfel v3 shadow", "utworz pusty portfel v3 shadow", "przygotuj v3 shadow",
-            "tryb ciagly glosu",
-            "centrum codziennej pracy",
-            "status codziennej pracy",
-            "utworz zadanie wieloetapowe",
-            "rozpocznij zadanie",
-            "uruchom zadanie",
-            "nastepny krok",
-            "wykonano krok",
-            "wstrzymaj zadanie",
-            "wznow zadanie",
-            "anuluj zadanie",
-            "dodaj przypomnienie",
-            "przypomnij mi",
-            "eksportuj raport codziennej pracy",
-            "wyczysc kontekst rozmowy",
-            "wyczysc historie rozmowy",
-            "zapomnij te rozmowe",
-            "kontynuuj ostatnie zadanie",
-            "jeszcze raz",
-            "powtorz",
-            "zrob to jeszcze raz",
-            "kontynuuj",
-            "jedz dalej",
-        )
-        return (
-            any(phrase in text for phrase in phrases)
-            or NaturalLanguageService.classify(command) == "contextual_greeting"
-            or deferred_matches(command)
-        )
+        return matches_personal_assistant(command)
     def resolve_command(self, command: object) -> ResolvedCommand:
         resolved = self.conversation.resolve(command)
         if self._is_direct_core_command(resolved):
@@ -410,11 +279,11 @@ class PersonalAssistantController:
         if intent == "conversation_status":
             return self._format_conversation_status()
         if intent == "conversation_options":
-            return self._format_conversation_options()
+            return self.personalization.format_conversation_options()
         if intent == "conversation_style_status":
-            return self._format_conversation_style()
+            return self.personalization.format_conversation_style()
         if intent == "conversation_style":
-            return self._set_conversation_style(command)
+            return self.personalization.set_conversation_style(command)
         if intent == "conversation_question_mode_status":
             return FreeConversationService(
                 self.project_root
@@ -441,17 +310,17 @@ class PersonalAssistantController:
         if intent == "forex_observation_review": return self.trading.format_observation_review()
         if intent == "initialize_forex_v3_shadow": return self.trading.initialize_v3_shadow()
         if intent == "remember_project":
-            return self._remember_project(command)
+            return self.personalization.remember_project(command)
         if intent == "activate_project":
-            return self._activate_project(command)
+            return self.personalization.activate_project(command)
         if intent == "remember_preference":
-            return self._remember_preference(command)
+            return self.personalization.remember_preference(command)
         if intent == "remember_personal_fact":
-            return self._remember_personal_fact(command)
+            return self.personalization.remember_personal_fact(command)
         if intent == "list_personal_memory":
-            return self._list_personal_memory()
+            return self.personalization.list_personal_memory()
         if intent == "forget_personal_fact":
-            return self._forget_personal_fact(command)
+            return self.personalization.forget_personal_fact(command)
         if intent == "add_workflow":
             title, steps = self.daily.parse_workflow_command(command)
             workflow = self.daily.create_workflow(title, steps)
@@ -497,131 +366,6 @@ class PersonalAssistantController:
             self.voice.update({"continuous_mode": enabled})
             return f"B99: tryb ciągły głosu {'włączony' if enabled else 'wyłączony'}."
         return self._format_full_status()
-    def _remember_project(self, command: str) -> str:
-        match = re.search(
-            r"(?:zapamiętaj|zapamietaj|dodaj)\s+projekt\s+(.+?)(?:\s+w\s+([A-Za-z]:[\\/].+))?$",
-            command,
-            re.IGNORECASE,
-        )
-        if not match:
-            raise ValueError("Użyj: Zapamiętaj projekt NAZWA w C:\\ścieżka.")
-        project = self.projects.remember_project(
-            match.group(1).strip(),
-            path=(match.group(2) or "").strip(),
-        )
-        return f"B98: zapisano i aktywowano projekt „{project['name']}”."
-    def _activate_project(self, command: str) -> str:
-        name = re.sub(
-            r"^(?:ustaw aktywny projekt|przełącz projekt|przelacz projekt)\s*",
-            "",
-            command,
-            flags=re.IGNORECASE,
-        ).strip()
-        project = self.projects.activate_project(name)
-        return f"B98: aktywny projekt: {project['name']}."
-    def _remember_preference(self, command: str) -> str:
-        content = re.sub(
-            r"^(?:zapamiętaj|zapamietaj|ustaw)\s+preferencj(?:ę|e)\s*",
-            "",
-            command,
-            flags=re.IGNORECASE,
-        ).strip()
-        if "=" in content:
-            key, value = [part.strip() for part in content.split("=", 1)]
-        elif ":" in content:
-            key, value = [part.strip() for part in content.split(":", 1)]
-        else:
-            raise ValueError("Użyj: Zapamiętaj preferencję KLUCZ = WARTOŚĆ.")
-        self.projects.set_preference(key, value)
-        return f"B98: zapisano preferencję „{key}”."
-    def _set_conversation_style(self, command: str) -> str:
-        text = fold_text(command)
-        if any(value in text for value in ("krocej", "krotko", "krotki")):
-            style, label = "concise", "krótki"
-        elif any(value in text for value in ("dokladniej", "dokladny")):
-            style, label = "detailed", "dokładny"
-        elif any(value in text for value in ("luzniej", "luzny")):
-            style, label = "casual", "luźny"
-        elif any(value in text for value in ("naturalnie", "normalnie", "normalny")):
-            style, label = "natural", "naturalny"
-        else:
-            raise ValueError(
-                "Dostępne style rozmowy: krótki, dokładny, luźny i normalny."
-            )
-        self.projects.set_preference(
-            "conversation_style", style, category="assistant_setting",
-        )
-        return f"Ustawiłem {label} styl rozmowy."
-    def _format_conversation_style(self) -> str:
-        style = str(self.projects.get_preference("conversation_style", "natural"))
-        labels = {
-            "concise": "krótki",
-            "detailed": "dokładny",
-            "casual": "luźny",
-            "natural": "naturalny",
-            "neutral": "naturalny",
-        }
-        return f"Aktualny styl rozmowy: {labels.get(style, 'naturalny')}."
-    @staticmethod
-    def _format_conversation_options() -> str:
-        return (
-            "Możemy rozmawiać swobodnie, omawiać pomysły, decyzje, emocje, "
-            "plany, motywację i zapamiętane informacje. Style odpowiedzi: "
-            "„mów krócej”, „mów dokładniej”, „rozmawiaj luźniej” albo "
-            "„rozmawiaj naturalnie”. Domyślny tryb naturalny nie kończy "
-            "odpowiedzi po kilku zdaniach, jeśli temat wymaga rozwinięcia. "
-            "Pytania kontrolujesz poleceniami: „nie zadawaj mi pytań”, "
-            "„pytaj naturalnie” albo „pytaj mnie częściej”."
-        )
-    def _remember_personal_fact(self, command: str) -> str:
-        match = re.match(
-            r"^(?:zapamiętaj|zapamietaj|pamiętaj|pamietaj)(?:\s+sobie)?\s*,?\s*(?:że|ze)\s+(.+)$",
-            command.strip(),
-            re.IGNORECASE,
-        )
-        if not match:
-            raise ValueError("Powiedz na przykład: Zapamiętaj, że lubię kawę.")
-        fact = " ".join(match.group(1).split()).strip(" .,:;")
-        if self._looks_sensitive(fact):
-            return (
-                "Nie zapiszę hasła, tokenu, kodu PIN ani danych płatniczych. "
-                "Takie informacje nie powinny trafiać do pamięci rozmowy."
-            )
-        saved = self.projects.remember_personal_fact(fact)
-        return f"Zapamiętam: {saved.get('value', fact)}."
-    def _list_personal_memory(self) -> str:
-        facts = self.projects.list_preferences(category="personal_fact", limit=10)
-        if not facts:
-            return "Nie mam jeszcze zapisanych informacji o Tobie."
-        values = [str(item.get("value", "")).strip() for item in facts]
-        return "Pamiętam:\n" + "\n".join(f"- {value}" for value in values if value)
-    def _forget_personal_fact(self, command: str) -> str:
-        query = re.sub(
-            r"^(?:zapomnij|usuń\s+z\s+pamięci|usun\s+z\s+pamieci)\s*"
-            r"(?:o\s+tym\s*)?(?:informacj(?:ę|e)\s*)?(?:,?\s*(?:że|ze|o)\s*)?",
-            "",
-            command.strip(),
-            flags=re.IGNORECASE,
-        ).strip(" .,:;")
-        if not query:
-            raise ValueError("Powiedz dokładnie, którą informację mam zapomnieć.")
-        matches = self.projects.find_personal_facts(query)
-        if not matches:
-            return "Nie znalazłem takiej informacji w pamięci."
-        if len(matches) > 1:
-            options = "; ".join(str(item.get("value", "")) for item in matches[:3])
-            return f"Znalazłem kilka podobnych informacji: {options}. Powiedz dokładniej, którą usunąć."
-        item = matches[0]
-        self.projects.remove_preference(item.get("key", ""))
-        return f"Zapomniałem: {item.get('value', query)}."
-    @staticmethod
-    def _looks_sensitive(value: object) -> bool:
-        text = fold_text(value)
-        markers = (
-            "haslo", "password", "token", "kod pin", "pin to", "cvv",
-            "numer karty", "klucz api", "api key", "sekret", "secret",
-        )
-        return any(marker in text for marker in markers)
     def _stability_runtime_status(self) -> dict[str, Any]:
         return {
             "conversation": self._conversation_status(),

@@ -16,7 +16,7 @@ class MarketDataTransportError(RuntimeError):
 
 @dataclass(frozen=True, slots=True)
 class PreparedJsonRequest:
-    url: str
+    url: str = field(repr=False)
     allowed_host: str
     headers: tuple[tuple[str, str], ...] = field(default_factory=tuple, repr=False)
     timeout_seconds: float = 5.0

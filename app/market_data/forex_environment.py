@@ -64,7 +64,11 @@ class ForexDataSettings:
 
     def __post_init__(self) -> None:
         provider = str(self.primary_provider or "").strip().upper()
-        if provider not in {"MT5_DEMO", "OANDA_PRACTICE"}:
+        if provider not in {
+            "MT5_DEMO",
+            "OANDA_PRACTICE",
+            "TWELVE_DATA_CLOUD",
+        }:
             raise ValueError("unsupported Forex primary provider")
         suffix = str(self.mt5_symbol_suffix or "").strip()
         if not re.fullmatch(r"[A-Za-z0-9._-]{0,12}", suffix):
@@ -104,6 +108,8 @@ class ForexDataSettings:
 
     @property
     def second_source_ready(self) -> bool:
+        if self.primary_provider == "TWELVE_DATA_CLOUD":
+            return bool(self.enabled and self.fmp_api_key)
         return bool(self.enabled and self.twelve_data_api_key)
 
     @property
@@ -114,7 +120,9 @@ class ForexDataSettings:
     def primary_ready(self) -> bool:
         if self.primary_provider == "MT5_DEMO":
             return self.enabled
-        return self.oanda_ready
+        if self.primary_provider == "OANDA_PRACTICE":
+            return self.oanda_ready
+        return bool(self.enabled and self.twelve_data_api_key)
 
     def readiness(self) -> dict[str, object]:
         return {
@@ -123,6 +131,11 @@ class ForexDataSettings:
             "primary_provider": self.primary_provider,
             "mt5_demo": bool(self.enabled and self.primary_provider == "MT5_DEMO"),
             "oanda_practice": self.oanda_ready,
+            "twelve_data_cloud": bool(
+                self.enabled
+                and self.primary_provider == "TWELVE_DATA_CLOUD"
+                and self.twelve_data_api_key
+            ),
             "independent_second_source": self.second_source_ready,
             "nbp_pln_reference": self.enabled,
             "economic_calendar": self.calendar_ready,

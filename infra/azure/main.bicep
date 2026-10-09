@@ -14,6 +14,14 @@ param buildSha string = 'development'
 @description('Bearer token shared only by the desktop client and Container App.')
 param apiToken string
 
+@secure()
+@description('Read-only Twelve Data key used by the Azure PAPER job.')
+param twelveDataApiKey string
+
+@secure()
+@description('Read-only FMP key used only for an independent price cross-check.')
+param fmpApiKey string
+
 @description('Microsoft Entra application client ID used by the phone page.')
 param phoneEntraClientId string
 
@@ -216,7 +224,6 @@ var storageQueueMessageProcessorRoleId = subscriptionResourceId(
   'Microsoft.Authorization/roleDefinitions',
   '8a0f0c08-91a1-4084-bc3d-661d67233fed'
 )
-
 resource plannerTableAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(commandsTable.id, plannerApp.id, storageTableDataContributorRoleId)
   scope: commandsTable
@@ -305,8 +312,24 @@ resource phoneAuth 'Microsoft.App/containerApps/authConfigs@2025-01-01' = {
     }
   }
 }
+
+module cloudPaper './paper-job.bicep' = {
+  name: '${namePrefix}-cloud-paper'
+  params: {
+    namePrefix: namePrefix
+    location: location
+    containerImage: containerImage
+    buildSha: buildSha
+    storageAccountName: remoteStorage.name
+    managedEnvironmentName: managedEnvironment.name
+    twelveDataApiKey: twelveDataApiKey
+    fmpApiKey: fmpApiKey
+  }
+}
 output endpoint string = 'https://${plannerApp.properties.configuration.ingress.fqdn}'
 output healthUrl string = 'https://${plannerApp.properties.configuration.ingress.fqdn}/health'
 output phoneUrl string = 'https://${plannerApp.properties.configuration.ingress.fqdn}/phone'
 output remoteStorageAccountName string = remoteStorage.name
 output remoteQueueName string = commandsQueue.name
+output paperJobName string = cloudPaper.outputs.paperJobName
+output paperStateContainerName string = cloudPaper.outputs.paperStateContainerName
