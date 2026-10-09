@@ -186,6 +186,7 @@ class HaloIdlePerformanceTests(unittest.TestCase):
     def test_adaptive_interval_preserves_time_based_motion_speed(self) -> None:
         halo = HaloWidget()
         try:
+            halo.set_animation_active(False)
             halo.set_state("thinking")
             halo._angle = 0.0  # noqa: SLF001
             halo._last_tick_at = 10.0  # noqa: SLF001
