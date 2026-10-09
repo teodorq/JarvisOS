@@ -74,12 +74,20 @@ jobs:
           python -m pytest -q --maxfail=1 --durations=20 --junitxml=pytest-junit.xml 2>&1 | Tee-Object -FilePath pytest-out.txt
           $pytestExitCode = $LASTEXITCODE
           if ($pytestExitCode -ne 0) {
-            Write-Warning "Regression suite failed once; retrying once in a clean Python process to reject transient Windows runner failures."
-            python -m pytest -q --maxfail=1 --durations=20 --junitxml=pytest-junit-retry.xml 2>&1 | Tee-Object -FilePath pytest-out-retry.txt
+            Write-Warning "Regression suite failed once; retrying only the failed test in a clean Python process."
+            python -m pytest -q --last-failed --maxfail=1 --durations=20 --junitxml=pytest-junit-retry.xml 2>&1 | Tee-Object -FilePath pytest-out-retry.txt
             $pytestExitCode = $LASTEXITCODE
           }
           if ($pytestExitCode -ne 0) {
-            Write-Output "::error title=Regression suite failed::pytest exited with code $pytestExitCode. Download the test artifact for details."
+            [xml]$junit = Get-Content -LiteralPath pytest-junit-retry.xml -Raw
+            $failedCases = @($junit.SelectNodes('//testcase[failure or error]')) |
+              ForEach-Object { "$($_.classname)::$($_.name)" } |
+              Select-Object -First 10
+            $failedSummary = ($failedCases -join ', ') -replace '[^A-Za-z0-9_.:\-\[\], ]', '?'
+            if ([string]::IsNullOrWhiteSpace($failedSummary)) {
+              $failedSummary = 'pytest exited without a reportable test identifier'
+            }
+            Write-Output "::error title=Regression suite failed::$failedSummary"
             exit $pytestExitCode
           }
 
