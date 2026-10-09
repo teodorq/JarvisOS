@@ -170,12 +170,13 @@ jobs:
             --resource-group rg-jarvis-os-cloud \
             --query properties.configuration.ingress.fqdn \
             --output tsv)"
-          storage_account="$(az storage account list \
+          storage_account="$(az containerapp show \
+            --name jarvis-os-planner \
             --resource-group rg-jarvis-os-cloud \
-            --query "[?tags.component=='phone-command-relay'].name | [0]" \
+            --query "properties.template.containers[0].env[?name=='JARVIS_OS_REMOTE_STORAGE_ACCOUNT'].value | [0]" \
             --output tsv)"
           if [[ ! "${storage_account}" =~ ^[a-z0-9]{3,24}$ ]]; then
-            echo "The tagged JARVIS OS Storage account is missing or ambiguous."
+            echo "The declared JARVIS OS Storage account is missing or invalid."
             exit 1
           fi
           if [[ ! "${previous_sha}" =~ ^[a-f0-9]{40}$ ]]; then

@@ -117,6 +117,13 @@ try {
         $deployedBuildSha -match "^[0-9a-f]{40}$"
     ) "immutable_build_missing"
 
+    $paperJob = Invoke-AzJson -Arguments @(
+        "containerapp", "job", "show",
+        "--name", "jarvis-os-forex-paper",
+        "--resource-group", $resourceGroup,
+        "--query", "{id:id}"
+    )
+
     $currentStage = "authentication"
     $auth = Invoke-AzJson -Arguments @(
         "containerapp", "auth", "show",
@@ -251,8 +258,9 @@ try {
             )
         )
         Assert-AuditCondition (
-            $deploymentRoles.Count -eq 1 -and
-            (Test-ExactRole -Assignments $deploymentRoles -PrincipalId ([string]$deploymentSp.id) -RoleName "Container Apps Contributor" -Scope ([string]$app.id))
+            $deploymentRoles.Count -eq 2 -and
+            (Test-ExactRole -Assignments $deploymentRoles -PrincipalId ([string]$deploymentSp.id) -RoleName "Container Apps Contributor" -Scope ([string]$app.id)) -and
+            (Test-ExactRole -Assignments $deploymentRoles -PrincipalId ([string]$deploymentSp.id) -RoleName "Container Apps Contributor" -Scope ([string]$paperJob.id))
         ) "deployment_role_scope_drift"
         Assert-AuditCondition (
             @(

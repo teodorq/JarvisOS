@@ -146,8 +146,10 @@ No Azure password, Storage key, desktop token, or Entra client secret is
 stored in GitHub or passed to the Container App.
 The federated identity accepts tokens only from this repository's `develop`
 and `main` branches and has Container Apps Contributor access only to the
-planner resource. Develop publishes production images; main runs the scheduled
-health monitor and the manual rollback workflow.
+planner and PAPER job resources. It derives the relay account name from the
+planner declaration and has no Storage role. Develop publishes production
+images; main runs the scheduled health monitor and the manual rollback
+workflow.
 Storage-account and identity changes remain deliberate Bicep deployments. The
 runtime declaration verifies that the managed identity is present and that no
 Storage connection-string secret returns. Container startup also performs a

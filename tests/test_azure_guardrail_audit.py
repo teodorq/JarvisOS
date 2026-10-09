@@ -21,6 +21,8 @@ def test_audit_covers_security_cost_identity_and_runtime() -> None:
         "Storage Queue Data Contributor",
         "Storage Queue Data Message Processor",
         "Container Apps Contributor",
+        "$paperJob.id",
+        "$deploymentRoles.Count -eq 2",
         '"github-$branch"',
         '@("main", "develop")',
         "budget_profile_drift",
@@ -30,6 +32,16 @@ def test_audit_covers_security_cost_identity_and_runtime() -> None:
     )
     for marker in required:
         assert marker in AUDIT
+
+
+def test_workflows_derive_relay_from_planner_without_storage_role() -> None:
+    for path in (
+        ROOT / ".github" / "workflows" / "cloud-image.yml",
+        ROOT / ".github" / "workflows" / "cloud-health-monitor.yml",
+    ):
+        workflow = path.read_text(encoding="utf-8")
+        assert "JARVIS_OS_REMOTE_STORAGE_ACCOUNT" in workflow
+        assert "az storage account list" not in workflow
 
 
 def test_audit_emits_only_a_safe_summary() -> None:

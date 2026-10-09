@@ -30,7 +30,8 @@ class CloudOperationsWorkflowTests(unittest.TestCase):
         self.assertIn(
             'data.get("remote_transport") == "azure_queue"', workflow
         )
-        self.assertIn("tags.component=='phone-command-relay'", workflow)
+        self.assertIn("JARVIS_OS_REMOTE_STORAGE_ACCOUNT", workflow)
+        self.assertNotIn("az storage account list", workflow)
         self.assertNotIn("jaroswfl24enbycwtyrelay", workflow)
 
     def test_rollback_is_manual_serialized_and_immutable(self) -> None:
@@ -116,5 +117,6 @@ class CloudOperationsWorkflowTests(unittest.TestCase):
         )
         self.assertNotIn(":latest", deploy)
         self.assertIn("steps.previous.outputs.storage_account", deploy)
-        self.assertIn("tags.component=='phone-command-relay'", deploy)
+        self.assertIn("JARVIS_OS_REMOTE_STORAGE_ACCOUNT", deploy)
+        self.assertNotIn("az storage account list", deploy)
         self.assertNotIn("jaroswfl24enbycwtyrelay", deploy)
