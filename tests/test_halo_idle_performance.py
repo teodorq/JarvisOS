@@ -31,7 +31,7 @@ class HaloIdlePerformanceTests(unittest.TestCase):
         cls.app = QApplication.instance() or QApplication([])
 
     def test_idle_states_use_a_lighter_frame_rate(self) -> None:
-        halo = HaloWidget()
+        halo = HaloWidget(performance_profile=BALANCED)
         try:
             self.assertEqual(
                 halo._timer.interval(),  # noqa: SLF001 - focused runtime check
@@ -165,7 +165,7 @@ class HaloIdlePerformanceTests(unittest.TestCase):
             halo.deleteLater()
 
     def test_slow_frames_reduce_refresh_rate_and_fast_frames_restore_it(self) -> None:
-        halo = HaloWidget()
+        halo = HaloWidget(performance_profile=BALANCED)
         try:
             halo.set_state("thinking")
             for _ in range(3):
@@ -184,7 +184,7 @@ class HaloIdlePerformanceTests(unittest.TestCase):
             halo.deleteLater()
 
     def test_adaptive_interval_preserves_time_based_motion_speed(self) -> None:
-        halo = HaloWidget()
+        halo = HaloWidget(performance_profile=BALANCED)
         try:
             halo.set_animation_active(False)
             halo.set_state("thinking")
