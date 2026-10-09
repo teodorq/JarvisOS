@@ -66,6 +66,14 @@ jobs:
           app_json="${RUNNER_TEMP}/jarvis-os-monitor-app.json"
           auth_json="${RUNNER_TEMP}/jarvis-os-monitor-auth.json"
           expected_image="ghcr.io/${{ github.repository_owner }}/jarvis-os-cloud:sha-${EXPECTED_SHA}"
+          storage_account="$(az storage account list \
+            --resource-group rg-jarvis-os-cloud \
+            --query "[?tags.component=='phone-command-relay'].name | [0]" \
+            --output tsv)"
+          if [[ ! "${storage_account}" =~ ^[a-z0-9]{3,24}$ ]]; then
+            echo "The tagged JARVIS OS Storage account is missing or ambiguous."
+            exit 1
+          fi
           az containerapp show \
             --name jarvis-os-planner \
             --resource-group rg-jarvis-os-cloud \
@@ -79,7 +87,7 @@ jobs:
             --auth-json "${auth_json}" \
             --expected-image "${expected_image}" \
             --expected-build-sha "${EXPECTED_SHA}" \
-            --expected-storage-account "jaroswfl24enbycwtyrelay" \
+            --expected-storage-account "${storage_account}" \
             --expected-tenant-id "1f218598-c698-404f-908f-025fe1b55870"
           fqdn="$(az containerapp show \
             --name jarvis-os-planner \
