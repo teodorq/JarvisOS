@@ -11,10 +11,10 @@ param budgetAmount string = '4.60'
 param budgetAlertEmail string
 
 @description('First day of the first tracked billing month.')
-param budgetStartDate string = '2026-08-01T00:00:00Z'
+param budgetStartDate string = utcNow('yyyy-MM-01T00:00:00Z')
 
-@description('Last day covered by the current budget guardrail.')
-param budgetEndDate string = '2028-07-31T00:00:00Z'
+@description('End of the rolling two-year budget guardrail window.')
+param budgetEndDate string = dateTimeAdd(budgetStartDate, 'P2Y')
 
 var alertRecipients = [
   budgetAlertEmail

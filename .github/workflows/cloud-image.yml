@@ -148,7 +148,7 @@ jobs:
         with:
           client-id: 553e8a79-9004-49d5-b996-bc8f3768ffce
           tenant-id: 1f218598-c698-404f-908f-025fe1b55870
-          subscription-id: c7cac745-0964-425d-97b4-61d19e4cef65
+          subscription-id: ed0e92d2-9ad3-4f8c-837a-5b696b06bdc9
 
       - name: Capture previous healthy revision
         id: previous
