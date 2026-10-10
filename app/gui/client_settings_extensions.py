@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.assistant.conversation_preferences import (
+    CONTEXT_HOURS_OPTIONS,
     MEMORY_DEPTH_OPTIONS,
     QUESTION_MODE_OPTIONS,
     STYLE_OPTIONS,
@@ -48,6 +49,7 @@ def install_client_settings_controls(window: Any, content: QVBoxLayout) -> None:
     window.client_conversation_style = _combo(STYLE_OPTIONS)
     window.client_conversation_question_mode = _combo(QUESTION_MODE_OPTIONS)
     window.client_conversation_memory_depth = _combo(MEMORY_DEPTH_OPTIONS)
+    window.client_conversation_context_hours = _combo(CONTEXT_HOURS_OPTIONS)
     window.client_sounds = _combo((("Włączone", True), ("Wyłączone", False)))
     window.client_desktop_notifications = _combo((
         ("Włączone", True),
@@ -69,6 +71,9 @@ def install_client_settings_controls(window: Any, content: QVBoxLayout) -> None:
     )
     form.addRow(
         "Pamięć bieżącego wątku", window.client_conversation_memory_depth
+    )
+    form.addRow(
+        "Ciągłość bieżącego tematu", window.client_conversation_context_hours
     )
     form.addRow("Dźwięki", window.client_sounds)
     form.addRow("Powiadomienia Windows", window.client_desktop_notifications)
@@ -151,6 +156,10 @@ def show_client_settings_controls(window: Any) -> None:
         conversation.get("memory_depth", 6),
     )
     _select(
+        window.client_conversation_context_hours,
+        conversation.get("context_hours", 1),
+    )
+    _select(
         window.client_start_minimized,
         bool(ui.get("start_minimized", False)),
     )
@@ -181,6 +190,7 @@ def save_client_settings_controls(window: Any) -> None:
         style=window.client_conversation_style.currentData(),
         question_mode=window.client_conversation_question_mode.currentData(),
         memory_depth=window.client_conversation_memory_depth.currentData(),
+        context_hours=window.client_conversation_context_hours.currentData(),
     )
     if getattr(window, "owner_window", None) is not None:
         window.owner_window.business_config = config

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -240,6 +241,34 @@ def test_conversation_memory_depth_can_keep_a_longer_bounded_thread(tmp_path) ->
         for message in messages
     )
     assert service.status()["conversation_memory_depth"] == 10
+
+
+def test_conversation_context_window_is_bounded_and_configurable(tmp_path) -> None:
+    memory = ProjectMemoryService(tmp_path)
+    memory.set_preference(
+        "conversation_context_hours", 8, category="assistant_setting",
+    )
+    service = FreeConversationService(tmp_path, model=_Model())
+    old_time = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
+    service.store.save({
+        "version": "1.2",
+        "turns": [{
+            "user": "Porozmawiajmy o projekcie",
+            "assistant": "Dobrze, ustalmy cel.",
+            "created_at": old_time,
+        }],
+        "previous_turns": [],
+        "updated_at": old_time,
+        "sequence": 1,
+    })
+
+    assert service.has_recent_history() is True
+    assert service.status()["conversation_context_hours"] == 8
+
+    memory.set_preference(
+        "conversation_context_hours", 1, category="assistant_setting",
+    )
+    assert service.has_recent_history() is False
 
 
 def test_short_acknowledgement_uses_active_conversation_context(tmp_path) -> None:

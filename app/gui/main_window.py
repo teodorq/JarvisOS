@@ -408,6 +408,7 @@ class MainWindow(BusinessCommandRuntimeMixin, QMainWindow):
                 style=conversation.get("style", "natural"),
                 question_mode=conversation.get("question_mode", "balanced"),
                 memory_depth=conversation.get("memory_depth", 6),
+                context_hours=conversation.get("context_hours", 1),
             )
             self._apply_runtime_config()
             self.settings_page.set_feedback("Konfiguracja zapisana bezpiecznie.", True)

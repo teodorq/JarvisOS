@@ -66,6 +66,9 @@ def test_client_settings_are_loaded_and_saved(tmp_path) -> None:
     window.client_conversation_memory_depth.setCurrentIndex(
         window.client_conversation_memory_depth.findData(10)
     )
+    window.client_conversation_context_hours.setCurrentIndex(
+        window.client_conversation_context_hours.findData(8)
+    )
     save_client_settings_controls(window)
 
     saved = store.ensure()
@@ -79,6 +82,7 @@ def test_client_settings_are_loaded_and_saved(tmp_path) -> None:
         "style": "casual",
         "question_mode": "none",
         "memory_depth": 10,
+        "context_hours": 8,
     }
     assert window.client_autostart_feedback.text() == (
         "Autostart: WŁĄCZONY — gotowy."

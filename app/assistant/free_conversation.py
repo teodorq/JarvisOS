@@ -13,7 +13,6 @@ from app.core.json_store import JsonStore
 from app.core.project_paths import resolve_project_root
 
 
-_CHAT_TTL = timedelta(hours=1)
 _HISTORY_MESSAGE_CHARS = 240
 _FOLLOWUP_PROMPTS = {
     "powiedz to prosciej": (
@@ -411,6 +410,7 @@ class FreeConversationService:
             "conversation_style": self._conversation_style(),
             "conversation_question_mode": self._question_mode(),
             "conversation_memory_depth": self._history_turn_limit(),
+            "conversation_context_hours": self._history_context_hours(),
             "model": dict(model_status or {}),
         }
 
@@ -433,6 +433,14 @@ class FreeConversationService:
         except (TypeError, ValueError):
             return 6
         return depth if depth in {3, 6, 10} else 6
+
+    def _history_context_hours(self) -> int:
+        value = self.memory.get_preference("conversation_context_hours", 1)
+        try:
+            hours = int(value)
+        except (TypeError, ValueError):
+            return 1
+        return hours if hours in {1, 8, 24} else 1
 
     def set_memory_depth(self, depth: object) -> str:
         try:
@@ -666,7 +674,8 @@ class FreeConversationService:
             age = datetime.now(timezone.utc) - updated.astimezone(timezone.utc)
         except (TypeError, ValueError):
             return False
-        return timedelta(0) <= age <= _CHAT_TTL and bool(data.get("turns"))
+        limit = timedelta(hours=self._history_context_hours())
+        return timedelta(0) <= age <= limit and bool(data.get("turns"))
 
     def _load(self) -> dict[str, Any]:
         data = self.store.load()

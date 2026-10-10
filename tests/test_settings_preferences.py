@@ -213,6 +213,7 @@ def test_owner_settings_save_conversation_outside_business_config(tmp_path) -> N
             "style": "detailed",
             "question_mode": "engaged",
             "memory_depth": 10,
+            "context_hours": 24,
         },
     })
 
@@ -221,5 +222,6 @@ def test_owner_settings_save_conversation_outside_business_config(tmp_path) -> N
         "style": "detailed",
         "question_mode": "engaged",
         "memory_depth": 10,
+        "context_hours": 24,
     }
     owner._apply_runtime_config.assert_called_once_with()
