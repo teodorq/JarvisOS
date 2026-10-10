@@ -12,6 +12,12 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from app.assistant.conversation_preferences import (
+    QUESTION_MODE_OPTIONS,
+    STYLE_OPTIONS,
+    load_conversation_preferences,
+    save_conversation_preferences,
+)
 from app.business.business_config import BusinessConfigStore
 from app.core.runtime_maintenance import (
     cleanup_runtime_storage,
@@ -38,6 +44,8 @@ def install_client_settings_controls(window: Any, content: QVBoxLayout) -> None:
         ("Oszczędna", "low_resource"),
         ("Pełna jakość", "balanced"),
     ))
+    window.client_conversation_style = _combo(STYLE_OPTIONS)
+    window.client_conversation_question_mode = _combo(QUESTION_MODE_OPTIONS)
     window.client_sounds = _combo((("Włączone", True), ("Wyłączone", False)))
     window.client_desktop_notifications = _combo((
         ("Włączone", True),
@@ -53,6 +61,10 @@ def install_client_settings_controls(window: Any, content: QVBoxLayout) -> None:
         ("Zacznij w zasobniku obok zegara", True),
     ))
     form.addRow("Wydajność", window.client_performance)
+    form.addRow("Styl odpowiedzi", window.client_conversation_style)
+    form.addRow(
+        "Pytania w rozmowie", window.client_conversation_question_mode
+    )
     form.addRow("Dźwięki", window.client_sounds)
     form.addRow("Powiadomienia Windows", window.client_desktop_notifications)
     form.addRow("Ekran po uruchomieniu", window.client_startup)
@@ -111,6 +123,9 @@ def show_client_settings_controls(window: Any) -> None:
     performance = dict(config.get("performance", {}) or {})
     sound = dict(config.get("sound", {}) or {})
     notifications = dict(config.get("notifications", {}) or {})
+    conversation = load_conversation_preferences(
+        window.controller.project_root
+    )
     _select(window.client_performance, performance.get("profile", "auto"))
     _select(window.client_sounds, bool(sound.get("effects_enabled", True)))
     _select(
@@ -118,6 +133,14 @@ def show_client_settings_controls(window: Any) -> None:
         bool(notifications.get("desktop_enabled", True)),
     )
     _select(window.client_startup, ui.get("startup_mode", "remember"))
+    _select(
+        window.client_conversation_style,
+        conversation.get("style", "natural"),
+    )
+    _select(
+        window.client_conversation_question_mode,
+        conversation.get("question_mode", "balanced"),
+    )
     _select(
         window.client_start_minimized,
         bool(ui.get("start_minimized", False)),
@@ -144,6 +167,11 @@ def save_client_settings_controls(window: Any) -> None:
             )
         },
     })
+    save_conversation_preferences(
+        window.controller.project_root,
+        style=window.client_conversation_style.currentData(),
+        question_mode=window.client_conversation_question_mode.currentData(),
+    )
     if getattr(window, "owner_window", None) is not None:
         window.owner_window.business_config = config
         apply_runtime_preferences(

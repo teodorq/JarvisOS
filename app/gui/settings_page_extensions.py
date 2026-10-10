@@ -10,6 +10,10 @@ from PySide6.QtWidgets import (
     QPushButton,
 )
 
+from app.assistant.conversation_preferences import (
+    QUESTION_MODE_OPTIONS,
+    STYLE_OPTIONS,
+)
 from app.gui.business_widgets import SectionCard
 
 
@@ -70,6 +74,28 @@ def install_settings_extensions(page: Any, content: Any) -> None:
     note.setWordWrap(True)
     runtime.content_layout.addWidget(note)
     content.addWidget(runtime)
+
+    conversation = SectionCard(
+        "Rozmowa z JARVIS",
+        "Ustaw długość odpowiedzi i sposób podtrzymywania rozmowy.",
+    )
+    conversation_form = QFormLayout()
+    conversation_form.setHorizontalSpacing(18)
+    page.conversation_style = _combo(STYLE_OPTIONS)
+    page.conversation_question_mode = _combo(QUESTION_MODE_OPTIONS)
+    conversation_form.addRow("Styl odpowiedzi", page.conversation_style)
+    conversation_form.addRow(
+        "Pytania w rozmowie", page.conversation_question_mode
+    )
+    conversation.content_layout.addLayout(conversation_form)
+    conversation_note = QLabel(
+        "Zmiana działa od następnej odpowiedzi i nie daje modelowi dostępu "
+        "do komputera ani narzędzi."
+    )
+    conversation_note.setObjectName("Muted")
+    conversation_note.setWordWrap(True)
+    conversation.content_layout.addWidget(conversation_note)
+    content.addWidget(conversation)
 
     maintenance = SectionCard(
         "Stan systemu i miejsce na dysku",
@@ -144,6 +170,10 @@ def load_settings_extensions(page: Any, config: dict[str, Any]) -> None:
 
 def settings_extension_updates(page: Any) -> dict[str, Any]:
     return {
+        "_conversation": {
+            "style": page.conversation_style.currentData(),
+            "question_mode": page.conversation_question_mode.currentData(),
+        },
         "ui": {
             "startup_mode": page.startup_mode.currentData(),
             "start_minimized": bool(page.start_minimized.currentData()),
@@ -156,6 +186,14 @@ def settings_extension_updates(page: Any) -> dict[str, Any]:
             "desktop_enabled": bool(page.desktop_notifications.currentData())
         },
     }
+
+
+def load_conversation_settings(page: Any, value: dict[str, Any]) -> None:
+    _select(page.conversation_style, value.get("style", "natural"))
+    _select(
+        page.conversation_question_mode,
+        value.get("question_mode", "balanced"),
+    )
 
 
 def set_settings_action_busy(page: Any, busy: bool) -> None:
@@ -202,6 +240,7 @@ def _select(combo: QComboBox, value: object) -> None:
 
 __all__ = [
     "install_settings_extensions", "load_settings_extensions",
+    "load_conversation_settings",
     "set_autostart_action_feedback",
     "set_settings_action_busy", "set_settings_action_feedback",
     "settings_extension_updates",

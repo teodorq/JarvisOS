@@ -55,6 +55,10 @@ The local chat runtime also follows the selected performance profile. On a
 low-resource device it uses fewer CPU threads, a smaller bounded context and
 releases the model from memory sooner; the balanced profile keeps the existing
 quality settings. Explicit environment overrides remain available.
+The client and owner settings expose the same persistent conversation controls:
+natural, concise, casual or detailed answers, plus no, balanced or more engaged
+follow-up questions. Changes apply from the next reply and do not grant the
+local model tool access.
 
 ## Tests
 

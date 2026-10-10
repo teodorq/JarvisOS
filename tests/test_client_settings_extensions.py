@@ -9,6 +9,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtWidgets import QApplication, QVBoxLayout, QWidget
 
 from app.business.business_config import BusinessConfigStore
+from app.assistant.conversation_preferences import load_conversation_preferences
 from app.gui.client_settings_extensions import (
     _run_maintenance,
     install_client_settings_controls,
@@ -56,6 +57,12 @@ def test_client_settings_are_loaded_and_saved(tmp_path) -> None:
     window.client_start_minimized.setCurrentIndex(
         window.client_start_minimized.findData(True)
     )
+    window.client_conversation_style.setCurrentIndex(
+        window.client_conversation_style.findData("casual")
+    )
+    window.client_conversation_question_mode.setCurrentIndex(
+        window.client_conversation_question_mode.findData("none")
+    )
     save_client_settings_controls(window)
 
     saved = store.ensure()
@@ -65,6 +72,10 @@ def test_client_settings_are_loaded_and_saved(tmp_path) -> None:
     assert saved["ui"]["startup_mode"] == "client"
     assert saved["ui"]["start_minimized"] is True
     assert window.owner_window.business_config == saved
+    assert load_conversation_preferences(tmp_path) == {
+        "style": "casual",
+        "question_mode": "none",
+    }
     assert window.client_autostart_feedback.text() == (
         "Autostart: WŁĄCZONY — gotowy."
     )

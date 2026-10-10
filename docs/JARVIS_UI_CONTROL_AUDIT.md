@@ -264,6 +264,8 @@ Reklamy, trading i podsumowania właściciela pozostają w trybie klienta zablok
 | Głos | włączony lub wyłączony | podstawowa |
 | Rozmowa | głos i tekst albo tylko tekst | podstawowa |
 | Wydajność | automatyczna, oszczędna, pełna jakość | podstawowa |
+| Styl odpowiedzi | naturalny, krótki, luźny, dokładny | podstawowa |
+| Pytania w rozmowie | bez pytań, naturalnie, częściej | podstawowa |
 | Dźwięki, powiadomienia | włączone lub wyłączone | opcjonalna |
 | Start, widoczność | ostatni/rozmowa/panel oraz okno/zasobnik | podstawowa |
 | SPRAWDŹ STAN / UPORZĄDKUJ DANE | Kontrola miejsca i bezpieczne sprzątanie. | administracyjna |

@@ -4,6 +4,8 @@ from datetime import datetime, timedelta
 import json
 import os
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import Mock
 
 from app.business.business_config import BusinessConfigStore
 from app.core.performance_profile import load_performance_profile
@@ -12,6 +14,8 @@ from app.core.runtime_maintenance import (
     runtime_storage_status,
 )
 from app.gui.startup_mode import should_start_client
+from app.gui.main_window import MainWindow
+from app.assistant.conversation_preferences import load_conversation_preferences
 
 
 class _Controller:
@@ -187,3 +191,30 @@ def test_cleanup_covers_all_project_code_without_touching_environment(tmp_path) 
     assert result["removed_cache_files"] == len(project_caches)
     assert all(not cache.exists() for cache in project_caches)
     assert protected.read_bytes() == b"installed dependency"
+
+
+def test_owner_settings_save_conversation_outside_business_config(tmp_path) -> None:
+    store = BusinessConfigStore(tmp_path)
+    owner = SimpleNamespace(
+        project_root=tmp_path,
+        config_store=store,
+        business_config=store.ensure(),
+        _apply_runtime_config=Mock(),
+        settings_page=SimpleNamespace(set_feedback=Mock()),
+        console_page=SimpleNamespace(append=Mock()),
+    )
+
+    MainWindow._save_business_settings(owner, {
+        "organization": "Kacper",
+        "_conversation": {
+            "style": "detailed",
+            "question_mode": "engaged",
+        },
+    })
+
+    assert "_conversation" not in store.ensure()
+    assert load_conversation_preferences(tmp_path) == {
+        "style": "detailed",
+        "question_mode": "engaged",
+    }
+    owner._apply_runtime_config.assert_called_once_with()
