@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
 
 from app.assistant_v12.controller import AssistantV12Controller
 from app.gui.business_display import display_status
-from app.gui.business_widgets import InfoRow, SectionCard, StatusPill
+from app.gui.business_widgets import InfoRow, SectionCard, StatusPill, describe_command_button
 
 
 class AssistantV12Page(QWidget):
@@ -184,7 +184,7 @@ class AssistantV12Page(QWidget):
     def _actions(self, *buttons: tuple[str, str]) -> QHBoxLayout:
         layout = QHBoxLayout()
         for title, command in buttons:
-            button = QPushButton(title)
+            button = describe_command_button(QPushButton(title), command)
             button.setObjectName("SecondaryButton")
             button.clicked.connect(
                 lambda _checked=False, value=command: self.command_requested.emit(value)

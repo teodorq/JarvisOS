@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.gui.business_display import display_status
-from app.gui.business_widgets import InfoRow, SectionCard, StatusPill
+from app.gui.business_widgets import InfoRow, SectionCard, StatusPill, describe_command_button
 from app.intelligence.controller import IntelligenceSuiteController
 
 
@@ -208,7 +208,7 @@ class IntelligenceCenterPage(QWidget):
         return card
 
     def _button(self, title: str, command: str) -> QPushButton:
-        button = QPushButton(title)
+        button = describe_command_button(QPushButton(title), command)
         button.setObjectName("SecondaryButton")
         button.clicked.connect(
             lambda _checked=False, value=command: self.command_requested.emit(value)

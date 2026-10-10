@@ -7,6 +7,8 @@ Zakres: panel właściciela, tryb klienta, ustawienia, Forex PAPER i menu obok z
 
 - Sprawdzono 212 przycisków, 18 list wyboru, 3 karty Forex i 2 polecenia menu obok zegara.
 - Każdy przycisk ma nazwę lub opis dostępności oraz przypiętą funkcję.
+- Przyciski poleceń pokazują po najechaniu ich dokładny cel i udostępniają ten sam opis
+  czytnikom ekranu, bez zmiany działania polecenia.
 - Każda aktywna lista wyboru ma co najmniej dwie rzeczywiste możliwości.
 - Usunięto 6 niewidocznych skrótów rozmowy, które dublowały menu `NARZĘDZIA`.
 - Lista profili z jednym profilem jest teraz nieaktywna i wyjaśnia, jak utworzyć kolejny profil.
@@ -290,7 +292,8 @@ Test `tests/test_ui_control_integrity.py` sprawdza przy każdej zmianie, że:
 3. aktywna lista nie udaje wyboru, gdy ma tylko jedną wartość;
 4. karty mają rzeczywiste alternatywy;
 5. wybór profilu nie pozwala ponownie aktywować już aktywnego profilu;
-6. stary ukryty rząd skrótów rozmowy nie wróci przypadkiem.
+6. każdy przycisk polecenia pokazuje pełny cel w podpowiedzi i opisie dostępności;
+7. stary ukryty rząd skrótów rozmowy nie wróci przypadkiem.
 
 Wynik pełnego uruchomienia po audycie: **3045 testów i 372 warianty
 zaliczone, 2 testy warunkowo pominięte, 0 błędów**. Pozostało 9 ostrzeżeń

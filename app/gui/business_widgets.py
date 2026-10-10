@@ -12,6 +12,17 @@ from PySide6.QtWidgets import (
 from app.core.user_text import naturalize_user_text
 
 
+def describe_command_button(button: QPushButton, command: object) -> QPushButton:
+    """Attach a readable purpose without changing the routed command."""
+
+    raw_command = " ".join(str(command or "").split())
+    purpose = naturalize_user_text(raw_command)
+    button.setProperty("command", raw_command)
+    button.setToolTip(purpose)
+    button.setAccessibleDescription(purpose)
+    return button
+
+
 class ElidedLabel(QLabel):
     """Single-line label that keeps full text in a tooltip."""
 
@@ -171,6 +182,7 @@ class QuickCommandButton(QPushButton):
                 f"{visible_title}\n{visible_subtitle}")
         super().__init__(text)
         self.command = command
+        describe_command_button(self, command)
         self.setObjectName("QuickCommandButton")
         self.setCursor(Qt.PointingHandCursor)
         self.setMinimumHeight(58)

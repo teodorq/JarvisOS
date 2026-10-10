@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
 from app.core.user_text import naturalize_user_text
 from app.business.business_edition_service import BusinessEditionService
 from app.gui.business_display import display_status
-from app.gui.business_widgets import InfoRow, SectionCard, StatusPill
+from app.gui.business_widgets import InfoRow, SectionCard, StatusPill, describe_command_button
 
 
 class BusinessReleasePage(QWidget):
@@ -149,7 +149,7 @@ class BusinessReleasePage(QWidget):
         *,
         primary: bool = True,
     ) -> QPushButton:
-        button = QPushButton(label)
+        button = describe_command_button(QPushButton(label), command)
         button.setObjectName("PrimaryButton" if primary else "SecondaryButton")
         button.clicked.connect(
             lambda _checked=False, value=command: self.command_requested.emit(value)

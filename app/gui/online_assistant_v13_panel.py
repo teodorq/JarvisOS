@@ -6,7 +6,7 @@ from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QHBoxLayout, QPushButton, QVBoxLayout, QWidget
 
 from app.gui.business_display import display_status
-from app.gui.business_widgets import InfoRow, SectionCard, StatusPill
+from app.gui.business_widgets import InfoRow, SectionCard, StatusPill, describe_command_button
 
 
 class OnlineAssistantV13Panel(QWidget):
@@ -64,7 +64,7 @@ class OnlineAssistantV13Panel(QWidget):
     def _actions(self, *items: tuple[str, str]) -> QHBoxLayout:
         layout = QHBoxLayout()
         for title, command in items:
-            button = QPushButton(title)
+            button = describe_command_button(QPushButton(title), command)
             button.setObjectName("SecondaryButton")
             button.clicked.connect(
                 lambda _checked=False, value=command: self.command_requested.emit(value)

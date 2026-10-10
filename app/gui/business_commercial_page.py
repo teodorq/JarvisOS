@@ -3,7 +3,7 @@ from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QFrame,QHBoxLayout,QLabel,QPushButton,QScrollArea,QVBoxLayout,QWidget
 from app.core.user_text import naturalize_user_text
 from app.gui.business_display import display_status
-from app.gui.business_widgets import InfoRow,SectionCard,StatusPill
+from app.gui.business_widgets import InfoRow,SectionCard,StatusPill,describe_command_button
 class BusinessCommercialPage(QWidget):
     command_requested=Signal(str)
     def __init__(self,service):
@@ -19,7 +19,7 @@ class BusinessCommercialPage(QWidget):
         for row in rows.values(): card.content_layout.addWidget(row)
         line=QHBoxLayout()
         for label,command in buttons:
-            button=QPushButton(label); button.setObjectName('PrimaryButton' if line.count()==0 else 'SecondaryButton'); button.clicked.connect(lambda _=False,c=command:self.command_requested.emit(c)); line.addWidget(button)
+            button=describe_command_button(QPushButton(label),command); button.setObjectName('PrimaryButton' if line.count()==0 else 'SecondaryButton'); button.clicked.connect(lambda _=False,c=command:self.command_requested.emit(c)); line.addWidget(button)
         line.addStretch(1); card.content_layout.addLayout(line); return card
     def refresh(self):
         response=self.service.commercial_platform_status(); stages=dict(response.get('stages',{}) or {})

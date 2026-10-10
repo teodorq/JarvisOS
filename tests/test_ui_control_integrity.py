@@ -11,6 +11,7 @@ from PySide6.QtCore import SIGNAL, QTimer
 from PySide6.QtWidgets import QApplication, QComboBox, QPushButton, QTabWidget
 
 from app.client_experience.controller import ClientExperienceController
+from app.core.user_text import naturalize_user_text
 from app.gui.client_experience_window import ClientExperienceWindow
 from app.gui.main_window import MainWindow
 
@@ -81,6 +82,29 @@ def test_every_choice_has_alternatives_or_is_disabled() -> None:
         tabs = owner.findChildren(QTabWidget)
         assert tabs
         assert all(tab.count() > 1 for tab in tabs)
+        _dispose(client, owner)
+    app.processEvents()
+
+
+def test_command_buttons_explain_their_exact_action() -> None:
+    app = QApplication.instance() or QApplication([])
+    with TemporaryDirectory() as temporary:
+        owner, client = _build_complete_ui(Path(temporary))
+        buttons = [
+            *owner.findChildren(QPushButton),
+            *client.findChildren(QPushButton),
+        ]
+        command_buttons = [
+            button for button in buttons if str(button.property("command") or "").strip()
+        ]
+
+        assert len(command_buttons) >= 80
+        for button in command_buttons:
+            command = str(button.property("command"))
+            purpose = naturalize_user_text(command)
+            assert button.toolTip().strip() == purpose
+            assert button.accessibleDescription().strip() == purpose
+
         _dispose(client, owner)
     app.processEvents()
 
