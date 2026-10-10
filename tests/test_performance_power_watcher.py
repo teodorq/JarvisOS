@@ -49,3 +49,21 @@ def test_manual_profile_disables_power_polling(tmp_path) -> None:
     watcher.sync()
 
     assert not watcher.timer.isActive()
+
+
+def test_auto_profile_recovers_only_after_two_balanced_checks(tmp_path) -> None:
+    owner = _Owner(tmp_path)
+    owner.performance_profile = LOW_RESOURCE
+    watcher = PerformancePowerWatcher(owner)
+
+    with patch(
+        "app.gui.performance_power_watcher.load_performance_profile",
+        return_value=BALANCED,
+    ), patch(
+        "app.gui.performance_power_watcher.apply_runtime_preferences"
+    ) as apply:
+        watcher.check()
+        apply.assert_not_called()
+        watcher.check()
+
+    apply.assert_called_once_with(owner)

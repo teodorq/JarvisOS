@@ -19,12 +19,14 @@ class PerformancePowerWatcher(QObject):
         self.timer = QTimer(self)
         self.timer.setInterval(self.INTERVAL_MS)
         self.timer.timeout.connect(self.check)
+        self._balanced_checks = 0
 
     def sync(self) -> None:
         if self._selected_profile() == "auto":
             if not self.timer.isActive():
                 self.timer.start()
             return
+        self._balanced_checks = 0
         self.timer.stop()
 
     def check(self) -> None:
@@ -35,7 +37,17 @@ class PerformancePowerWatcher(QObject):
             getattr(self.owner_window, "project_root", None)
         )
         current = getattr(self.owner_window, "performance_profile", None)
-        if getattr(current, "name", "") != next_profile.name:
+        current_name = getattr(current, "name", "")
+        if current_name == next_profile.name:
+            self._balanced_checks = 0
+            return
+        if next_profile.name == "low_resource":
+            self._balanced_checks = 0
+            apply_runtime_preferences(self.owner_window)
+            return
+        self._balanced_checks += 1
+        if self._balanced_checks >= 2:
+            self._balanced_checks = 0
             apply_runtime_preferences(self.owner_window)
 
     def _selected_profile(self) -> str:
