@@ -24,8 +24,29 @@ def test_controller_start_does_not_load_deferred_suites() -> None:
         "assert not assistant.assistant_v12.loaded; "
         "assert not assistant.online.loaded; "
         "assert not assistant.natural_actions.loaded; "
+        "assert not assistant.weather.loaded; "
+        "assert not assistant.free_conversation.loaded; "
         "assert 'app.online_assistant.controller' not in sys.modules; "
-        "assert 'app.natural_actions.service' not in sys.modules"
+        "assert 'app.natural_actions.service' not in sys.modules; "
+        "assert 'app.assistant.weather' not in sys.modules; "
+        "assert 'app.assistant.free_conversation' not in sys.modules; "
+        "assert 'app.assistant.local_chat_model' not in sys.modules; "
+        "assert 'app.market_data.http_json' not in sys.modules"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code], check=False, capture_output=True, text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_client_brain_import_defers_free_conversation_stack() -> None:
+    code = (
+        "import sys; from app.ai.client_brain import ClientBrain; "
+        "brain=ClientBrain('.'); "
+        "assert 'app.assistant.free_conversation_routing' not in sys.modules; "
+        "assert 'app.assistant.free_conversation' not in sys.modules; "
+        "assert 'app.assistant.local_chat_model' not in sys.modules"
     )
     result = subprocess.run(
         [sys.executable, "-c", code], check=False, capture_output=True, text=True,

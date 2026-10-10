@@ -9,15 +9,13 @@ from typing import Any
 from app.assistant.daily_work import DailyWorkService
 from app.assistant.capability_guide import CapabilityGuideService
 from app.assistant.contextual_greeting import ContextualGreetingService
-from app.assistant.free_conversation import FreeConversationService
 from app.assistant.natural_language import NaturalLanguageService, ResolvedCommand, fold_text
 from app.assistant.project_memory import ProjectMemoryService
 from app.assistant.reliable_desktop import ReliableDesktopService
 from app.assistant.voice_runtime import VoiceRuntimeService
-from app.assistant.weather import WeatherService
 from app.assistant.status_formatter import AssistantStatusFormatter
 from app.core.project_paths import resolve_project_root
-from app.assistant.deferred_services import DEFERRED_STAGES, DeferredAssistantServices, deferred_matches, handle_deferred_natural_action
+from app.assistant.deferred_services import DEFERRED_STAGES, DeferredAssistantServices, LazyAssistantService, deferred_matches, handle_deferred_natural_action
 from app.integrations import IntegrationStatusService
 from app.assistant.trading_runtime import LazyTradingRuntime
 class PersonalAssistantController:
@@ -39,7 +37,10 @@ class PersonalAssistantController:
         self.projects = ProjectMemoryService(self.project_root)
         self.personalization = AssistantPersonalizationService(self.projects)
         self.voice = VoiceRuntimeService(self.project_root)
-        self.weather = WeatherService()
+        self.weather = LazyAssistantService(_weather_service)
+        self.free_conversation = LazyAssistantService(
+            lambda: _free_conversation_service(self.project_root)
+        )
         self.daily = DailyWorkService(self.project_root)
         deferred = DeferredAssistantServices(
             self.project_root, stability_runtime_status=self._stability_runtime_status,
@@ -75,7 +76,7 @@ class PersonalAssistantController:
     def plan(self, command: object) -> dict[str, Any]:
         resolved = self.resolve_command(command)
         if resolved.intent == "conversation_followup":
-            thought = FreeConversationService(self.project_root).plan(resolved.resolved)
+            thought = self.free_conversation.plan(resolved.resolved)
             thought.update({
                 "original_command": resolved.original,
                 "used_context": True,
@@ -285,17 +286,13 @@ class PersonalAssistantController:
         if intent == "conversation_style":
             return self.personalization.set_conversation_style(command)
         if intent == "conversation_question_mode_status":
-            return FreeConversationService(
-                self.project_root
-            ).question_mode_status()
+            return self.free_conversation.question_mode_status()
         if intent == "conversation_question_mode":
-            return FreeConversationService(
-                self.project_root
-            ).set_question_mode(command)
+            return self.free_conversation.set_question_mode(command)
         if intent == "conversation_followup":
-            return FreeConversationService(self.project_root).reply(command)
+            return self.free_conversation.reply(command)
         if intent == "conversation_recap":
-            return FreeConversationService(self.project_root).recap()
+            return self.free_conversation.recap()
         if intent == "desktop_status":
             return self._format_desktop_status()
         if intent == "memory_status":
@@ -352,7 +349,7 @@ class PersonalAssistantController:
             return f"B100: zapisano przypomnienie na {reminder['due_at']}: {reminder['text']}"
         if intent == "clear_context":
             self.conversation.context.clear()
-            removed = FreeConversationService(self.project_root).clear_history()
+            removed = self.free_conversation.clear_history()
             return (
                 f"Wyczyszczono bieżący kontekst i historię rozmowy "
                 f"({removed} zapisanych wymian). Informacje, które kazałeś "
@@ -408,3 +405,15 @@ class PersonalAssistantController:
             f"Status {workflow.get('status')}, postęp {completed}/{len(steps)}, "
             f"następny krok: {next_step}."
         )
+
+
+def _weather_service() -> Any:
+    from app.assistant.weather import WeatherService
+
+    return WeatherService()
+
+
+def _free_conversation_service(project_root: Path) -> Any:
+    from app.assistant.free_conversation import FreeConversationService
+
+    return FreeConversationService(project_root)
