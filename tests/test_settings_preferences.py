@@ -7,7 +7,10 @@ from pathlib import Path
 
 from app.business.business_config import BusinessConfigStore
 from app.core.performance_profile import load_performance_profile
-from app.core.runtime_maintenance import cleanup_runtime_storage
+from app.core.runtime_maintenance import (
+    cleanup_runtime_storage,
+    runtime_storage_status,
+)
 from app.gui.startup_mode import should_start_client
 
 
@@ -116,6 +119,13 @@ def test_cleanup_compacts_allowlisted_history_and_old_screenshots(tmp_path) -> N
     protected = tmp_path / "data" / "memory" / "important.pyc"
     protected.parent.mkdir(parents=True)
     protected.write_bytes(b"keep")
+    audio = tmp_path / "runtime" / "voice_output" / "cache"
+    audio.mkdir(parents=True)
+    for index in range(66):
+        sample = audio / f"voice_{index:02d}.wav"
+        sample.write_bytes(b"voice")
+        stamp = (now - timedelta(minutes=index)).timestamp()
+        os.utime(sample, (stamp, stamp))
 
     result = cleanup_runtime_storage(tmp_path)
 
@@ -123,7 +133,36 @@ def test_cleanup_compacts_allowlisted_history_and_old_screenshots(tmp_path) -> N
     assert result["saved_bytes"] > 0
     assert result["compacted_files"] == 1
     assert result["removed_screenshots"] == 2
+    assert result["removed_audio_files"] == 2
     assert result["removed_cache_files"] == 1
     assert not cache.exists()
     assert protected.read_bytes() == b"keep"
     assert len(list(screenshots.glob("*.png"))) == 12
+    assert len(list(audio.glob("*.wav"))) == 64
+
+
+def test_runtime_status_reports_full_storage_breakdown(tmp_path) -> None:
+    sizes = {
+        ".venv": 11,
+        "data": 13,
+        "runtime": 17,
+        "archive": 19,
+        "assets": 23,
+        "AI_PLIKI": 29,
+    }
+    for name, size in sizes.items():
+        directory = tmp_path / name
+        directory.mkdir(parents=True)
+        (directory / "sample.bin").write_bytes(b"x" * size)
+
+    voice = tmp_path / "runtime" / "voice_output" / "cloud_cache"
+    voice.mkdir(parents=True)
+    (voice / "reply.wav").write_bytes(b"voice")
+    status = runtime_storage_status(tmp_path)
+
+    assert status["environment_bytes"] == sizes[".venv"]
+    assert status["archive_bytes"] == sizes["archive"]
+    assert status["support_bytes"] == sizes["assets"] + sizes["AI_PLIKI"]
+    assert status["audio_cache_files"] == 1
+    assert status["audio_cache_bytes"] == len(b"voice")
+    assert status["application_bytes"] == sum(sizes.values()) + len(b"voice")

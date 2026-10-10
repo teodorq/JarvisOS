@@ -126,8 +126,11 @@ class SettingsActionRuntime(QObject):
             "balanced": "pełna jakość",
         }.get(str(value.get("profile", "")), "automatyczny")
         return (
-            f"Stan prawidłowy • tryb {profile} • dane "
-            f"{_size(value.get('data_bytes', 0))} • wolne na dysku "
+            f"Stan prawidłowy • tryb {profile} • JARVIS "
+            f"{_size(value.get('application_bytes', 0))} (środowisko "
+            f"{_size(value.get('environment_bytes', 0))}, dane "
+            f"{_size(value.get('data_bytes', 0))}, archiwum "
+            f"{_size(value.get('archive_bytes', 0))}) • wolne na dysku "
             f"{_size(value.get('disk_free_bytes', 0))}."
         )
 
@@ -136,7 +139,8 @@ class SettingsActionRuntime(QObject):
         return (
             f"Porządkowanie zakończone • odzyskano "
             f"{_size(value.get('saved_bytes', 0))} • usunięte stare zrzuty: "
-            f"{int(value.get('removed_screenshots', 0) or 0)} • cache: "
+            f"{int(value.get('removed_screenshots', 0) or 0)} • audio: "
+            f"{int(value.get('removed_audio_files', 0) or 0)} • cache: "
             f"{int(value.get('removed_cache_files', 0) or 0)} plików."
         )
 

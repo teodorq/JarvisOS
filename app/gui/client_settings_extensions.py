@@ -181,12 +181,16 @@ def _maintenance_done(window: Any, result: object, *, cleanup: bool) -> None:
         text = (
             f"Gotowe. Odzyskano {_size(value.get('saved_bytes', 0))}; "
             f"usunięte stare zrzuty: "
-            f"{int(value.get('removed_screenshots', 0) or 0)}; cache: "
+            f"{int(value.get('removed_screenshots', 0) or 0)}; audio: "
+            f"{int(value.get('removed_audio_files', 0) or 0)}; cache: "
             f"{int(value.get('removed_cache_files', 0) or 0)} plików."
         )
     else:
         text = (
-            f"Dane JARVIS: {_size(value.get('data_bytes', 0))}; wolne na "
+            f"JARVIS: {_size(value.get('application_bytes', 0))} "
+            f"(środowisko {_size(value.get('environment_bytes', 0))}, "
+            f"dane {_size(value.get('data_bytes', 0))}, archiwum "
+            f"{_size(value.get('archive_bytes', 0))}); wolne na "
             f"dysku: {_size(value.get('disk_free_bytes', 0))}."
         )
     window.client_maintenance_feedback.setText(text)
