@@ -670,6 +670,21 @@ def test_memory_depth_status_is_answered_without_calling_model(tmp_path) -> None
     assert model.calls == []
 
 
+def test_topic_continuity_can_be_controlled_without_calling_model(tmp_path) -> None:
+    model = _Model(["Nie powinno zostać użyte."])
+    service = FreeConversationService(tmp_path, model=model)
+
+    answer = service.reply("Pamiętaj temat do jutra")
+
+    assert answer == "Będę zachowywać bieżący temat przez 24 godziny."
+    assert service.reply("Jak długo pamiętasz rozmowę?") == (
+        "Ciągłość bieżącego tematu: 24 godziny."
+    )
+    assert service.matches("Zachowaj temat do wieczora") is True
+    assert service.status()["conversation_context_hours"] == 24
+    assert model.calls == []
+
+
 def test_engaged_questions_still_work_with_concise_style(tmp_path) -> None:
     memory = ProjectMemoryService(tmp_path)
     memory.set_preference(

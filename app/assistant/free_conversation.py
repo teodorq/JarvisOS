@@ -210,6 +210,28 @@ _MEMORY_DEPTH_STATUS_SIGNALS = (
     "sprawdz pamiec rozmowy",
     "status pamieci rozmowy",
 )
+_CONTEXT_HOURS_SIGNALS = {
+    1: (
+        "pamietaj temat przez godzine",
+        "zachowaj temat przez godzine",
+    ),
+    8: (
+        "pamietaj temat przez dzien",
+        "pamietaj rozmowe przez dzien",
+        "zachowaj temat do wieczora",
+    ),
+    24: (
+        "pamietaj temat do jutra",
+        "pamietaj rozmowe do jutra",
+        "pamietaj temat przez 24 godziny",
+    ),
+}
+_CONTEXT_HOURS_STATUS_SIGNALS = (
+    "jak dlugo pamietasz temat",
+    "jak dlugo pamietasz rozmowe",
+    "status ciaglosci rozmowy",
+    "sprawdz ciaglosc tematu",
+)
 _SYSTEM = (
     "Jesteś JARVIS OS, prywatnym asystentem Kacpra. Rozmawiaj swobodnie, "
     "życzliwie i konkretnie, jak naturalny rozmówca z Polski, a nie instrukcja "
@@ -256,6 +278,10 @@ class FreeConversationService:
     def matches(self, command: object) -> bool:
         text = normalize_user_command(command)
         folded = fold_text(text).strip(" .,!?:;")
+        if _requests_context_hours_status(folded):
+            return True
+        if _requested_context_hours(folded):
+            return True
         if _requests_memory_depth_status(folded):
             return True
         if _requested_memory_depth(folded):
@@ -295,6 +321,11 @@ class FreeConversationService:
 
     def reply(self, command: object) -> str:
         text = normalize_user_command(command)[:1_200]
+        if _requests_context_hours_status(text):
+            return self.context_hours_status()
+        requested_context_hours = _requested_context_hours(text)
+        if requested_context_hours:
+            return self.set_context_hours(requested_context_hours)
         if _requests_memory_depth_status(text):
             return self.memory_depth_status()
         requested_memory_depth = _requested_memory_depth(text)
@@ -441,6 +472,34 @@ class FreeConversationService:
         except (TypeError, ValueError):
             return 1
         return hours if hours in {1, 8, 24} else 1
+
+    def set_context_hours(self, hours: object) -> str:
+        try:
+            selected = int(hours)
+        except (TypeError, ValueError) as error:
+            raise ValueError(
+                "Ciągłość tematu może wynosić 1, 8 albo 24 godziny."
+            ) from error
+        if selected not in {1, 8, 24}:
+            raise ValueError(
+                "Ciągłość tematu może wynosić 1, 8 albo 24 godziny."
+            )
+        self.memory.set_preference(
+            "conversation_context_hours",
+            selected,
+            category="assistant_setting",
+        )
+        labels = {
+            1: "Będę zachowywać bieżący temat przez 1 godzinę.",
+            8: "Będę zachowywać bieżący temat przez 8 godzin.",
+            24: "Będę zachowywać bieżący temat przez 24 godziny.",
+        }
+        return labels[selected]
+
+    def context_hours_status(self) -> str:
+        hours = self._history_context_hours()
+        labels = {1: "1 godzina", 8: "8 godzin", 24: "24 godziny"}
+        return f"Ciągłość bieżącego tematu: {labels[hours]}."
 
     def set_memory_depth(self, depth: object) -> str:
         try:
@@ -747,6 +806,19 @@ def _requested_memory_depth(value: object) -> int:
 def _requests_memory_depth_status(value: object) -> bool:
     folded = fold_text(value).strip(" .,!?:;")
     return any(signal in folded for signal in _MEMORY_DEPTH_STATUS_SIGNALS)
+
+
+def _requested_context_hours(value: object) -> int:
+    folded = fold_text(value).strip(" .,!?:;")
+    for hours, signals in _CONTEXT_HOURS_SIGNALS.items():
+        if any(signal in folded for signal in signals):
+            return hours
+    return 0
+
+
+def _requests_context_hours_status(value: object) -> bool:
+    folded = fold_text(value).strip(" .,!?:;")
+    return any(signal in folded for signal in _CONTEXT_HOURS_STATUS_SIGNALS)
 
 
 def _apply_question_mode(value: object, mode: str) -> str:
