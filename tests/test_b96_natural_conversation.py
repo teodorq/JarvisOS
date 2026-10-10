@@ -186,6 +186,47 @@ class B96NaturalConversationTests(unittest.TestCase):
                 "none",
             )
 
+    def test_conversation_memory_limits_use_the_main_command_router(self) -> None:
+        with TemporaryDirectory() as temporary:
+            controller = PersonalAssistantController(temporary)
+
+            memory_change = controller.plan("Pamiętaj dłużej naszą rozmowę")
+            self.assertEqual(
+                memory_change["assistant_intent"],
+                "conversation_memory_depth",
+            )
+            self.assertFalse(memory_change["read_only"])
+            self.assertIn(
+                "10 ostatnich wymian",
+                controller.handle("Pamiętaj dłużej naszą rozmowę"),
+            )
+            memory_status = controller.plan(
+                "Ile pamiętasz z naszej rozmowy?"
+            )
+            self.assertTrue(memory_status["read_only"])
+            self.assertIn(
+                "10 ostatnich wymian",
+                controller.handle("Ile pamiętasz z naszej rozmowy?"),
+            )
+
+            context_change = controller.plan("Pamiętaj temat do jutra")
+            self.assertEqual(
+                context_change["assistant_intent"],
+                "conversation_context_hours",
+            )
+            self.assertFalse(context_change["read_only"])
+            self.assertIn(
+                "24 godziny", controller.handle("Pamiętaj temat do jutra"),
+            )
+            context_status = controller.plan(
+                "Jak długo pamiętasz rozmowę?"
+            )
+            self.assertTrue(context_status["read_only"])
+            self.assertIn(
+                "24 godziny",
+                controller.handle("Jak długo pamiętasz rozmowę?"),
+            )
+
     def test_explicit_conversation_followup_routes_back_to_local_chat(self) -> None:
         with TemporaryDirectory() as temporary:
             controller = PersonalAssistantController(temporary)

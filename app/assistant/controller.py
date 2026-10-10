@@ -147,6 +147,8 @@ class PersonalAssistantController:
             "conversation_options",
             "conversation_style_status",
             "conversation_question_mode_status",
+            "conversation_memory_depth_status",
+            "conversation_context_status",
             "conversation_followup",
             "conversation_recap",
             "memory_status",
@@ -298,6 +300,14 @@ class PersonalAssistantController:
             return self.free_conversation.question_mode_status()
         if intent == "conversation_question_mode":
             return self.free_conversation.set_question_mode(command)
+        if intent == "conversation_memory_depth_status":
+            return self.free_conversation.memory_depth_status()
+        if intent == "conversation_memory_depth":
+            return self.free_conversation.set_memory_depth(command)
+        if intent == "conversation_context_status":
+            return self.free_conversation.context_hours_status()
+        if intent == "conversation_context_hours":
+            return self.free_conversation.set_context_hours(command)
         if intent == "conversation_followup":
             return self.free_conversation.reply(command)
         if intent == "conversation_recap":

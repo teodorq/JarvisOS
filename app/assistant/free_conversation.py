@@ -476,10 +476,8 @@ class FreeConversationService:
     def set_context_hours(self, hours: object) -> str:
         try:
             selected = int(hours)
-        except (TypeError, ValueError) as error:
-            raise ValueError(
-                "Ciągłość tematu może wynosić 1, 8 albo 24 godziny."
-            ) from error
+        except (TypeError, ValueError):
+            selected = _requested_context_hours(hours)
         if selected not in {1, 8, 24}:
             raise ValueError(
                 "Ciągłość tematu może wynosić 1, 8 albo 24 godziny."
@@ -504,10 +502,8 @@ class FreeConversationService:
     def set_memory_depth(self, depth: object) -> str:
         try:
             selected = int(depth)
-        except (TypeError, ValueError) as error:
-            raise ValueError(
-                "Dostępna pamięć rozmowy: krótka, naturalna albo długa."
-            ) from error
+        except (TypeError, ValueError):
+            selected = _requested_memory_depth(depth)
         if selected not in {3, 6, 10}:
             raise ValueError(
                 "Dostępna pamięć rozmowy: krótka, naturalna albo długa."
