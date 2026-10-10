@@ -71,6 +71,36 @@ def test_verified_local_read_executes_once_after_authorization() -> None:
     assert assistant.handled == ["Która jest godzina?"]
 
 
+def test_natural_status_aliases_use_direct_fast_path(tmp_path) -> None:
+    from app.assistant.controller import PersonalAssistantController
+
+    assistant = PersonalAssistantController(tmp_path)
+    aliases = {
+        "stan JARVISA": "assistant_status",
+        "status pamięci": "memory_status",
+        "stan głosu": "voice_status",
+        "status pulpitu": "desktop_status",
+        "status zadań": "daily_status",
+        "stan połączeń": "integration_status",
+    }
+
+    for command, expected_intent in aliases.items():
+        resolved = assistant.resolve_command(command)
+        thought = assistant.plan(command)
+        assert resolved.intent == expected_intent
+        assert thought["assistant_intent"] == expected_intent
+        assert is_fast_local_read(thought) is True
+
+    response = assistant.handle("status pulpitu")
+    assert response.startswith("Sterowanie pulpitem działa.")
+    assert not assistant.intelligence.loaded
+    assert not assistant.productivity.loaded
+    assert not assistant.stability.loaded
+    assert not assistant.assistant_v12.loaded
+    assert not assistant.online.loaded
+    assert not assistant.natural_actions.loaded
+
+
 def test_write_network_context_and_action_plans_never_use_fast_path() -> None:
     rejected = (
         _thought(read_only=False),

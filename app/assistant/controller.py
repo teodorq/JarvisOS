@@ -86,6 +86,8 @@ class PersonalAssistantController:
                 "conversation_followup": True,
             })
             return thought
+        if self._is_direct_core_command(resolved):
+            return self._core_plan(resolved)
         if resolved.intent == "natural_action":
             return self.natural_actions.plan(resolved.resolved)
         if self.online.matches(resolved.resolved):
@@ -131,6 +133,10 @@ class PersonalAssistantController:
                 "clarification": resolved.clarification,
             })
             return thought
+        return self._core_plan(resolved)
+
+    @staticmethod
+    def _core_plan(resolved: ResolvedCommand) -> dict[str, Any]:
         read_only = resolved.intent in {
             "current_time",
             "device_status",
