@@ -68,6 +68,30 @@ def test_auto_uses_low_resource_while_laptop_is_on_battery() -> None:
     assert profile.name == "low_resource"
 
 
+def test_auto_uses_low_resource_during_memory_pressure() -> None:
+    with _root("auto") as root:
+        profile = load_performance_profile(
+            root,
+            environment={},
+            system_probe=lambda: (32 * 1024**3, 16),
+            battery_probe=lambda: False,
+            memory_pressure_probe=lambda: True,
+        )
+    assert profile.name == "low_resource"
+
+
+def test_auto_returns_to_balanced_after_memory_pressure() -> None:
+    with _root("auto") as root:
+        profile = load_performance_profile(
+            root,
+            environment={},
+            system_probe=lambda: (32 * 1024**3, 16),
+            battery_probe=lambda: False,
+            memory_pressure_probe=lambda: False,
+        )
+    assert profile.name == "balanced"
+
+
 def test_explicit_balanced_profile_wins_over_battery_state() -> None:
     with _root("balanced") as root:
         profile = load_performance_profile(

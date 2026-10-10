@@ -60,12 +60,21 @@ def _running_on_battery() -> bool | None:
     return None if battery is None else not bool(battery.power_plugged)
 
 
+def _under_memory_pressure() -> bool:
+    memory = psutil.virtual_memory()
+    return (
+        int(memory.available) <= 1536 * 1024**2
+        or float(memory.percent) >= 88.0
+    )
+
+
 def load_performance_profile(
     project_root: str | Path | None = None,
     *,
     environment: dict[str, str] | None = None,
     system_probe: Callable[[], tuple[int, int]] | None = None,
     battery_probe: Callable[[], bool | None] | None = None,
+    memory_pressure_probe: Callable[[], bool] | None = None,
 ) -> PerformanceProfile:
     """Select a bounded UI profile without making startup depend on config I/O."""
     root = Path(project_root or resolve_project_root()).resolve()
@@ -100,6 +109,12 @@ def load_performance_profile(
 
     try:
         if (battery_probe or _running_on_battery)() is True:
+            return LOW_RESOURCE
+    except Exception:
+        pass
+
+    try:
+        if (memory_pressure_probe or _under_memory_pressure)() is True:
             return LOW_RESOURCE
     except Exception:
         pass
