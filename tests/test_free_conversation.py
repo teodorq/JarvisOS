@@ -95,6 +95,45 @@ def test_local_model_uses_lighter_defaults_for_low_resource_profile(
     assert model.status()["performance_profile"] == "low_resource"
 
 
+def test_local_model_leaves_cpu_capacity_for_the_interface(
+    monkeypatch, tmp_path,
+) -> None:
+    from app.assistant import local_chat_model
+    from app.core.performance_profile import LOW_RESOURCE
+
+    monkeypatch.delenv("JARVIS_OS_CHAT_CPU_THREADS", raising=False)
+    monkeypatch.setattr(local_chat_model.os, "cpu_count", lambda: 2)
+    monkeypatch.setattr(
+        local_chat_model,
+        "load_performance_profile",
+        lambda _root: LOW_RESOURCE,
+    )
+
+    model = local_chat_model.LocalChatModel(project_root=tmp_path)
+
+    assert model.cpu_threads == 2
+    assert model.status()["cpu_threads"] == 2
+
+
+def test_local_model_reserves_one_core_on_four_core_machine(
+    monkeypatch, tmp_path,
+) -> None:
+    from app.assistant import local_chat_model
+    from app.core.performance_profile import LOW_RESOURCE
+
+    monkeypatch.delenv("JARVIS_OS_CHAT_CPU_THREADS", raising=False)
+    monkeypatch.setattr(local_chat_model.os, "cpu_count", lambda: 4)
+    monkeypatch.setattr(
+        local_chat_model,
+        "load_performance_profile",
+        lambda _root: LOW_RESOURCE,
+    )
+
+    model = local_chat_model.LocalChatModel(project_root=tmp_path)
+
+    assert model.cpu_threads == 3
+
+
 def test_local_model_switches_profile_live_without_shortening_answer_budget(
     monkeypatch, tmp_path,
 ) -> None:

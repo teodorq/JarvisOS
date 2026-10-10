@@ -33,7 +33,10 @@ class LocalChatModel:
             else "balanced"
         )
         low_resource = profile_name == "low_resource"
-        default_threads = 4 if low_resource else 6
+        self.logical_cpu_count = max(1, int(os.cpu_count() or 1))
+        default_threads = _default_cpu_threads(
+            low_resource, self.logical_cpu_count
+        )
         default_context = 1536 if low_resource else 2048
         self._cpu_threads_overridden = "JARVIS_OS_CHAT_CPU_THREADS" in os.environ
         self._context_tokens_overridden = (
@@ -85,7 +88,9 @@ class LocalChatModel:
         low_resource = name == "low_resource"
         self.performance_profile = "low_resource" if low_resource else "balanced"
         if not self._cpu_threads_overridden:
-            self.cpu_threads = 4 if low_resource else 6
+            self.cpu_threads = _default_cpu_threads(
+                low_resource, self.logical_cpu_count
+            )
         if not self._context_tokens_overridden:
             self.context_tokens = 1536 if low_resource else 2048
         self.keep_alive = "90s" if low_resource else "5m"
@@ -143,6 +148,7 @@ class LocalChatModel:
             "response_tokens": self.response_tokens,
             "context_tokens": self.context_tokens,
             "processor": "CPU" if self.gpu_layers == 0 else "GPU",
+            "cpu_threads": self.cpu_threads,
             "performance_profile": self.performance_profile,
             "keep_alive": self.keep_alive,
         }
@@ -153,6 +159,13 @@ def _bounded_timeout(value: object) -> float:
         return min(60.0, max(5.0, float(value)))
     except (TypeError, ValueError):
         return 50.0
+
+
+def _default_cpu_threads(low_resource: bool, logical_cpus: int) -> int:
+    available = max(1, int(logical_cpus))
+    if available > 2:
+        available -= 1
+    return min(4 if low_resource else 6, available)
 
 
 def _bounded_int(
