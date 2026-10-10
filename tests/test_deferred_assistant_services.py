@@ -26,12 +26,39 @@ def test_controller_start_does_not_load_deferred_suites() -> None:
         "assert not assistant.natural_actions.loaded; "
         "assert not assistant.weather.loaded; "
         "assert not assistant.free_conversation.loaded; "
+        "assert not assistant.summary_reminders.loaded; "
         "assert 'app.online_assistant.controller' not in sys.modules; "
         "assert 'app.natural_actions.service' not in sys.modules; "
         "assert 'app.assistant.weather' not in sys.modules; "
         "assert 'app.assistant.free_conversation' not in sys.modules; "
         "assert 'app.assistant.local_chat_model' not in sys.modules; "
         "assert 'app.market_data.http_json' not in sys.modules"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code], check=False, capture_output=True, text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_user_status_does_not_expand_unrelated_assistant_suites() -> None:
+    code = (
+        "import sys; from app.assistant.controller import PersonalAssistantController; "
+        "assistant=PersonalAssistantController('.'); "
+        "response=assistant.handle('status asystenta'); "
+        "assert response.startswith('JARVIS jest gotowy do pracy.'); "
+        "assert assistant.summary_reminders.loaded; "
+        "assert not assistant.intelligence.loaded; "
+        "assert not assistant.productivity.loaded; "
+        "assert not assistant.stability.loaded; "
+        "assert not assistant.assistant_v12.loaded; "
+        "assert not assistant.online.loaded; "
+        "assert not assistant.natural_actions.loaded; "
+        "assert not assistant.weather.loaded; "
+        "assert not assistant.free_conversation.loaded; "
+        "assert 'app.assistant.weather' not in sys.modules; "
+        "assert 'app.online_assistant.controller' not in sys.modules; "
+        "assert 'app.natural_actions.service' not in sys.modules"
     )
     result = subprocess.run(
         [sys.executable, "-c", code], check=False, capture_output=True, text=True,

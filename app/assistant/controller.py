@@ -41,6 +41,9 @@ class PersonalAssistantController:
         self.free_conversation = LazyAssistantService(
             lambda: _free_conversation_service(self.project_root)
         )
+        self.summary_reminders = LazyAssistantService(
+            lambda: _reminder_center(self.project_root)
+        )
         self.daily = DailyWorkService(self.project_root)
         deferred = DeferredAssistantServices(
             self.project_root, stability_runtime_status=self._stability_runtime_status,
@@ -385,7 +388,15 @@ class PersonalAssistantController:
             "context_limit": 50,
         }
     def _format_full_status(self) -> str:
-        return AssistantStatusFormatter.full(self.status())
+        return AssistantStatusFormatter.full({
+            "conversation": self._conversation_status(),
+            "desktop": self.desktop.status(),
+            "memory": self.projects.status(),
+            "daily_work": self.daily.status(),
+            "productivity": {
+                "reminders": self.summary_reminders.status(),
+            },
+        })
     def _format_conversation_status(self) -> str: return AssistantStatusFormatter.conversation(self._conversation_status())
     def _format_desktop_status(self) -> str: return AssistantStatusFormatter.desktop(self.desktop.status())
     def _format_memory_status(self) -> str: return AssistantStatusFormatter.memory(self.projects.status())
@@ -417,3 +428,9 @@ def _free_conversation_service(project_root: Path) -> Any:
     from app.assistant.free_conversation import FreeConversationService
 
     return FreeConversationService(project_root)
+
+
+def _reminder_center(project_root: Path) -> Any:
+    from app.productivity.reminder_center import ReminderCenterV2
+
+    return ReminderCenterV2(project_root)
