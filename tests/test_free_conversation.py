@@ -626,6 +626,21 @@ def test_memory_depth_can_be_changed_directly_without_calling_model(
     assert model.calls == []
 
 
+def test_memory_depth_status_is_answered_without_calling_model(tmp_path) -> None:
+    memory = ProjectMemoryService(tmp_path)
+    memory.set_preference(
+        "conversation_memory_depth", 3, category="assistant_setting",
+    )
+    model = _Model(["Nie powinno zostać użyte."])
+    service = FreeConversationService(tmp_path, model=model)
+
+    answer = service.reply("Ile pamiętasz z naszej rozmowy?")
+
+    assert answer == "Pamięć bieżącego wątku: krótka (3 ostatnich wymian)."
+    assert service.matches("Jaka masz pamięć rozmowy?") is True
+    assert model.calls == []
+
+
 def test_engaged_questions_still_work_with_concise_style(tmp_path) -> None:
     memory = ProjectMemoryService(tmp_path)
     memory.set_preference(

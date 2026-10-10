@@ -204,6 +204,13 @@ _MEMORY_DEPTH_SIGNALS = {
         "uzywaj dluzszej pamieci rozmowy",
     ),
 }
+_MEMORY_DEPTH_STATUS_SIGNALS = (
+    "jaka masz pamiec rozmowy",
+    "ile pamietasz z rozmowy",
+    "ile pamietasz z naszej rozmowy",
+    "sprawdz pamiec rozmowy",
+    "status pamieci rozmowy",
+)
 _SYSTEM = (
     "Jesteś JARVIS OS, prywatnym asystentem Kacpra. Rozmawiaj swobodnie, "
     "życzliwie i konkretnie, jak naturalny rozmówca z Polski, a nie instrukcja "
@@ -250,6 +257,8 @@ class FreeConversationService:
     def matches(self, command: object) -> bool:
         text = normalize_user_command(command)
         folded = fold_text(text).strip(" .,!?:;")
+        if _requests_memory_depth_status(folded):
+            return True
         if _requested_memory_depth(folded):
             return True
         if _requested_question_mode(folded):
@@ -287,6 +296,8 @@ class FreeConversationService:
 
     def reply(self, command: object) -> str:
         text = normalize_user_command(command)[:1_200]
+        if _requests_memory_depth_status(text):
+            return self.memory_depth_status()
         requested_memory_depth = _requested_memory_depth(text)
         if requested_memory_depth:
             return self.set_memory_depth(requested_memory_depth)
@@ -722,6 +733,11 @@ def _requested_memory_depth(value: object) -> int:
         if any(signal in folded for signal in signals):
             return depth
     return 0
+
+
+def _requests_memory_depth_status(value: object) -> bool:
+    folded = fold_text(value).strip(" .,!?:;")
+    return any(signal in folded for signal in _MEMORY_DEPTH_STATUS_SIGNALS)
 
 
 def _apply_question_mode(value: object, mode: str) -> str:
