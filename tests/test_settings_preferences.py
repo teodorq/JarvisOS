@@ -11,6 +11,7 @@ from app.business.business_config import BusinessConfigStore
 from app.core.performance_profile import load_performance_profile
 from app.core.runtime_maintenance import (
     cleanup_runtime_storage,
+    directory_size,
     runtime_storage_status,
 )
 from app.gui.startup_mode import should_start_client
@@ -173,6 +174,15 @@ def test_runtime_status_reports_full_storage_breakdown(tmp_path) -> None:
     assert status["largest_category"] == "support"
     assert status["largest_category_bytes"] == sizes["assets"] + sizes["AI_PLIKI"]
     assert status["cleanup_candidate_bytes"] == 0
+
+
+def test_runtime_directory_size_counts_nested_files(tmp_path) -> None:
+    nested = tmp_path / "large" / "nested"
+    nested.mkdir(parents=True)
+    (tmp_path / "large" / "one.bin").write_bytes(b"123")
+    (nested / "two.bin").write_bytes(b"4567")
+
+    assert directory_size(tmp_path / "large") == 7
 
 
 def test_cleanup_covers_all_project_code_without_touching_environment(tmp_path) -> None:

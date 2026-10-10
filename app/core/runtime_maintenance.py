@@ -27,15 +27,28 @@ _AUDIO_CACHE_DIRECTORIES = (
 
 
 def directory_size(path: Path) -> int:
+    """Measure a directory iteratively using cached Windows directory entries."""
     total = 0
-    if not path.is_dir():
+    try:
+        if not path.is_dir():
+            return total
+    except OSError:
         return total
-    for current, _directories, files in os.walk(path):
-        for filename in files:
-            try:
-                total += (Path(current) / filename).stat().st_size
-            except OSError:
-                continue
+    pending = [path]
+    while pending:
+        current = pending.pop()
+        try:
+            with os.scandir(current) as entries:
+                for entry in entries:
+                    try:
+                        if entry.is_dir(follow_symlinks=False):
+                            pending.append(Path(entry.path))
+                        elif entry.is_file(follow_symlinks=False):
+                            total += entry.stat(follow_symlinks=False).st_size
+                    except OSError:
+                        continue
+        except OSError:
+            continue
     return total
 
 
