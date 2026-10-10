@@ -151,6 +151,10 @@ class ForexPaperAutopilotTests(unittest.TestCase):
         self.assertTrue(replay["execution"]["idempotent_replay"])
         status = self.autopilot.executor.status()
         self.assertEqual(status["position_count"], 1)
+        self.assertFalse(status["valuation_available"])
+        self.assertEqual(status["valuation_status"], "QUOTES_UNAVAILABLE")
+        self.assertTrue(first["account"]["valuation_available"])
+        self.assertEqual(first["account"]["valuation_status"], "FRESH_QUOTES")
         self.assertEqual(
             status["open_positions"][0]["initial_risk_pln"],
             opened_fill["initial_risk_pln"],
@@ -195,6 +199,8 @@ class ForexPaperAutopilotTests(unittest.TestCase):
         self.assertEqual(closed_fill["closed_at"], later.isoformat())
         status = self.autopilot.executor.status()
         self.assertEqual(status["position_count"], 0)
+        self.assertTrue(status["valuation_available"])
+        self.assertEqual(status["valuation_status"], "NO_OPEN_POSITIONS")
         self.assertEqual(status["fill_count"], 2)
         self.assertEqual(status["processed_cycle_count"], 2)
         self.assertEqual(status["last_cycle"]["cycle_id"], "forex-cycle-close")

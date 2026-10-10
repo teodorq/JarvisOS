@@ -563,6 +563,7 @@ class ForexPaperExecutionEngine:
             ):
                 latest_created_at = str(event.get("created_at", ""))
                 break
+        valuation_available = not positions or rates is not None
         unrealized = (
             self._unrealized_pln(positions, dict(quotes or {}), rates)
             if rates is not None
@@ -598,6 +599,14 @@ class ForexPaperExecutionEngine:
             "balance_pln": _text(balance),
             "unrealized_pnl_pln": _text(unrealized),
             "equity_pln": _text(balance + unrealized),
+            "valuation_available": valuation_available,
+            "valuation_status": (
+                "FRESH_QUOTES"
+                if rates is not None
+                else "NO_OPEN_POSITIONS"
+                if not positions
+                else "QUOTES_UNAVAILABLE"
+            ),
             "daily_pnl_pln": _text(_decimal(state.get("daily_pnl_pln"))),
             "weekly_pnl_pln": weekly_loss_safety["weekly_pnl_pln"],
             "realized_pnl_pln": _text(realized),

@@ -158,6 +158,14 @@ class _Activity:
         ]
 
 
+class _UnavailableValuationDashboard(_Dashboard):
+    def snapshot(self) -> dict:
+        value = super().snapshot()
+        value["valuation_available"] = False
+        value["valuation_status"] = "QUOTES_UNAVAILABLE"
+        return value
+
+
 def test_forex_page_shows_position_and_has_no_execution_controls() -> None:
     app = QApplication.instance() or QApplication([])
     page = ForexPaperPage(_Dashboard(), activity=_Activity())
@@ -219,7 +227,23 @@ def test_main_window_exposes_forex_page_without_exceeding_limit() -> None:
     assert '("FOREX PAPER", "forex")' in source
     assert '"forex": self.forex_page' in source
     assert "activity=self.assistant.trading.forex_activity" in source
-    assert len(source.splitlines()) < 440
+    assert len(source.splitlines()) < 460
+
+
+def test_forex_page_does_not_present_missing_valuation_as_zero() -> None:
+    app = QApplication.instance() or QApplication([])
+    page = ForexPaperPage(_UnavailableValuationDashboard())
+    try:
+        assert page.metrics["equity"].value_label.text() == "N/D"
+        assert page.metrics["unrealized"].value_label.text() == "N/D"
+        assert "ŚWIEŻEJ WYCENY" in page.metrics["equity"].hint_label.text()
+        assert "ŚWIEŻYCH NOTOWAŃ" in (
+            page.metrics["unrealized"].hint_label.text()
+        )
+    finally:
+        page.timer.stop()
+        page.deleteLater()
+        app.processEvents()
 
 
 def test_safety_banner_shows_weekly_loss_pause() -> None:

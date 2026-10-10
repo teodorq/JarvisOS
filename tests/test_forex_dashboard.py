@@ -323,6 +323,8 @@ def test_dashboard_projects_latest_safe_paper_cycle() -> None:
             "risk_recorded": True,
         }
         assert snapshot["unrealized_pnl_pln"] == "-1.88"
+        assert snapshot["valuation_available"] is True
+        assert snapshot["valuation_status"] == "FRESH_QUOTES"
         assert snapshot["performance"]["valid_closed_trade_count"] == 1
         assert snapshot["performance"]["profit_factor"] == "0.0000"
         assert snapshot["last_runtime_cycle"]["decision"] == "NO_ENTRY_SIGNAL"
@@ -388,6 +390,22 @@ def test_dashboard_projects_latest_safe_paper_cycle() -> None:
         assert risk["current_observed_consecutive_losses"] == 1
         assert risk["risk_coverage_complete"] is False
         assert risk["automatic_strategy_change"] is False
+
+
+def test_dashboard_marks_open_position_without_quotes_as_unvalued() -> None:
+    with TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        account = _account()
+        account["valuation_available"] = False
+        account["valuation_status"] = "QUOTES_UNAVAILABLE"
+        _write_result(root, account)
+        dashboard = ForexPaperDashboard(root, executor=_Executor({}))
+
+        snapshot = dashboard.snapshot()
+
+        assert snapshot["valuation_available"] is False
+        assert snapshot["valuation_status"] == "QUOTES_UNAVAILABLE"
+        assert "Brak świeżej wyceny" in snapshot["message"]
         assert snapshot["new_entries_paused_by_loss_streak"] is True
         assert snapshot["new_entries_paused_by_weekly_loss"] is False
         assert snapshot["weekly_loss_safety"] == {
@@ -522,6 +540,8 @@ def test_dashboard_marks_a_future_observer_heartbeat_as_stale() -> None:
         assert protection["available"] is True
         assert protection["stale"] is True
         assert protection["live_orders_sent"] is False
+        assert snapshot["valuation_available"] is False
+        assert snapshot["valuation_status"] == "QUOTES_UNAVAILABLE"
 
 
 def test_dashboard_projects_recent_restart_recovery_gap() -> None:

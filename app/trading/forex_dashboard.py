@@ -212,6 +212,9 @@ class ForexPaperDashboard:
             account.get("weekly_loss_safety")
         )
         position_protection = self._position_protection()
+        valuation_available = self._valuation_available(
+            account, position_protection
+        )
         message = "Lokalna symulacja; brak zleceń u brokera."
         if position_protection["attention_required"]:
             message = (
@@ -228,6 +231,16 @@ class ForexPaperDashboard:
                 "Nowe wejścia PAPER są wstrzymane po serii strat; "
                 "zweryfikowane zamknięcia nadal działają."
             )
+        if not valuation_available:
+            valuation_message = (
+                "Brak świeżej wyceny otwartej pozycji; wynik otwarty i wartość "
+                "konta odświeżą się z notowaniami."
+            )
+            message = (
+                valuation_message
+                if message == "Lokalna symulacja; brak zleceń u brokera."
+                else f"{message} {valuation_message}"
+            )
         return {
             "status": "READY",
             "mode": "FOREX_PAPER_ONLY",
@@ -237,6 +250,10 @@ class ForexPaperDashboard:
             "equity_pln": self._number(account.get("equity_pln"), 2),
             "unrealized_pnl_pln": self._number(
                 account.get("unrealized_pnl_pln"), 2
+            ),
+            "valuation_available": valuation_available,
+            "valuation_status": self._valuation_status(
+                account, valuation_available
             ),
             "realized_pnl_pln": self._number(account.get("realized_pnl_pln"), 2),
             "position_count": len(positions),
@@ -261,6 +278,37 @@ class ForexPaperDashboard:
             "real_money_access": False,
             "message": message,
         }
+
+    @staticmethod
+    def _valuation_available(
+        account: dict[str, Any], position_protection: dict[str, Any]
+    ) -> bool:
+        positions = account.get("open_positions")
+        has_position = bool(positions) if isinstance(positions, list) else False
+        if (
+            has_position
+            and position_protection.get("available") is True
+            and position_protection.get("stale") is True
+        ):
+            return False
+        value = account.get("valuation_available")
+        if type(value) is bool:
+            return value
+        # Reports written before valuation metadata always came from a full
+        # PAPER cycle with a validated rate book. Preserve that safe history.
+        return True
+
+    @staticmethod
+    def _valuation_status(
+        account: dict[str, Any], available: bool
+    ) -> str:
+        if not available:
+            return "QUOTES_UNAVAILABLE"
+        value = str(account.get("valuation_status", "")).strip().upper()
+        allowed = {"FRESH_QUOTES", "NO_OPEN_POSITIONS", "QUOTES_UNAVAILABLE"}
+        if value in allowed:
+            return value
+        return "FRESH_QUOTES" if available else "QUOTES_UNAVAILABLE"
 
     def _performance_review(self, account: dict[str, Any]) -> dict[str, Any]:
         blocked = self._blocked_performance_review()

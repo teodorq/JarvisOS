@@ -235,10 +235,24 @@ class ForexPaperPage(QWidget):
         self.protection.set_status(protection_label, protection_tone)
         self.protection_detail.setText(protection_detail)
         self.metrics["balance"].set_value(f"{snapshot.get('balance_pln', '0.00')} PLN")
-        self.metrics["equity"].set_value(f"{snapshot.get('equity_pln', '0.00')} PLN")
-        pnl = str(snapshot.get("unrealized_pnl_pln", "0.00"))
-        self.metrics["unrealized"].set_value(f"{pnl} PLN")
-        self.metrics["unrealized"].set_hint(self._pnl_hint(pnl))
+        valuation_available = snapshot.get("valuation_available") is not False
+        if valuation_available:
+            self.metrics["equity"].set_value(
+                f"{snapshot.get('equity_pln', '0.00')} PLN"
+            )
+            self.metrics["equity"].set_hint("")
+            pnl = str(snapshot.get("unrealized_pnl_pln", "0.00"))
+            self.metrics["unrealized"].set_value(f"{pnl} PLN")
+            self.metrics["unrealized"].set_hint(self._pnl_hint(pnl))
+        else:
+            self.metrics["equity"].set_value("N/D")
+            self.metrics["equity"].set_hint(
+                "Brak świeżej wyceny otwartej pozycji."
+            )
+            self.metrics["unrealized"].set_value("N/D")
+            self.metrics["unrealized"].set_hint(
+                "Wynik pojawi się po otrzymaniu świeżych notowań."
+            )
         raw_positions = snapshot.get("positions")
         raw_positions = raw_positions if isinstance(raw_positions, list) else []
         positions = [dict(item) for item in raw_positions[:5] if isinstance(item, dict)]
