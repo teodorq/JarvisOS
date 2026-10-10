@@ -41,7 +41,12 @@ User memory, command history, Google tokens, voice models, logs, generated backu
    `ollama pull gemma3:4b` once.
 4. Run `start_jarvis.vbs` to start JARVIS OS without a console window.
 
-The installer creates a local `.venv` environment. It uses `requirements-lock.txt` when available, so the verified package versions are reproducible.
+The installer creates a local `.venv` environment. By default it uses the
+smaller `requirements-runtime-lock.txt`, which keeps the desktop UI, microphone,
+local voice, Azure phone bridge and MetaTrader PAPER support while omitting test
+and optional integration packages. Contributors can run `install.bat dev` to
+install the complete verified `requirements-lock.txt` environment used by the
+regression suite.
 Free conversation stays on `127.0.0.1`, receives no tools and keeps only a
 bounded recent chat context. Ordinary actions, mail, calendar and trading keep
 their existing dedicated safety routes. If Ollama is unavailable, JARVIS uses a
@@ -498,7 +503,15 @@ method for placing, changing or closing broker orders.
 
 ## Optional Google Workspace integration
 
-Copy `config/google_workspace_client_secret.example.json` to a local credentials file and fill it with credentials from Google Cloud. Real client secrets and OAuth tokens must never be committed.
+Install the optional Google libraries first:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install --no-cache-dir -r requirements_google_workspace.txt
+```
+
+Then copy `config/google_workspace_client_secret.example.json` to a local
+credentials file and fill it with credentials from Google Cloud. Real client
+secrets and OAuth tokens must never be committed.
 
 ## Weather without an API key
 

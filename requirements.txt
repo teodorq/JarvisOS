@@ -3,6 +3,7 @@ pyautogui
 Pillow
 psutil
 SpeechRecognition
+PyAudio
 pyttsx3
 requests
 pytweening

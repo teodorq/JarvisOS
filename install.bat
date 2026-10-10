@@ -20,10 +20,15 @@ if not exist ".venv\Scripts\python.exe" (
     if errorlevel 1 goto :error
 )
 
-set "REQUIREMENTS=requirements-lock.txt"
+set "REQUIREMENTS=requirements-runtime-lock.txt"
+set "INSTALL_MODE=lekki tryb aplikacji"
+if /I "%~1"=="dev" (
+    set "REQUIREMENTS=requirements-lock.txt"
+    set "INSTALL_MODE=pelne srodowisko deweloperskie"
+)
 if not exist "%REQUIREMENTS%" set "REQUIREMENTS=requirements.txt"
 
-echo Instalowanie zweryfikowanych bibliotek JARVIS OS...
+echo Instalowanie zweryfikowanych bibliotek JARVIS OS - %INSTALL_MODE%...
 ".venv\Scripts\python.exe" -m pip install --no-cache-dir --upgrade pip
 if errorlevel 1 goto :error
 ".venv\Scripts\python.exe" -m pip install --no-cache-dir -r "%REQUIREMENTS%"
