@@ -235,6 +235,7 @@ def _maintenance_done(window: Any, result: object, *, cleanup: bool) -> None:
         )
     else:
         text = (
+            f"Aktywny tryb: {_performance_label(value.get('profile'))}. "
             f"JARVIS: {_size(value.get('application_bytes', 0))} "
             f"(środowisko {_size(value.get('environment_bytes', 0))}, "
             f"dane {_size(value.get('data_bytes', 0))}, archiwum "
@@ -354,6 +355,13 @@ def _cleanup_preview(value: dict[str, Any]) -> str:
     if size <= 0:
         return "Nie ma teraz zbędnych plików do uprzątnięcia."
     return f"Bezpiecznie można uprzątnąć {_size(size)} ({files} plików)."
+
+
+def _performance_label(value: object) -> str:
+    return {
+        "low_resource": "oszczędny",
+        "balanced": "pełna jakość",
+    }.get(str(value or "").strip().casefold(), "automatyczny")
 
 
 __all__ = [

@@ -11,6 +11,7 @@ from PySide6.QtWidgets import QApplication, QVBoxLayout, QWidget
 from app.business.business_config import BusinessConfigStore
 from app.assistant.conversation_preferences import load_conversation_preferences
 from app.gui.client_settings_extensions import (
+    _maintenance_done,
     _run_maintenance,
     install_client_settings_controls,
     save_client_settings_controls,
@@ -104,4 +105,24 @@ def test_client_storage_status_submits_a_real_operation(tmp_path) -> None:
     result = operation()
     assert isinstance(result, dict)
     assert "disk_free_bytes" in result
+    host.close()
+
+
+def test_client_storage_status_shows_the_active_performance_profile(
+    tmp_path,
+) -> None:
+    _app, host, window, _store = _window(tmp_path)
+
+    _maintenance_done(window, {
+        "profile": "low_resource",
+        "application_bytes": 1024,
+        "environment_bytes": 0,
+        "data_bytes": 0,
+        "archive_bytes": 0,
+        "disk_free_bytes": 2048,
+    }, cleanup=False)
+
+    assert "Aktywny tryb: oszczędny" in (
+        window.client_maintenance_feedback.text()
+    )
     host.close()
