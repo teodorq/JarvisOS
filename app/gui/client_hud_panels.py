@@ -228,6 +228,8 @@ def mount_client_command_input(window: Any) -> None:
     window.listen_button.setText("MÓW")
     send.setText("›")
     send.setObjectName("HudSendAction")
+    send.setAccessibleName("Wyślij polecenie")
+    send.setToolTip("Wyślij wpisane polecenie do JARVIS")
 
 
 __all__ = ["build_client_hud_row", "mount_client_command_input", "mount_client_status"]

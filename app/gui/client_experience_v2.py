@@ -151,8 +151,6 @@ class ClientExperienceV2:
         self.window.command_entry.setClearButtonEnabled(True)
         mount_client_status(self.window)
         mount_client_command_input(self.window)
-        for button in getattr(self.window, "quick_buttons", []):
-            button.hide()
         self.window.command_entry.setFocus(Qt.OtherFocusReason)
 
     def clear(self) -> None:

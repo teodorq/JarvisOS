@@ -14,7 +14,7 @@ class BrainCommandRouter:
     def think(self, brain: Any, command: str) -> dict:
         original_command, command = str(command), normalize_user_command(command)
         brain.cognitive.before_think(command)
-        assistant = self._assistant_controller(brain, create=PersonalAssistantController.matches(command))
+        assistant = None if "longrun-" in command.casefold() else self._assistant_controller(brain, create=PersonalAssistantController.matches(command))
         if assistant is not None:
             resolved = assistant.resolve_command(command)
             command = resolved.resolved

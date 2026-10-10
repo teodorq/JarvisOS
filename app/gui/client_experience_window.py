@@ -124,6 +124,7 @@ class ClientExperienceWindow(ClientVoiceMixin, ClientOnlineMixin, ClientV12Mixin
         row.addWidget(self.stable_label)
         owner = QPushButton()
         owner.setObjectName("ClientSecondary")
+        owner.setAccessibleName("Ukryty dostęp do panelu właściciela")
         owner.clicked.connect(lambda: self.owner_access.request_unlock())
         owner.hide()
         self.owner_button = owner
@@ -196,25 +197,6 @@ class ClientExperienceWindow(ClientVoiceMixin, ClientOnlineMixin, ClientV12Mixin
         input_row.addWidget(self.listen_button)
         input_row.addWidget(send)
         content.addLayout(input_row)
-        quick_row = QHBoxLayout()
-        quick_commands = (
-            ("MÓJ DZIEŃ", "Pokaż mój plan na dziś"),
-            ("POCZTA", "Znajdź najważniejszą wiadomość"),
-            ("KALENDARZ", "Co mam dziś w kalendarzu?"),
-            ("DOKUMENTY", "Znajdź ostatnio używany dokument"),
-            ("PRZYPOMNIENIA", "Pokaż najbliższe przypomnienia"),
-            ("STATUS", "Status asystenta"),
-        )
-        self.quick_buttons = []
-        for label, command in quick_commands:
-            button = QPushButton(label)
-            button.setObjectName("ClientSecondary")
-            button.clicked.connect(
-                lambda _checked=False, value=command: self._submit_text(value)
-            )
-            self.quick_buttons.append(button)
-            quick_row.addWidget(button)
-        content.addLayout(quick_row)
         content.addStretch(1)
         outer.addWidget(main, 1)
         readiness = QFrame()

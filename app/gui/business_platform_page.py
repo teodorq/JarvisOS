@@ -92,18 +92,30 @@ class BusinessPlatformPage(QWidget):
         row = QHBoxLayout()
         self.profile_selector = QComboBox()
         self.profile_selector.setMinimumWidth(320)
+        self.profile_selector.currentIndexChanged.connect(
+            self._sync_profile_actions
+        )
         snapshot = QPushButton("UTWÓRZ SNAPSHOT")
         snapshot.setObjectName("SecondaryButton")
+        snapshot.setToolTip(
+            "Zapisuje obecną konfigurację jako nowy profil organizacji."
+        )
         snapshot.clicked.connect(self._snapshot_profile)
-        activate = QPushButton("AKTYWUJ")
-        activate.setObjectName("PrimaryButton")
-        activate.clicked.connect(self._activate_profile)
+        self.activate_profile_button = QPushButton("AKTYWUJ")
+        self.activate_profile_button.setObjectName("PrimaryButton")
+        self.activate_profile_button.setToolTip(
+            "Wczytuje zaznaczony profil organizacji."
+        )
+        self.activate_profile_button.clicked.connect(self._activate_profile)
         export = QPushButton("EKSPORTUJ")
         export.setObjectName("SecondaryButton")
+        export.setToolTip(
+            "Zapisuje aktywny profil do przenośnego pliku JSON."
+        )
         export.clicked.connect(self._export_profile)
         row.addWidget(self.profile_selector, 1)
         row.addWidget(snapshot)
-        row.addWidget(activate)
+        row.addWidget(self.activate_profile_button)
         row.addWidget(export)
         card.content_layout.addLayout(row)
         return card
@@ -180,6 +192,7 @@ class BusinessPlatformPage(QWidget):
     def refresh(self) -> None:
         profiles = self.service.organization_profiles.status()
         active_id = str(profiles.get("active_profile_id", ""))
+        self._active_profile_id = active_id
         self.profile_selector.blockSignals(True)
         self.profile_selector.clear()
         active_index = 0
@@ -192,6 +205,7 @@ class BusinessPlatformPage(QWidget):
         if self.profile_selector.count():
             self.profile_selector.setCurrentIndex(active_index)
         self.profile_selector.blockSignals(False)
+        self._sync_profile_actions()
         self.profile_status.set_value(display_status(profiles.get("status")))
         self.profile_count.set_value(profiles.get("profile_count", 0))
 
@@ -228,6 +242,26 @@ class BusinessPlatformPage(QWidget):
             "healthy" if ready else "danger",
         )
         self.data_changed.emit()
+
+    def _sync_profile_actions(self, _index: int = -1) -> None:
+        count = self.profile_selector.count()
+        has_choice = count > 1
+        self.profile_selector.setEnabled(has_choice)
+        if count == 0:
+            selector_hint = "Brak zapisanych profili. Utwórz snapshot."
+        elif count == 1:
+            selector_hint = (
+                "Dostępny jest jeden profil. Utwórz snapshot, aby móc "
+                "przełączać konfiguracje."
+            )
+        else:
+            selector_hint = "Wybierz profil organizacji do aktywowania."
+        self.profile_selector.setToolTip(selector_hint)
+        selected = str(self.profile_selector.currentData() or "")
+        active = str(getattr(self, "_active_profile_id", "") or "")
+        self.activate_profile_button.setEnabled(
+            bool(selected) and selected != active
+        )
 
     def _snapshot_profile(self) -> None:
         result = self.service.organization_profiles.snapshot_current()

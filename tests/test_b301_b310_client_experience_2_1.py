@@ -154,8 +154,11 @@ class TestB301B310ClientExperience21(unittest.TestCase):
         backdrop = (root / "app/gui/client_hud_backdrop.py").read_text(
             encoding="utf-8"
         )
+        tools = (root / "app/gui/client_tool_drawer.py").read_text(
+            encoding="utf-8"
+        )
         self.assertIn("ClientHudBackdrop", client)
-        self.assertIn("PRZYPOMNIENIA", client)
+        self.assertIn("NOWE PRZYPOMNIENIE", tools)
         self.assertIn("rgba(2, 10, 19, 174)", theme)
         self.assertIn("spacing = 42", backdrop)
         self.assertLess(len(client.splitlines()), 440)
