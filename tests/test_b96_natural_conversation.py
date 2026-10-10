@@ -150,6 +150,8 @@ class B96NaturalConversationTests(unittest.TestCase):
             answer = controller.handle("Pokaż opcje rozmowy")
             self.assertIn("mów dokładniej", answer)
             self.assertIn("rozmawiaj luźniej", answer)
+            self.assertIn("pamiętaj dłużej", answer)
+            self.assertIn("pamiętaj temat do jutra", answer)
 
     def test_natural_conversation_style_can_be_restored(self) -> None:
         with TemporaryDirectory() as temporary:

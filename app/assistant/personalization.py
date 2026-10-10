@@ -84,7 +84,11 @@ class AssistantPersonalizationService:
             "„rozmawiaj naturalnie”. Domyślny tryb naturalny nie kończy "
             "odpowiedzi po kilku zdaniach, jeśli temat wymaga rozwinięcia. "
             "Pytania kontrolujesz poleceniami: „nie zadawaj mi pytań”, "
-            "„pytaj naturalnie” albo „pytaj mnie częściej”."
+            "„pytaj naturalnie” albo „pytaj mnie częściej”. Zakres pamięci "
+            "bieżącej rozmowy zmienisz przez „pamiętaj krótko”, „pamiętaj "
+            "naturalnie” lub „pamiętaj dłużej”. Czas zachowania tematu ustawisz "
+            "poleceniem „pamiętaj temat przez godzinę”, „pamiętaj temat przez "
+            "dzień” albo „pamiętaj temat do jutra”."
         )
     def remember_personal_fact(self, command: str) -> str:
         match = re.match(
