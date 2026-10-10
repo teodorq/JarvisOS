@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import re
+import time
 from typing import Any
 import urllib.error
 import urllib.request
@@ -74,6 +75,8 @@ class LocalChatModel:
         )
         self.performance_profile = profile_name
         self.keep_alive = "90s" if low_resource else "5m"
+        self._failure_count = 0
+        self._retry_after = 0.0
         flag = os.getenv("JARVIS_OS_LOCAL_CHAT_ENABLED", "true")
         self.enabled = str(flag).strip().casefold() in _TRUE
 
@@ -96,7 +99,7 @@ class LocalChatModel:
         self.keep_alive = "90s" if low_resource else "5m"
 
     def reply(self, messages: list[dict[str, str]], *, system: str) -> str:
-        if not self.enabled:
+        if not self.enabled or self._retry_after > time.monotonic():
             return ""
         safe_messages = [
             {"role": item["role"], "content": str(item["content"])[:2_000]}
@@ -128,10 +131,14 @@ class LocalChatModel:
         try:
             with urllib.request.urlopen(request, timeout=self.timeout) as response:
                 if getattr(response, "status", 200) != 200:
+                    self._record_failure()
                     return ""
                 result: Any = json.loads(response.read(1_000_000).decode("utf-8"))
         except (OSError, ValueError, urllib.error.URLError, TimeoutError):
+            self._record_failure()
             return ""
+        self._failure_count = 0
+        self._retry_after = 0.0
         message = dict(result.get("message", {}) or {}) if isinstance(result, dict) else {}
         text = str(message.get("content", "") or "").strip()
         text = re.sub(r"<think>.*?</think>", "", text, flags=re.I | re.S).strip()
@@ -151,7 +158,13 @@ class LocalChatModel:
             "cpu_threads": self.cpu_threads,
             "performance_profile": self.performance_profile,
             "keep_alive": self.keep_alive,
+            "temporarily_unavailable": self._retry_after > time.monotonic(),
         }
+
+    def _record_failure(self) -> None:
+        self._failure_count = min(6, self._failure_count + 1)
+        cooldown = min(30.0, 5.0 * self._failure_count)
+        self._retry_after = time.monotonic() + cooldown
 
 
 def _bounded_timeout(value: object) -> float:

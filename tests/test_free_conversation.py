@@ -228,6 +228,33 @@ def test_local_model_sends_no_tools_to_local_ollama(monkeypatch) -> None:
     assert captured["timeout"] == 50.0
 
 
+def test_local_model_temporarily_skips_repeated_failed_connections(
+    monkeypatch,
+) -> None:
+    from app.assistant import local_chat_model
+
+    clock = [100.0]
+    calls = []
+
+    def unavailable(*_args, **_kwargs):
+        calls.append(True)
+        raise OSError("offline")
+
+    monkeypatch.setattr(local_chat_model.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(local_chat_model.urllib.request, "urlopen", unavailable)
+    model = local_chat_model.LocalChatModel()
+    messages = [{"role": "user", "content": "Cześć"}]
+
+    assert model.reply(messages, system="test") == ""
+    assert model.reply(messages, system="test") == ""
+    assert len(calls) == 1
+    assert model.status()["temporarily_unavailable"] is True
+
+    clock[0] += 5.0
+    assert model.reply(messages, system="test") == ""
+    assert len(calls) == 2
+
+
 def test_local_chat_keeps_only_bounded_conversation_context(tmp_path) -> None:
     model = _Model(["Pierwsza odpowiedź.", "Druga odpowiedź."])
     service = FreeConversationService(tmp_path, model=model)
