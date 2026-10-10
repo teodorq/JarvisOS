@@ -212,6 +212,7 @@ def test_owner_settings_save_conversation_outside_business_config(tmp_path) -> N
         "_conversation": {
             "style": "detailed",
             "question_mode": "engaged",
+            "memory_depth": 10,
         },
     })
 
@@ -219,5 +220,6 @@ def test_owner_settings_save_conversation_outside_business_config(tmp_path) -> N
     assert load_conversation_preferences(tmp_path) == {
         "style": "detailed",
         "question_mode": "engaged",
+        "memory_depth": 10,
     }
     owner._apply_runtime_config.assert_called_once_with()

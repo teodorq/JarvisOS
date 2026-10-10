@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.assistant.conversation_preferences import (
+    MEMORY_DEPTH_OPTIONS,
     QUESTION_MODE_OPTIONS,
     STYLE_OPTIONS,
     load_conversation_preferences,
@@ -46,6 +47,7 @@ def install_client_settings_controls(window: Any, content: QVBoxLayout) -> None:
     ))
     window.client_conversation_style = _combo(STYLE_OPTIONS)
     window.client_conversation_question_mode = _combo(QUESTION_MODE_OPTIONS)
+    window.client_conversation_memory_depth = _combo(MEMORY_DEPTH_OPTIONS)
     window.client_sounds = _combo((("Włączone", True), ("Wyłączone", False)))
     window.client_desktop_notifications = _combo((
         ("Włączone", True),
@@ -64,6 +66,9 @@ def install_client_settings_controls(window: Any, content: QVBoxLayout) -> None:
     form.addRow("Styl odpowiedzi", window.client_conversation_style)
     form.addRow(
         "Pytania w rozmowie", window.client_conversation_question_mode
+    )
+    form.addRow(
+        "Pamięć bieżącego wątku", window.client_conversation_memory_depth
     )
     form.addRow("Dźwięki", window.client_sounds)
     form.addRow("Powiadomienia Windows", window.client_desktop_notifications)
@@ -142,6 +147,10 @@ def show_client_settings_controls(window: Any) -> None:
         conversation.get("question_mode", "balanced"),
     )
     _select(
+        window.client_conversation_memory_depth,
+        conversation.get("memory_depth", 6),
+    )
+    _select(
         window.client_start_minimized,
         bool(ui.get("start_minimized", False)),
     )
@@ -171,6 +180,7 @@ def save_client_settings_controls(window: Any) -> None:
         window.controller.project_root,
         style=window.client_conversation_style.currentData(),
         question_mode=window.client_conversation_question_mode.currentData(),
+        memory_depth=window.client_conversation_memory_depth.currentData(),
     )
     if getattr(window, "owner_window", None) is not None:
         window.owner_window.business_config = config

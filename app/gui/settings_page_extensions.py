@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.assistant.conversation_preferences import (
+    MEMORY_DEPTH_OPTIONS,
     QUESTION_MODE_OPTIONS,
     STYLE_OPTIONS,
 )
@@ -83,9 +84,13 @@ def install_settings_extensions(page: Any, content: Any) -> None:
     conversation_form.setHorizontalSpacing(18)
     page.conversation_style = _combo(STYLE_OPTIONS)
     page.conversation_question_mode = _combo(QUESTION_MODE_OPTIONS)
+    page.conversation_memory_depth = _combo(MEMORY_DEPTH_OPTIONS)
     conversation_form.addRow("Styl odpowiedzi", page.conversation_style)
     conversation_form.addRow(
         "Pytania w rozmowie", page.conversation_question_mode
+    )
+    conversation_form.addRow(
+        "Pamięć bieżącego wątku", page.conversation_memory_depth
     )
     conversation.content_layout.addLayout(conversation_form)
     conversation_note = QLabel(
@@ -173,6 +178,7 @@ def settings_extension_updates(page: Any) -> dict[str, Any]:
         "_conversation": {
             "style": page.conversation_style.currentData(),
             "question_mode": page.conversation_question_mode.currentData(),
+            "memory_depth": page.conversation_memory_depth.currentData(),
         },
         "ui": {
             "startup_mode": page.startup_mode.currentData(),
@@ -194,6 +200,7 @@ def load_conversation_settings(page: Any, value: dict[str, Any]) -> None:
         page.conversation_question_mode,
         value.get("question_mode", "balanced"),
     )
+    _select(page.conversation_memory_depth, value.get("memory_depth", 6))
 
 
 def set_settings_action_busy(page: Any, busy: bool) -> None:

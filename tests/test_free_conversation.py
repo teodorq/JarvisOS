@@ -220,6 +220,28 @@ def test_context_budget_keeps_personal_memory_after_longer_chat(tmp_path) -> Non
     assert all(len(message["content"]) <= 800 for message in messages)
 
 
+def test_conversation_memory_depth_can_keep_a_longer_bounded_thread(tmp_path) -> None:
+    memory = ProjectMemoryService(tmp_path)
+    memory.set_preference(
+        "conversation_memory_depth", 10, category="assistant_setting",
+    )
+    model = _Model([f"Odpowiedź {index}." for index in range(13)])
+    service = FreeConversationService(tmp_path, model=model)
+
+    for index in range(12):
+        service.reply(f"Co myślisz o etapie numer {index}?")
+    service.reply("Jak myślisz, co będzie dalej?")
+
+    messages, _system = model.calls[-1]
+    assert len(messages) == 21
+    assert "etapie numer 2" in messages[0]["content"]
+    assert not any(
+        message["content"] == "Co myślisz o etapie numer 1?"
+        for message in messages
+    )
+    assert service.status()["conversation_memory_depth"] == 10
+
+
 def test_short_acknowledgement_uses_active_conversation_context(tmp_path) -> None:
     model = _Model([
         "Najpierw ustalmy cel. Co chcesz osiągnąć?",

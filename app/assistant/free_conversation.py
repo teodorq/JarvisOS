@@ -14,7 +14,6 @@ from app.core.project_paths import resolve_project_root
 
 
 _CHAT_TTL = timedelta(hours=1)
-_CHAT_HISTORY_TURNS = 6
 _HISTORY_MESSAGE_CHARS = 240
 _FOLLOWUP_PROMPTS = {
     "powiedz to prosciej": (
@@ -377,6 +376,7 @@ class FreeConversationService:
             ),
             "conversation_style": self._conversation_style(),
             "conversation_question_mode": self._question_mode(),
+            "conversation_memory_depth": self._history_turn_limit(),
             "model": dict(model_status or {}),
         }
 
@@ -391,6 +391,14 @@ class FreeConversationService:
             self.memory.get_preference("conversation_question_mode", "balanced")
         )
         return mode if mode in _QUESTION_MODE_INSTRUCTIONS else "balanced"
+
+    def _history_turn_limit(self) -> int:
+        value = self.memory.get_preference("conversation_memory_depth", 6)
+        try:
+            depth = int(value)
+        except (TypeError, ValueError):
+            return 6
+        return depth if depth in {3, 6, 10} else 6
 
     def set_question_mode(self, command: object) -> str:
         mode = _requested_question_mode(command)
@@ -540,7 +548,9 @@ class FreeConversationService:
     def _messages(self) -> list[dict[str, str]]:
         if not self._has_recent_history():
             return []
-        turns = list(self._load().get("turns", []) or [])[-_CHAT_HISTORY_TURNS:]
+        turns = list(self._load().get("turns", []) or [])[
+            -self._history_turn_limit():
+        ]
         result: list[dict[str, str]] = []
         for item in turns:
             result.extend((

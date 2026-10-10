@@ -32,6 +32,9 @@ def test_settings_page_emits_complete_user_preferences() -> None:
     page.conversation_question_mode.setCurrentIndex(
         page.conversation_question_mode.findData("engaged")
     )
+    page.conversation_memory_depth.setCurrentIndex(
+        page.conversation_memory_depth.findData(10)
+    )
     emitted: list[dict] = []
     page.save_requested.connect(emitted.append)
 
@@ -46,6 +49,7 @@ def test_settings_page_emits_complete_user_preferences() -> None:
     assert emitted[0]["_conversation"] == {
         "style": "detailed",
         "question_mode": "engaged",
+        "memory_depth": 10,
     }
     page.deleteLater()
 
