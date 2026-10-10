@@ -186,6 +186,24 @@ _QUESTION_MODE_SIGNALS = {
         "normalny tryb pytan",
     ),
 }
+_MEMORY_DEPTH_SIGNALS = {
+    3: (
+        "pamietaj krotko",
+        "krotka pamiec rozmowy",
+        "uzywaj krotszej pamieci rozmowy",
+    ),
+    6: (
+        "pamietaj naturalnie",
+        "naturalna pamiec rozmowy",
+        "normalna pamiec rozmowy",
+    ),
+    10: (
+        "pamietaj dluzej",
+        "pamietaj wiecej rozmowy",
+        "dluga pamiec rozmowy",
+        "uzywaj dluzszej pamieci rozmowy",
+    ),
+}
 _SYSTEM = (
     "Jesteś JARVIS OS, prywatnym asystentem Kacpra. Rozmawiaj swobodnie, "
     "życzliwie i konkretnie, jak naturalny rozmówca z Polski, a nie instrukcja "
@@ -232,6 +250,8 @@ class FreeConversationService:
     def matches(self, command: object) -> bool:
         text = normalize_user_command(command)
         folded = fold_text(text).strip(" .,!?:;")
+        if _requested_memory_depth(folded):
+            return True
         if _requested_question_mode(folded):
             return True
         if _starts_new_topic(folded):
@@ -267,6 +287,9 @@ class FreeConversationService:
 
     def reply(self, command: object) -> str:
         text = normalize_user_command(command)[:1_200]
+        requested_memory_depth = _requested_memory_depth(text)
+        if requested_memory_depth:
+            return self.set_memory_depth(requested_memory_depth)
         requested_question_mode = _requested_question_mode(text)
         if requested_question_mode:
             return self.set_question_mode(text)
@@ -399,6 +422,37 @@ class FreeConversationService:
         except (TypeError, ValueError):
             return 6
         return depth if depth in {3, 6, 10} else 6
+
+    def set_memory_depth(self, depth: object) -> str:
+        try:
+            selected = int(depth)
+        except (TypeError, ValueError) as error:
+            raise ValueError(
+                "Dostępna pamięć rozmowy: krótka, naturalna albo długa."
+            ) from error
+        if selected not in {3, 6, 10}:
+            raise ValueError(
+                "Dostępna pamięć rozmowy: krótka, naturalna albo długa."
+            )
+        self.memory.set_preference(
+            "conversation_memory_depth",
+            selected,
+            category="assistant_setting",
+        )
+        labels = {
+            3: "Ustawiona krótka pamięć rozmowy: 3 ostatnie wymiany.",
+            6: "Ustawiona naturalna pamięć rozmowy: 6 ostatnich wymian.",
+            10: "Ustawiona długa pamięć rozmowy: 10 ostatnich wymian.",
+        }
+        return labels[selected]
+
+    def memory_depth_status(self) -> str:
+        labels = {3: "krótka", 6: "naturalna", 10: "długa"}
+        depth = self._history_turn_limit()
+        return (
+            f"Pamięć bieżącego wątku: {labels[depth]} "
+            f"({depth} ostatnich wymian)."
+        )
 
     def set_question_mode(self, command: object) -> str:
         mode = _requested_question_mode(command)
@@ -660,6 +714,14 @@ def _requested_question_mode(value: object) -> str:
         if any(signal in folded for signal in signals):
             return mode
     return ""
+
+
+def _requested_memory_depth(value: object) -> int:
+    folded = fold_text(value).strip(" .,!?:;")
+    for depth, signals in _MEMORY_DEPTH_SIGNALS.items():
+        if any(signal in folded for signal in signals):
+            return depth
+    return 0
 
 
 def _apply_question_mode(value: object, mode: str) -> str:
