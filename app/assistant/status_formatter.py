@@ -73,9 +73,18 @@ class AssistantStatusFormatter:
 
     @classmethod
     def conversation(cls, status: dict[str, Any]) -> str:
+        reply_limit = int(status.get("reply_context_limit", 6) or 6)
+        context_hours = int(status.get("topic_context_hours", 1) or 1)
+        hour_label = {
+            1: "1 godzinę",
+            8: "8 godzin",
+            24: "24 godziny",
+        }.get(context_hours, f"{context_hours} godzin")
         result = (
-            f"Pamiętam {status['turn_count']} z maksymalnie "
-            f"{status['context_limit']} ostatnich wymian rozmowy. "
+            f"Historia sterowania zawiera {status['turn_count']} z maksymalnie "
+            f"{status['context_limit']} ostatnich wymian. W swobodnej rozmowie "
+            f"łączę do {reply_limit} ostatnich wymian i zachowuję bieżący temat "
+            f"przez {hour_label}. "
             f"Ostatnio wykonywałem: {cls._intent_label(status['last_intent'])}."
         )
         target = str(status.get("last_target") or "").strip()

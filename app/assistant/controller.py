@@ -396,12 +396,22 @@ class PersonalAssistantController:
         }
     def _conversation_status(self) -> dict[str, Any]:
         data = self.conversation.context.load()
+        local_chat = self.free_conversation.status()
         return {
             "status": "NATURAL_CONVERSATION_READY",
             "turn_count": len(list(data.get("turns", []) or [])),
             "last_intent": data.get("last_intent", ""),
             "last_target": data.get("last_target", ""),
             "context_limit": 50,
+            "reply_context_limit": int(
+                local_chat.get("conversation_memory_depth", 6) or 6
+            ),
+            "topic_context_hours": int(
+                local_chat.get("conversation_context_hours", 1) or 1
+            ),
+            "free_chat_turn_count": int(
+                local_chat.get("turn_count", 0) or 0
+            ),
         }
     def _format_full_status(self) -> str:
         return AssistantStatusFormatter.full({

@@ -5,11 +5,6 @@ from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import QButtonGroup, QFrame, QGridLayout, QHBoxLayout, QLabel, QMainWindow, QPushButton, QSizePolicy, QStackedWidget, QVBoxLayout, QWidget
 from app.ai.client_brain import ClientBrain
 from app.assistant.controller import PersonalAssistantController
-from app.assistant.conversation_preferences import (
-    load_conversation_preferences,
-    reset_conversation_preferences,
-    save_conversation_preferences,
-)
 from app.business.business_config import BusinessConfigStore
 from app.business.business_edition_service import BusinessEditionService
 from app.core.project_paths import resolve_project_root
@@ -17,6 +12,7 @@ from app.core.performance_profile import load_performance_profile
 from app.client_experience.controller import ClientExperienceController
 from app.gui.business_command_runtime import BusinessCommandRuntimeMixin
 from app.gui.confirmation_revision_runtime import handle_owner_confirmation, remember_confirmed_calendar_write
+from app.gui.conversation_settings_runtime import load_owner_conversation_settings, reset_owner_conversation_settings, save_owner_conversation_settings
 from app.gui.owner_access_setup import ensure_owner_pin
 from app.gui.business_display import display_environment, display_status, same_identity
 from app.gui.business_theme import BusinessTheme
@@ -27,7 +23,6 @@ from app.gui.owner_page_loader import ensure_owner_page
 from app.gui.startup_mode import should_start_client
 from app.gui.settings_action_runtime import connect_settings_actions
 from app.gui.runtime_preferences import apply_runtime_preferences
-from app.gui.settings_page_extensions import load_conversation_settings
 from app.system.monitor import SystemMonitor
 from app.voice.lazy_listener import LazyVoiceListener
 LEGACY_UI_LABELS = ("BUSINESS COMMAND CENTER", "COMMAND CONSOLE", "ORGANIZATION", "LICENSE & TRUST", "OWNER DEVELOPMENT LICENSE")
@@ -267,10 +262,7 @@ class MainWindow(BusinessCommandRuntimeMixin, QMainWindow):
         connect_settings_actions(self)
         self.trust_page.refresh_requested.connect(self._refresh_business_status)
         self.settings_page.load_config(self.business_config)
-        load_conversation_settings(
-            self.settings_page,
-            load_conversation_preferences(self.project_root),
-        )
+        load_owner_conversation_settings(self.settings_page, self.project_root)
         self.console_page.show_quick_actions(
             bool(dict(self.business_config.get("ui", {}) or {}).get(
                 "show_quick_actions", True
@@ -403,13 +395,7 @@ class MainWindow(BusinessCommandRuntimeMixin, QMainWindow):
             payload = dict(updates)
             conversation = dict(payload.pop("_conversation", {}) or {})
             self.business_config = self.config_store.update(payload)
-            save_conversation_preferences(
-                self.project_root,
-                style=conversation.get("style", "natural"),
-                question_mode=conversation.get("question_mode", "balanced"),
-                memory_depth=conversation.get("memory_depth", 6),
-                context_hours=conversation.get("context_hours", 1),
-            )
+            save_owner_conversation_settings(self.project_root, conversation)
             self._apply_runtime_config()
             self.settings_page.set_feedback("Konfiguracja zapisana bezpiecznie.", True)
             self.console_page.append("Jarvis: Konfiguracja Business Edition została zapisana.")
@@ -418,7 +404,7 @@ class MainWindow(BusinessCommandRuntimeMixin, QMainWindow):
     def _reset_business_settings(self) -> None:
         try:
             self.business_config = self.config_store.reset()
-            reset_conversation_preferences(self.project_root)
+            reset_owner_conversation_settings(self.project_root)
             self._apply_runtime_config()
             self.settings_page.set_feedback("Przywrócono bezpieczne ustawienia domyślne.", True)
             self.console_page.append("Jarvis: Przywrócono domyślną konfigurację Business Edition.")
@@ -432,10 +418,7 @@ class MainWindow(BusinessCommandRuntimeMixin, QMainWindow):
             display_environment(self.business_config["environment"])
         )
         self.settings_page.load_config(self.business_config)
-        load_conversation_settings(
-            self.settings_page,
-            load_conversation_preferences(self.project_root),
-        )
+        load_owner_conversation_settings(self.settings_page, self.project_root)
         self.console_page.show_quick_actions(
             bool(dict(self.business_config.get("ui", {}) or {}).get(
                 "show_quick_actions", True

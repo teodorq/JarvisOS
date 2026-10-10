@@ -76,6 +76,17 @@ class B96NaturalConversationTests(unittest.TestCase):
             self.assertTrue(thought["read_only"])
             self.assertTrue(thought["can_execute"])
 
+    def test_conversation_status_explains_real_bounded_context(self) -> None:
+        with TemporaryDirectory() as temporary:
+            controller = PersonalAssistantController(temporary)
+            controller.handle("Pamiętaj dłużej naszą rozmowę")
+            controller.handle("Pamiętaj temat do jutra")
+
+            answer = controller.handle("Status rozmowy")
+
+            self.assertIn("do 10 ostatnich wymian", answer)
+            self.assertIn("przez 24 godziny", answer)
+
     def test_mutating_memory_command_requires_normal_safety_gate(self) -> None:
         with TemporaryDirectory() as temporary:
             controller = PersonalAssistantController(temporary)
