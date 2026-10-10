@@ -55,9 +55,19 @@ class AssistantStatusFormatter:
             f"ostatnie zadanie „{title}” — {completed} z {total} kroków"
             if title else "brak aktywnego zadania wieloetapowego"
         )
+        chat_turns = int(conversation.get("free_chat_turn_count", 0) or 0)
+        reply_limit = int(conversation.get("reply_context_limit", 6) or 6)
+        context_hours = int(conversation.get("topic_context_hours", 1) or 1)
+        hour_label = {
+            1: "1 godzinę",
+            8: "8 godzin",
+            24: "24 godziny",
+        }.get(context_hours, f"{context_hours} godzin")
         return (
-            "JARVIS jest gotowy do pracy.\nRozmowa: pamiętam "
-            f"{cls._count(conversation['turn_count'], 'ostatnią wymianę', 'ostatnie wymiany', 'ostatnich wymian')}.\n"
+            "JARVIS jest gotowy do pracy.\nRozmowa: zapisano "
+            f"{cls._count(chat_turns, 'wymianę', 'wymiany', 'wymian')}; "
+            f"odpowiedź korzysta z maksymalnie {reply_limit}, a temat pozostaje "
+            f"aktywny przez {hour_label}.\n"
             "Sterowanie pulpitem: "
             f"{cls._count(desktop['executions'], 'wykonana operacja', 'wykonane operacje', 'wykonanych operacji')}, "
             f"{cls._count(desktop['failure_count'], 'błąd', 'błędy', 'błędów')}.\n"

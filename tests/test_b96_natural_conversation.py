@@ -75,6 +75,11 @@ class B96NaturalConversationTests(unittest.TestCase):
             self.assertEqual(thought["handler"], "personal_assistant")
             self.assertTrue(thought["read_only"])
             self.assertTrue(thought["can_execute"])
+            answer = controller.handle("Pokaż status asystenta")
+            self.assertIn(
+                "odpowiedź korzysta z maksymalnie 6", answer,
+            )
+            self.assertIn("temat pozostaje aktywny przez 1 godzinę", answer)
 
     def test_conversation_status_explains_real_bounded_context(self) -> None:
         with TemporaryDirectory() as temporary:

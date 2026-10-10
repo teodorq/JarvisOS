@@ -15,6 +15,7 @@ from app.assistant.reliable_desktop import ReliableDesktopService
 from app.assistant.voice_runtime import VoiceRuntimeService
 from app.assistant.status_formatter import AssistantStatusFormatter
 from app.core.project_paths import resolve_project_root
+from app.core.json_store import JsonStore
 from app.assistant.deferred_services import DEFERRED_STAGES, DeferredAssistantServices, LazyAssistantService, deferred_matches, handle_deferred_natural_action
 from app.integrations import IntegrationStatusService
 from app.assistant.trading_runtime import LazyTradingRuntime
@@ -396,21 +397,30 @@ class PersonalAssistantController:
         }
     def _conversation_status(self) -> dict[str, Any]:
         data = self.conversation.context.load()
-        local_chat = self.free_conversation.status()
+        chat = JsonStore(
+            self.project_root / "data" / "assistant" / "free_conversation.json",
+            dict,
+        ).load()
+        depth = self.projects.get_preference("conversation_memory_depth", 6)
+        hours = self.projects.get_preference("conversation_context_hours", 1)
+        try:
+            depth = int(depth)
+        except (TypeError, ValueError):
+            depth = 6
+        try:
+            hours = int(hours)
+        except (TypeError, ValueError):
+            hours = 1
         return {
             "status": "NATURAL_CONVERSATION_READY",
             "turn_count": len(list(data.get("turns", []) or [])),
             "last_intent": data.get("last_intent", ""),
             "last_target": data.get("last_target", ""),
             "context_limit": 50,
-            "reply_context_limit": int(
-                local_chat.get("conversation_memory_depth", 6) or 6
-            ),
-            "topic_context_hours": int(
-                local_chat.get("conversation_context_hours", 1) or 1
-            ),
-            "free_chat_turn_count": int(
-                local_chat.get("turn_count", 0) or 0
+            "reply_context_limit": depth if depth in {3, 6, 10} else 6,
+            "topic_context_hours": hours if hours in {1, 8, 24} else 1,
+            "free_chat_turn_count": len(
+                list(dict(chat or {}).get("turns", []) or [])
             ),
         }
     def _format_full_status(self) -> str:
