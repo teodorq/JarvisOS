@@ -94,6 +94,61 @@ def test_local_model_uses_lighter_defaults_for_low_resource_profile(
     assert model.status()["performance_profile"] == "low_resource"
 
 
+def test_local_model_switches_profile_live_without_shortening_answer_budget(
+    monkeypatch, tmp_path,
+) -> None:
+    from app.assistant import local_chat_model
+    from app.core.performance_profile import BALANCED, LOW_RESOURCE
+
+    for name in (
+        "JARVIS_OS_CHAT_CPU_THREADS",
+        "JARVIS_OS_CHAT_CONTEXT_TOKENS",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(
+        local_chat_model,
+        "load_performance_profile",
+        lambda _root: BALANCED,
+    )
+    model = local_chat_model.LocalChatModel(project_root=tmp_path)
+    model.set_response_budget(360)
+
+    model.set_performance_profile(LOW_RESOURCE)
+
+    assert model.cpu_threads == 4
+    assert model.context_tokens == 1536
+    assert model.response_tokens == 360
+    assert model.keep_alive == "90s"
+
+    model.set_performance_profile(BALANCED)
+    assert model.cpu_threads == 6
+    assert model.context_tokens == 2048
+    assert model.response_tokens == 360
+    assert model.keep_alive == "5m"
+
+
+def test_live_profile_switch_preserves_explicit_chat_overrides(
+    monkeypatch, tmp_path,
+) -> None:
+    from app.assistant import local_chat_model
+    from app.core.performance_profile import BALANCED, LOW_RESOURCE
+
+    monkeypatch.setenv("JARVIS_OS_CHAT_CPU_THREADS", "9")
+    monkeypatch.setenv("JARVIS_OS_CHAT_CONTEXT_TOKENS", "3000")
+    monkeypatch.setattr(
+        local_chat_model,
+        "load_performance_profile",
+        lambda _root: BALANCED,
+    )
+    model = local_chat_model.LocalChatModel(project_root=tmp_path)
+
+    model.set_performance_profile(LOW_RESOURCE)
+
+    assert model.cpu_threads == 9
+    assert model.context_tokens == 3000
+    assert model.keep_alive == "90s"
+
+
 def test_local_model_sends_no_tools_to_local_ollama(monkeypatch) -> None:
     from app.assistant import local_chat_model
 

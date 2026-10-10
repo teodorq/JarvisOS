@@ -29,9 +29,17 @@ def test_low_resource_preferences_apply_to_live_runtimes(tmp_path) -> None:
         _forex_activity_runtime_service=SimpleNamespace(timer=_Timer()),
         _live_conflict_refresh_service=SimpleNamespace(timer=_Timer()),
     )
+    chat_model = SimpleNamespace(set_performance_profile=Mock())
+    loaded_chat = SimpleNamespace(model=chat_model)
     owner = SimpleNamespace(
         project_root=tmp_path,
         business_config=config,
+        assistant=SimpleNamespace(
+            free_conversation=SimpleNamespace(
+                instance_if_loaded=loaded_chat,
+            ),
+        ),
+        brain=SimpleNamespace(_free_conversation_service=None),
         client_window=client,
         timer=_Timer(),
         _forex_activity_timer=_Timer(),
@@ -49,3 +57,22 @@ def test_low_resource_preferences_apply_to_live_runtimes(tmp_path) -> None:
     sound.apply_preferences.assert_called_once_with(
         enabled=False, performance_profile=profile
     )
+    chat_model.set_performance_profile.assert_called_once_with(profile)
+
+
+def test_runtime_preferences_do_not_load_deferred_chat(tmp_path) -> None:
+    store = BusinessConfigStore(tmp_path)
+    store.update({"performance": {"profile": "low_resource"}})
+    proxy = SimpleNamespace(instance_if_loaded=None)
+    owner = SimpleNamespace(
+        project_root=tmp_path,
+        business_config=store.ensure(),
+        assistant=SimpleNamespace(free_conversation=proxy),
+        brain=SimpleNamespace(_free_conversation_service=None),
+        client_window=None,
+    )
+
+    profile = apply_runtime_preferences(owner)
+
+    assert profile is not None and profile.name == "low_resource"
+    assert proxy.instance_if_loaded is None

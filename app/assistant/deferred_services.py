@@ -115,6 +115,12 @@ class LazyAssistantService:
     def loaded(self) -> bool:
         return self._instance is not None
 
+    @property
+    def instance_if_loaded(self) -> Any | None:
+        """Return an existing service without defeating deferred startup."""
+        with self._lock:
+            return self._instance
+
     def set_progress_callback(self, callback: Any | None) -> None:
         with self._lock:
             self._progress_callback = callback

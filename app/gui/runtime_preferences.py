@@ -18,6 +18,7 @@ def apply_runtime_preferences(
         return None
     profile = load_performance_profile(root)
     owner_window.performance_profile = profile
+    _sync_loaded_chat_models(owner_window, profile)
     _set_interval(owner_window, "timer", profile.owner_metrics_interval_ms)
     _set_interval(
         owner_window, "_forex_activity_timer", profile.owner_forex_interval_ms
@@ -67,6 +68,32 @@ def _sync_power_watcher(owner_window: Any) -> None:
     sync = getattr(watcher, "sync", None)
     if callable(sync):
         sync()
+
+
+def _sync_loaded_chat_models(
+    owner_window: Any,
+    profile: PerformanceProfile,
+) -> None:
+    """Update already loaded chat models without constructing lazy services."""
+    services: list[Any] = []
+    assistant = getattr(owner_window, "assistant", None)
+    proxy = getattr(assistant, "free_conversation", None)
+    loaded = getattr(proxy, "instance_if_loaded", None)
+    if loaded is not None:
+        services.append(loaded)
+    brain = getattr(owner_window, "brain", None)
+    direct = getattr(brain, "_free_conversation_service", None)
+    if direct is not None:
+        services.append(direct)
+    seen: set[int] = set()
+    for service in services:
+        model = getattr(service, "model", None)
+        setter = getattr(model, "set_performance_profile", None)
+        identity = id(model)
+        if model is None or identity in seen or not callable(setter):
+            continue
+        seen.add(identity)
+        setter(profile)
 
 
 __all__ = ["apply_runtime_preferences"]

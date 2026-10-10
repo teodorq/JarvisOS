@@ -35,6 +35,10 @@ class LocalChatModel:
         low_resource = profile_name == "low_resource"
         default_threads = 4 if low_resource else 6
         default_context = 1536 if low_resource else 2048
+        self._cpu_threads_overridden = "JARVIS_OS_CHAT_CPU_THREADS" in os.environ
+        self._context_tokens_overridden = (
+            "JARVIS_OS_CHAT_CONTEXT_TOKENS" in os.environ
+        )
         selected = str(
             model or os.getenv("JARVIS_OS_CHAT_MODEL", "gemma3:4b")
         ).strip()
@@ -74,6 +78,17 @@ class LocalChatModel:
         self.response_tokens = _bounded_int(
             tokens, minimum=48, maximum=512, fallback=220,
         )
+
+    def set_performance_profile(self, profile: object) -> None:
+        """Apply live resource limits without overriding explicit tuning."""
+        name = str(getattr(profile, "name", profile)).strip().casefold()
+        low_resource = name == "low_resource"
+        self.performance_profile = "low_resource" if low_resource else "balanced"
+        if not self._cpu_threads_overridden:
+            self.cpu_threads = 4 if low_resource else 6
+        if not self._context_tokens_overridden:
+            self.context_tokens = 1536 if low_resource else 2048
+        self.keep_alive = "90s" if low_resource else "5m"
 
     def reply(self, messages: list[dict[str, str]], *, system: str) -> str:
         if not self.enabled:
