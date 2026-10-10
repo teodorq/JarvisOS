@@ -166,3 +166,24 @@ def test_runtime_status_reports_full_storage_breakdown(tmp_path) -> None:
     assert status["audio_cache_files"] == 1
     assert status["audio_cache_bytes"] == len(b"voice")
     assert status["application_bytes"] == sum(sizes.values()) + len(b"voice")
+
+
+def test_cleanup_covers_all_project_code_without_touching_environment(tmp_path) -> None:
+    project_caches = (
+        tmp_path / "__pycache__",
+        tmp_path / "software_engineer" / "feature" / "__pycache__",
+    )
+    for cache in project_caches:
+        cache.mkdir(parents=True)
+        (cache / "module.cpython-313.pyc").write_bytes(b"regenerable")
+    environment_cache = tmp_path / ".venv" / "Lib" / "site-packages" / "__pycache__"
+    environment_cache.mkdir(parents=True)
+    protected = environment_cache / "package.cpython-313.pyc"
+    protected.write_bytes(b"installed dependency")
+
+    result = cleanup_runtime_storage(tmp_path)
+
+    assert result["removed_cache_dirs"] == len(project_caches)
+    assert result["removed_cache_files"] == len(project_caches)
+    assert all(not cache.exists() for cache in project_caches)
+    assert protected.read_bytes() == b"installed dependency"

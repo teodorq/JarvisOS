@@ -8,7 +8,13 @@ from typing import Any
 from app.core.project_paths import resolve_project_root
 
 
-_CACHE_PARENTS = ("app", "tests", "tools", "cloud_service")
+_CACHE_PARENTS = (
+    "app",
+    "tests",
+    "tools",
+    "cloud_service",
+    "software_engineer",
+)
 
 
 def regenerable_cache_status(
@@ -50,6 +56,9 @@ def _cache_targets(root: Path) -> list[Path]:
     pytest_cache = root / ".pytest_cache"
     if pytest_cache.is_dir() and not pytest_cache.is_symlink():
         targets.append(pytest_cache)
+    root_cache = root / "__pycache__"
+    if root_cache.is_dir() and not root_cache.is_symlink():
+        targets.append(root_cache)
     for name in _CACHE_PARENTS:
         parent = root / name
         if not parent.is_dir() or parent.is_symlink():
@@ -69,6 +78,8 @@ def _allowed_target(root: Path, target: Path) -> bool:
     except ValueError:
         return False
     if relative == Path(".pytest_cache"):
+        return True
+    if relative == Path("__pycache__"):
         return True
     return (
         len(relative.parts) >= 2

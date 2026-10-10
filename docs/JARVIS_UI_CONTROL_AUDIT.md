@@ -66,7 +66,7 @@ wcześniej przeczytać lub poprawić.
 | Przycisk | Cel | Potrzebność |
 |---|---|---|
 | SPRAWDŹ STAN JARVIS | Liczy zajęte miejsce i pokazuje stan danych bez zmian. | administracyjna |
-| UPORZĄDKUJ DANE | Usuwa stare cache, audio i zrzuty; zachowuje pamięć, ustawienia i trading. | administracyjna |
+| UPORZĄDKUJ DANE | Usuwa stare cache kodu, testów, audio i zrzuty; zachowuje środowisko, pamięć, ustawienia i trading. | administracyjna |
 | SPRAWDŹ | Odczytuje stan autostartu Windows. | administracyjna |
 | WŁĄCZ / WYŁĄCZ | Włącza lub wyłącza autostart bez widocznego okna konsoli. | administracyjna |
 | PRZYWRÓĆ DOMYŚLNE | Przywraca bezpieczne ustawienia początkowe. | administracyjna |
