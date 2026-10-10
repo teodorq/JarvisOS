@@ -13,8 +13,10 @@ from app.core.regenerable_cache_cleanup import (
     regenerable_cache_status,
 )
 from app.core.storage_retention import (
+    audio_cache_retention_status,
     enforce_audio_cache_retention,
     enforce_screenshot_retention,
+    screenshot_retention_status,
 )
 
 
@@ -50,8 +52,28 @@ def runtime_storage_status(project_root: str | Path | None = None) -> dict[str, 
         directory_size(root / name) for name in ("assets", "AI_PLIKI")
     )
     audio = _audio_cache_status(root)
+    audio_candidates = _audio_cleanup_status(root)
     screenshot_bytes = sum(
         path.stat().st_size for path in screenshots.glob("*") if path.is_file()
+    )
+    screenshot_candidates = screenshot_retention_status(screenshots)
+    storage_groups = {
+        "environment": environment_bytes,
+        "data": data_bytes,
+        "runtime": runtime_bytes,
+        "archive": archive_bytes,
+        "support": support_bytes,
+    }
+    largest_category = max(storage_groups, key=storage_groups.get)
+    cleanup_candidate_bytes = (
+        int(caches.get("cache_bytes", 0))
+        + int(screenshot_candidates.get("candidate_bytes", 0))
+        + int(audio_candidates.get("audio_candidate_bytes", 0))
+    )
+    cleanup_candidate_files = (
+        int(caches.get("cache_files", 0))
+        + int(screenshot_candidates.get("candidate_files", 0))
+        + int(audio_candidates.get("audio_candidate_files", 0))
     )
     return {
         "profile": load_performance_profile(root).name,
@@ -67,8 +89,19 @@ def runtime_storage_status(project_root: str | Path | None = None) -> dict[str, 
         "autodev_bytes": directory_size(root / "data" / "autodev"),
         "screenshot_count": sum(1 for path in screenshots.glob("*") if path.is_file()),
         "screenshot_bytes": screenshot_bytes,
+        "screenshot_candidate_files": int(
+            screenshot_candidates.get("candidate_files", 0)
+        ),
+        "screenshot_candidate_bytes": int(
+            screenshot_candidates.get("candidate_bytes", 0)
+        ),
+        "largest_category": largest_category,
+        "largest_category_bytes": storage_groups[largest_category],
+        "cleanup_candidate_files": cleanup_candidate_files,
+        "cleanup_candidate_bytes": cleanup_candidate_bytes,
         "disk_free_bytes": usage.free,
         **audio,
+        **audio_candidates,
         **caches,
     }
 
@@ -132,6 +165,24 @@ def _cleanup_audio_caches(root: Path) -> dict[str, int]:
     return {
         "removed_audio_files": removed_files,
         "removed_audio_bytes": removed_bytes,
+    }
+
+
+def _audio_cleanup_status(root: Path) -> dict[str, int]:
+    candidate_files = 0
+    candidate_bytes = 0
+    for relative in _AUDIO_CACHE_DIRECTORIES:
+        directory = (root / relative).resolve(strict=False)
+        try:
+            directory.relative_to(root)
+        except ValueError:
+            continue
+        result = audio_cache_retention_status(directory)
+        candidate_files += int(result.get("candidate_files", 0))
+        candidate_bytes += int(result.get("candidate_bytes", 0))
+    return {
+        "audio_candidate_files": candidate_files,
+        "audio_candidate_bytes": candidate_bytes,
     }
 
 

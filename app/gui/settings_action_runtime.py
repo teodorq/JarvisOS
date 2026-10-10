@@ -131,7 +131,9 @@ class SettingsActionRuntime(QObject):
             f"{_size(value.get('environment_bytes', 0))}, dane "
             f"{_size(value.get('data_bytes', 0))}, archiwum "
             f"{_size(value.get('archive_bytes', 0))}) • wolne na dysku "
-            f"{_size(value.get('disk_free_bytes', 0))}."
+            f"{_size(value.get('disk_free_bytes', 0))}. "
+            f"Najwięcej zajmuje {_largest_label(value)}. "
+            f"{_cleanup_preview(value)}"
         )
 
     @staticmethod
@@ -164,6 +166,28 @@ def _size(value: object) -> str:
     if amount >= 1024**2:
         return f"{amount / 1024**2:.1f} MB"
     return f"{amount / 1024:.1f} KB"
+
+
+def _largest_label(value: dict[str, Any]) -> str:
+    labels = {
+        "environment": "środowisko uruchomieniowe",
+        "data": "dane JARVIS",
+        "runtime": "pliki bieżącego działania",
+        "archive": "archiwum",
+        "support": "zasoby aplikacji",
+    }
+    name = labels.get(
+        str(value.get("largest_category", "")), "pliki aplikacji"
+    )
+    return f"{name}: {_size(value.get('largest_category_bytes', 0))}"
+
+
+def _cleanup_preview(value: dict[str, Any]) -> str:
+    size = int(value.get("cleanup_candidate_bytes", 0) or 0)
+    files = int(value.get("cleanup_candidate_files", 0) or 0)
+    if size <= 0:
+        return "Nie ma teraz zbędnych plików do uprzątnięcia."
+    return f"Bezpiecznie można uprzątnąć {_size(size)} ({files} plików)."
 
 
 def connect_settings_actions(window: Any) -> SettingsActionRuntime:

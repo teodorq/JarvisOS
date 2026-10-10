@@ -44,45 +44,50 @@ def enforce_screenshot_retention(
     """Bound local screenshots by age, count and bytes inside one directory."""
     root = Path(directory).resolve(strict=False)
     selected = policy or ScreenshotRetentionPolicy()
-    if not root.is_dir():
-        return {"removed_files": 0, "removed_bytes": 0, "kept_files": 0}
-    candidates = sorted(
-        (
-            item
-            for item in root.iterdir()
-            if item.is_file() and item.suffix.casefold() in {".png", ".jpg", ".jpeg", ".webp"}
-        ),
-        key=lambda item: item.stat().st_mtime,
-        reverse=True,
+    removable, _removable_bytes, kept_files = _retention_plan(
+        root,
+        suffixes={".png", ".jpg", ".jpeg", ".webp"},
+        max_files=selected.max_files,
+        max_total_bytes=selected.max_total_bytes,
+        max_age_days=selected.max_age_days,
+        now=now,
     )
-    cutoff = (now or datetime.now()) - timedelta(days=selected.max_age_days)
-    total_kept = 0
     removed_files = 0
     removed_bytes = 0
-    kept_files = 0
-    for index, path in enumerate(candidates):
-        stat = path.stat()
-        modified = datetime.fromtimestamp(stat.st_mtime)
-        keep_newest = index == 0
-        should_remove = not keep_newest and (
-            index >= selected.max_files
-            or modified < cutoff
-            or total_kept + stat.st_size > selected.max_total_bytes
-        )
-        if should_remove:
-            try:
-                path.resolve(strict=False).relative_to(root)
-                path.unlink()
-            except (OSError, ValueError):
-                continue
-            removed_files += 1
-            removed_bytes += stat.st_size
+    for path, size in removable:
+        try:
+            path.resolve(strict=False).relative_to(root)
+            path.unlink()
+        except (OSError, ValueError):
             continue
-        kept_files += 1
-        total_kept += stat.st_size
+        removed_files += 1
+        removed_bytes += size
     return {
         "removed_files": removed_files,
         "removed_bytes": removed_bytes,
+        "kept_files": kept_files,
+    }
+
+
+def screenshot_retention_status(
+    directory: str | Path,
+    *,
+    policy: ScreenshotRetentionPolicy | None = None,
+    now: datetime | None = None,
+) -> dict[str, int]:
+    """Preview safe screenshot cleanup without modifying any file."""
+    selected = policy or ScreenshotRetentionPolicy()
+    removable, removable_bytes, kept_files = _retention_plan(
+        Path(directory).resolve(strict=False),
+        suffixes={".png", ".jpg", ".jpeg", ".webp"},
+        max_files=selected.max_files,
+        max_total_bytes=selected.max_total_bytes,
+        max_age_days=selected.max_age_days,
+        now=now,
+    )
+    return {
+        "candidate_files": len(removable),
+        "candidate_bytes": removable_bytes,
         "kept_files": kept_files,
     }
 
@@ -114,45 +119,24 @@ def enforce_audio_cache_retention(
             except OSError:
                 pass
 
-    candidates = sorted(
-        (
-            item
-            for item in root.iterdir()
-            if item.is_file() and item.suffix.casefold() == ".wav"
-        ),
-        key=lambda item: item.stat().st_mtime,
-        reverse=True,
+    removable, _removable_bytes, kept_files = _retention_plan(
+        root,
+        suffixes={".wav"},
+        max_files=selected.max_files,
+        max_total_bytes=selected.max_total_bytes,
+        max_age_days=selected.max_age_days,
+        protected=protected,
+        now=now,
     )
-    cutoff = (now or datetime.now()) - timedelta(days=selected.max_age_days)
-    total_kept = 0
     removed_files = 0
     removed_bytes = 0
-    kept_files = 0
-    for index, path in enumerate(candidates):
+    for path, size in removable:
         try:
-            resolved = path.resolve(strict=False)
-            resolved.relative_to(root)
-            stat = path.stat()
-        except (OSError, ValueError):
+            path.unlink()
+        except OSError:
             continue
-        modified = datetime.fromtimestamp(stat.st_mtime)
-        keep_current = protected is not None and resolved == protected
-        keep_newest = index == 0
-        should_remove = not (keep_current or keep_newest) and (
-            index >= selected.max_files
-            or modified < cutoff
-            or total_kept + stat.st_size > selected.max_total_bytes
-        )
-        if should_remove:
-            try:
-                path.unlink()
-            except OSError:
-                continue
-            removed_files += 1
-            removed_bytes += stat.st_size
-            continue
-        kept_files += 1
-        total_kept += stat.st_size
+        removed_files += 1
+        removed_bytes += size
     return {
         "removed_files": removed_files,
         "removed_bytes": removed_bytes,
@@ -160,9 +144,80 @@ def enforce_audio_cache_retention(
     }
 
 
+def audio_cache_retention_status(
+    directory: str | Path,
+    *,
+    policy: AudioCacheRetentionPolicy | None = None,
+    now: datetime | None = None,
+) -> dict[str, int]:
+    """Preview safe generated-audio cleanup without modifying any file."""
+    selected = policy or AudioCacheRetentionPolicy()
+    removable, removable_bytes, kept_files = _retention_plan(
+        Path(directory).resolve(strict=False),
+        suffixes={".wav"},
+        max_files=selected.max_files,
+        max_total_bytes=selected.max_total_bytes,
+        max_age_days=selected.max_age_days,
+        now=now,
+    )
+    return {
+        "candidate_files": len(removable),
+        "candidate_bytes": removable_bytes,
+        "kept_files": kept_files,
+    }
+
+
+def _retention_plan(
+    root: Path,
+    *,
+    suffixes: set[str],
+    max_files: int,
+    max_total_bytes: int,
+    max_age_days: int,
+    protected: Path | None = None,
+    now: datetime | None = None,
+) -> tuple[list[tuple[Path, int]], int, int]:
+    if not root.is_dir():
+        return [], 0, 0
+    inventory: list[tuple[Path, Path, int, float]] = []
+    for item in root.iterdir():
+        if not item.is_file() or item.suffix.casefold() not in suffixes:
+            continue
+        try:
+            resolved = item.resolve(strict=False)
+            resolved.relative_to(root)
+            stat = item.stat()
+        except (OSError, ValueError):
+            continue
+        inventory.append((item, resolved, stat.st_size, stat.st_mtime))
+    inventory.sort(key=lambda entry: entry[3], reverse=True)
+    cutoff = ((now or datetime.now()) - timedelta(days=max_age_days)).timestamp()
+    total_kept = 0
+    kept_files = 0
+    removable: list[tuple[Path, int]] = []
+    removable_bytes = 0
+    for index, (path, resolved, size, modified) in enumerate(inventory):
+        keep_protected = protected is not None and resolved == protected
+        keep_newest = index == 0
+        should_remove = not (keep_protected or keep_newest) and (
+            index >= max_files
+            or modified < cutoff
+            or total_kept + size > max_total_bytes
+        )
+        if should_remove:
+            removable.append((path, size))
+            removable_bytes += size
+            continue
+        kept_files += 1
+        total_kept += size
+    return removable, removable_bytes, kept_files
+
+
 __all__ = [
     "AudioCacheRetentionPolicy",
     "ScreenshotRetentionPolicy",
+    "audio_cache_retention_status",
     "enforce_audio_cache_retention",
     "enforce_screenshot_retention",
+    "screenshot_retention_status",
 ]

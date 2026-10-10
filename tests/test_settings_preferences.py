@@ -170,6 +170,9 @@ def test_runtime_status_reports_full_storage_breakdown(tmp_path) -> None:
     assert status["audio_cache_files"] == 1
     assert status["audio_cache_bytes"] == len(b"voice")
     assert status["application_bytes"] == sum(sizes.values()) + len(b"voice")
+    assert status["largest_category"] == "support"
+    assert status["largest_category_bytes"] == sizes["assets"] + sizes["AI_PLIKI"]
+    assert status["cleanup_candidate_bytes"] == 0
 
 
 def test_cleanup_covers_all_project_code_without_touching_environment(tmp_path) -> None:

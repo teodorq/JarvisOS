@@ -12,8 +12,10 @@ from PIL import Image
 from app.core.storage_retention import (
     AudioCacheRetentionPolicy,
     ScreenshotRetentionPolicy,
+    audio_cache_retention_status,
     enforce_audio_cache_retention,
     enforce_screenshot_retention,
+    screenshot_retention_status,
 )
 from app.vision.screen import ScreenVision
 
@@ -100,6 +102,28 @@ class ScreenshotRetentionTests(unittest.TestCase):
 
             self.assertEqual(len(list(root.glob("*.png"))), 12)
 
+    def test_preview_reports_cleanup_without_deleting_files(self) -> None:
+        now = datetime(2026, 10, 2, 12, 0)
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            for index in range(4):
+                self._file(
+                    root,
+                    f"screen_{index}.png",
+                    10,
+                    now - timedelta(minutes=index),
+                )
+            result = screenshot_retention_status(
+                root,
+                policy=ScreenshotRetentionPolicy(
+                    max_files=2, max_total_bytes=1_000, max_age_days=90
+                ),
+                now=now,
+            )
+            self.assertEqual(result["candidate_files"], 2)
+            self.assertEqual(result["candidate_bytes"], 20)
+            self.assertEqual(len(list(root.glob("*.png"))), 4)
+
     def test_screen_capture_uses_compact_webp(self) -> None:
         image = Image.new("RGB", (320, 180), color=(8, 24, 42))
         with TemporaryDirectory() as directory:
@@ -156,6 +180,28 @@ class AudioCacheRetentionTests(unittest.TestCase):
             self.assertEqual(result["removed_files"], 0)
         with self.assertRaises(ValueError):
             AudioCacheRetentionPolicy(max_files=0)
+
+    def test_preview_reports_audio_candidates_without_deleting(self) -> None:
+        now = datetime(2026, 10, 3, 12, 0)
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            for index in range(3):
+                ScreenshotRetentionTests._file(
+                    root,
+                    f"voice_{index}.wav",
+                    20,
+                    now - timedelta(minutes=index),
+                )
+            result = audio_cache_retention_status(
+                root,
+                policy=AudioCacheRetentionPolicy(
+                    max_files=2, max_total_bytes=1_000, max_age_days=90
+                ),
+                now=now,
+            )
+            self.assertEqual(result["candidate_files"], 1)
+            self.assertEqual(result["candidate_bytes"], 20)
+            self.assertEqual(len(list(root.glob("*.wav"))), 3)
 
 
 if __name__ == "__main__":
