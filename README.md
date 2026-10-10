@@ -51,6 +51,10 @@ Free conversation stays on `127.0.0.1`, receives no tools and keeps only a
 bounded recent chat context. Ordinary actions, mail, calendar and trading keep
 their existing dedicated safety routes. If Ollama is unavailable, JARVIS uses a
 short nontechnical fallback instead of blocking the interface indefinitely.
+The local chat runtime also follows the selected performance profile. On a
+low-resource device it uses fewer CPU threads, a smaller bounded context and
+releases the model from memory sooner; the balanced profile keeps the existing
+quality settings. Explicit environment overrides remain available.
 
 ## Tests
 

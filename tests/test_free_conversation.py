@@ -69,6 +69,31 @@ def test_local_model_uses_bounded_cpu_profile(monkeypatch) -> None:
     assert model.status()["processor"] == "CPU"
 
 
+def test_local_model_uses_lighter_defaults_for_low_resource_profile(
+    monkeypatch, tmp_path,
+) -> None:
+    from app.assistant import local_chat_model
+    from app.core.performance_profile import LOW_RESOURCE
+
+    for name in (
+        "JARVIS_OS_CHAT_CPU_THREADS",
+        "JARVIS_OS_CHAT_CONTEXT_TOKENS",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(
+        local_chat_model,
+        "load_performance_profile",
+        lambda _root: LOW_RESOURCE,
+    )
+
+    model = local_chat_model.LocalChatModel(project_root=tmp_path)
+
+    assert model.cpu_threads == 4
+    assert model.context_tokens == 1536
+    assert model.keep_alive == "90s"
+    assert model.status()["performance_profile"] == "low_resource"
+
+
 def test_local_model_sends_no_tools_to_local_ollama(monkeypatch) -> None:
     from app.assistant import local_chat_model
 

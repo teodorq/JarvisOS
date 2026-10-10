@@ -216,7 +216,7 @@ class FreeConversationService:
         self, project_root: str | Path | None = None, *, model: Any | None = None,
     ) -> None:
         root = resolve_project_root(project_root)
-        self.model = model or LocalChatModel()
+        self.model = model or LocalChatModel(project_root=root)
         self.reflexes = ConversationReflexService()
         self.memory = ProjectMemoryService(root)
         self.store = JsonStore(

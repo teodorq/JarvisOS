@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 import re
 from typing import Any
 import urllib.error
 import urllib.request
+
+from app.core.performance_profile import load_performance_profile
 
 
 _MODEL_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,80}$")
@@ -17,7 +20,21 @@ class LocalChatModel:
 
     URL = "http://127.0.0.1:11434/api/chat"
 
-    def __init__(self, model: str | None = None, timeout: float | None = None) -> None:
+    def __init__(
+        self,
+        model: str | None = None,
+        timeout: float | None = None,
+        *,
+        project_root: str | Path | None = None,
+    ) -> None:
+        profile_name = (
+            load_performance_profile(project_root).name
+            if project_root is not None
+            else "balanced"
+        )
+        low_resource = profile_name == "low_resource"
+        default_threads = 4 if low_resource else 6
+        default_context = 1536 if low_resource else 2048
         selected = str(
             model or os.getenv("JARVIS_OS_CHAT_MODEL", "gemma3:4b")
         ).strip()
@@ -28,7 +45,10 @@ class LocalChatModel:
             timeout if timeout is not None else os.getenv("JARVIS_OS_CHAT_TIMEOUT_SECONDS", "50")
         )
         self.cpu_threads = _bounded_int(
-            os.getenv("JARVIS_OS_CHAT_CPU_THREADS", "6"), minimum=1, maximum=16, fallback=6
+            os.getenv("JARVIS_OS_CHAT_CPU_THREADS", str(default_threads)),
+            minimum=1,
+            maximum=16,
+            fallback=default_threads,
         )
         self.gpu_layers = _bounded_int(
             os.getenv("JARVIS_OS_CHAT_GPU_LAYERS", "0"), minimum=0, maximum=999, fallback=0
@@ -40,11 +60,13 @@ class LocalChatModel:
             fallback=220,
         )
         self.context_tokens = _bounded_int(
-            os.getenv("JARVIS_OS_CHAT_CONTEXT_TOKENS", "2048"),
+            os.getenv("JARVIS_OS_CHAT_CONTEXT_TOKENS", str(default_context)),
             minimum=1024,
             maximum=4096,
-            fallback=2048,
+            fallback=default_context,
         )
+        self.performance_profile = profile_name
+        self.keep_alive = "90s" if low_resource else "5m"
         flag = os.getenv("JARVIS_OS_LOCAL_CHAT_ENABLED", "true")
         self.enabled = str(flag).strip().casefold() in _TRUE
 
@@ -65,7 +87,7 @@ class LocalChatModel:
             "model": self.model,
             "stream": False,
             "think": False,
-            "keep_alive": "5m",
+            "keep_alive": self.keep_alive,
             "messages": [{"role": "system", "content": system[:4_000]}, *safe_messages],
             "options": {
                 "temperature": 0.45,
@@ -106,6 +128,8 @@ class LocalChatModel:
             "response_tokens": self.response_tokens,
             "context_tokens": self.context_tokens,
             "processor": "CPU" if self.gpu_layers == 0 else "GPU",
+            "performance_profile": self.performance_profile,
+            "keep_alive": self.keep_alive,
         }
 
 
