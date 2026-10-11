@@ -58,7 +58,6 @@ def install_client_settings_controls(window: Any, content: QVBoxLayout) -> None:
     window.client_startup = _combo((
         ("Ostatnio używany ekran", "remember"),
         ("Rozmowa z JARVIS", "client"),
-        ("Panel właściciela", "owner"),
     ))
     window.client_start_minimized = _combo((
         ("Pokaż okno", False),

@@ -38,6 +38,8 @@ def _window(tmp_path):
 def test_client_settings_are_loaded_and_saved(tmp_path) -> None:
     app, host, window, store = _window(tmp_path)
 
+    assert window.client_startup.findData("owner") == -1
+
     with patch(
         "app.gui.client_settings_extensions.autostart_status",
         return_value={"supported": True, "installed": True, "state": "READY"},

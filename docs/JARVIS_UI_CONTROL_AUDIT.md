@@ -79,7 +79,7 @@ wcześniej przeczytać lub poprawić.
 | Środowisko | rozwój, testy, produkcja, demo | Oznacza przeznaczenie instalacji. | administracyjna |
 | Kolor akcentu | błękit, cyjan, fiolet, zieleń, bursztyn | Zmienia wygląd. | opcjonalna |
 | Skróty poleceń | włączone, wyłączone | Pokazuje lub ukrywa skróty konsoli. | opcjonalna |
-| Ekran po uruchomieniu | ostatni, rozmowa, panel właściciela | Wybiera główny tryb startu. | podstawowa |
+| Ekran po uruchomieniu | klient: ostatni lub rozmowa; właściciel: dodatkowo panel właściciela | Wybiera główny tryb startu bez ujawniania panelu właściciela w ustawieniach klienta. | podstawowa |
 | Widoczność po uruchomieniu | okno, zasobnik | Pozwala działać bez otwartego okna. | podstawowa |
 | Start panelu właściciela | konsola, asystent, produktywność, Forex, stabilność, ustawienia | Wybiera pierwszą zakładkę panelu. | opcjonalna |
 | Tryb wydajności | automatyczny, oszczędny, pełna jakość | Dopasowuje obciążenie do urządzenia. | podstawowa |
