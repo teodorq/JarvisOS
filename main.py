@@ -10,6 +10,12 @@ from PySide6.QtWidgets import QApplication, QSplashScreen, QSystemTrayIcon
 from app.business.business_config import BusinessConfigStore
 from app.cloud.environment import load_cloud_environment
 from app.core.project_paths import resolve_project_root
+from app.gui.single_instance import (
+    create_instance_server,
+    force_visible_start,
+    install_instance_handler,
+    request_existing_instance,
+)
 from app.market_data.forex_environment import load_forex_environment
 from app.voice.environment import load_voice_environment
 
@@ -20,7 +26,11 @@ def main() -> int:
     load_forex_environment(project_root)
     load_voice_environment(project_root)
     from app.gui.main_window import MainWindow
-    from app.gui.system_tray import install_system_tray, should_start_in_tray
+    from app.gui.system_tray import (
+        install_system_tray,
+        should_start_in_tray,
+        show_jarvis_window,
+    )
 
     config = BusinessConfigStore(project_root).ensure()
 
@@ -28,6 +38,12 @@ def main() -> int:
     app.setApplicationName(str(config["product_name"]))
     app.setApplicationDisplayName(str(config["product_name"]))
     app.setOrganizationName(str(config["organization"]))
+
+    force_visible = force_visible_start(sys.argv[1:])
+    existing_command = "show" if force_visible else "ping"
+    if request_existing_instance(existing_command):
+        return 0
+    instance_server = create_instance_server()
 
     icon_path = project_root / "JARVIS_OS.ico"
     app_icon = QIcon(str(icon_path)) if icon_path.is_file() else QIcon()
@@ -41,9 +57,9 @@ def main() -> int:
         app.setWindowIcon(app_icon)
 
     tray_available = QSystemTrayIcon.isSystemTrayAvailable()
-    start_in_tray = should_start_in_tray(
-        config,
-        tray_available=tray_available,
+    start_in_tray = (
+        should_start_in_tray(config, tray_available=tray_available)
+        and not force_visible
     )
     if not start_in_tray and not pixmap.isNull():
         pixmap = pixmap.scaled(
@@ -61,6 +77,12 @@ def main() -> int:
 
     window = MainWindow()
     tray = install_system_tray(app, window, app_icon)
+    if instance_server is not None:
+        install_instance_handler(
+            instance_server,
+            on_show=lambda: show_jarvis_window(window),
+        )
+        window._desktop_instance_server = instance_server
     if not start_in_tray or tray is None:
         window.show_start_mode()
     if splash is not None:

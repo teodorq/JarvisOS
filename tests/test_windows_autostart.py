@@ -101,6 +101,7 @@ def test_manual_launcher_and_shortcut_do_not_open_a_console() -> None:
         encoding="utf-8"
     )
     assert "shell.Run command, 0, False" in hidden
+    assert 'Chr(34) & " --show"' in hidden
     assert "start_jarvis.vbs" in scripts
     assert "$shortcut.TargetPath=$wscript" in scripts
     assert "//B //NoLogo" in scripts

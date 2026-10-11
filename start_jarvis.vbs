@@ -12,6 +12,6 @@ If Not files.FileExists(pythonw) Then
     pythonw = "pythonw.exe"
 End If
 
-command = Chr(34) & pythonw & Chr(34) & " " & Chr(34) & main & Chr(34)
+command = Chr(34) & pythonw & Chr(34) & " " & Chr(34) & main & Chr(34) & " --show"
 shell.CurrentDirectory = root
 shell.Run command, 0, False
