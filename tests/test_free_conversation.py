@@ -151,6 +151,7 @@ def test_local_model_switches_profile_live_without_shortening_answer_budget(
         "load_performance_profile",
         lambda _root: BALANCED,
     )
+    monkeypatch.setattr(local_chat_model.os, "cpu_count", lambda: 8)
     model = local_chat_model.LocalChatModel(project_root=tmp_path)
     model.set_response_budget(360)
 
