@@ -282,7 +282,7 @@ class PersonalAssistantController:
         if intent == "contextual_greeting":
             return self.greetings.reply()
         if intent == "current_time": return format_local_clock(command)
-        if intent == "device_status": return format_local_device_status()
+        if intent == "device_status": return format_local_device_status(command)
         if intent == "weather":
             return self.weather.format_for_command(command)
         if intent == "capability_help":

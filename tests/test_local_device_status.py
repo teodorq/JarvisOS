@@ -60,6 +60,24 @@ class LocalDeviceStatusTests(unittest.TestCase):
 
         self.assertIn("bateria niewykryta", result)
 
+    def test_specific_device_question_returns_only_requested_metric(self) -> None:
+        cases = (
+            ("Pokaż użycie procesora", "użycie procesora: 17%", "RAM"),
+            ("Pokaż użycie pamięci RAM", "pamięci RAM: 53%", "CPU"),
+            ("Pokaż wolne miejsce na dysku", "125.5 GB", "CPU"),
+            ("Pokaż czas pracy komputera", "1 d 2 godz. 35 min", "CPU"),
+            ("Pokaż poziom baterii", "poziom 82%", "CPU"),
+        )
+        for command, expected, excluded in cases:
+            with self.subTest(command=command):
+                result = format_local_device_status(
+                    command,
+                    provider=_Provider,
+                    now=datetime(2026, 10, 2, 12, 35),
+                )
+                self.assertIn(expected, result)
+                self.assertNotIn(excluded, result)
+
     def test_provider_failure_returns_safe_message(self) -> None:
         class BrokenProvider:
             @staticmethod
@@ -97,6 +115,24 @@ class LocalDeviceStatusTests(unittest.TestCase):
         ):
             with self.subTest(command=command):
                 self.assertTrue(PersonalAssistantController.matches(command))
+
+    def test_short_device_followups_use_the_previous_topic(self) -> None:
+        with TemporaryDirectory() as directory:
+            assistant = PersonalAssistantController(Path(directory))
+            assistant.handle("Jaki jest stan komputera?")
+
+            for command, resolved in (
+                ("A RAM?", "Pokaż użycie pamięci RAM"),
+                ("A bateria?", "Pokaż poziom baterii"),
+                ("A dysk?", "Pokaż wolne miejsce na dysku"),
+                ("A procesor?", "Pokaż użycie procesora"),
+                ("A czas pracy?", "Pokaż czas pracy komputera"),
+            ):
+                with self.subTest(command=command):
+                    result = assistant.resolve_command(command)
+                    self.assertEqual(result.intent, "device_status")
+                    self.assertEqual(result.resolved, resolved)
+                    self.assertTrue(result.used_context)
 
 
 if __name__ == "__main__":

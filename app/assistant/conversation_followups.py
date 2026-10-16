@@ -25,6 +25,9 @@ def resolve_contextual_followup(
     resolved = _day_followup(folded, last_intent=last_intent)
     if resolved:
         return resolved, "natural_action"
+    resolved = _device_followup(folded, last_intent=last_intent)
+    if resolved:
+        return resolved, "device_status"
     resolved = _gmail_followup(folded, last_intent=last_intent)
     return (resolved, "natural_action") if resolved else ("", "")
 
@@ -81,6 +84,34 @@ def _day_followup(folded: str, *, last_intent: str) -> str:
     }:
         return "Pokaż mój dzień"
     return ""
+
+
+def _device_followup(folded: str, *, last_intent: str) -> str:
+    if last_intent != "device_status":
+        return ""
+    followups = {
+        "a procesor": "Pokaż użycie procesora",
+        "procesor": "Pokaż użycie procesora",
+        "a cpu": "Pokaż użycie procesora",
+        "cpu": "Pokaż użycie procesora",
+        "a ram": "Pokaż użycie pamięci RAM",
+        "ram": "Pokaż użycie pamięci RAM",
+        "a pamiec": "Pokaż użycie pamięci RAM",
+        "pamiec": "Pokaż użycie pamięci RAM",
+        "a dysk": "Pokaż wolne miejsce na dysku",
+        "dysk": "Pokaż wolne miejsce na dysku",
+        "a wolne miejsce": "Pokaż wolne miejsce na dysku",
+        "wolne miejsce": "Pokaż wolne miejsce na dysku",
+        "a bateria": "Pokaż poziom baterii",
+        "bateria": "Pokaż poziom baterii",
+        "a zasilanie": "Pokaż poziom baterii",
+        "zasilanie": "Pokaż poziom baterii",
+        "a czas pracy": "Pokaż czas pracy komputera",
+        "czas pracy": "Pokaż czas pracy komputera",
+        "a jak dlugo dziala": "Pokaż czas pracy komputera",
+        "jak dlugo dziala": "Pokaż czas pracy komputera",
+    }
+    return followups.get(folded, "")
 
 
 def _gmail_followup(folded: str, *, last_intent: str) -> str:

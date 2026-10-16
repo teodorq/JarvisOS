@@ -40,6 +40,7 @@ def test_auto_keeps_balanced_profile_for_capable_machine() -> None:
             environment={},
             system_probe=lambda: (16 * 1024**3, 8),
             battery_probe=lambda: False,
+            memory_pressure_probe=lambda: False,
         )
     assert profile.name == "balanced"
     assert profile.orb_stride_multiplier == 1
