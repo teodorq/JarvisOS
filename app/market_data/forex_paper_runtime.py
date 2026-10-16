@@ -54,7 +54,10 @@ class ForexDemoPaperRuntime:
     ) -> None:
         self.project_root = project_root
         self.settings = settings
-        self.gateway = gateway or ForexReadOnlyDataGateway(settings)
+        self.gateway = gateway or ForexReadOnlyDataGateway(
+            settings,
+            project_root=project_root,
+        )
         self.journal = journal or ForexObservationJournal(project_root)
         self.autopilot = autopilot or ForexPaperAutopilot(project_root)
         self.forward_evidence = forward_evidence or ForexV2ForwardEvidenceReport(

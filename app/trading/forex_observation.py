@@ -1423,10 +1423,14 @@ class ForexObservationService:
             "cross_checked_pair_count": len(cross_checked),
             "cross_checked_pairs": list(cross_checked),
             "calendar_ready": bool(value.get("calendar_ready")),
+            "calendar_source_state": str(
+                value.get("calendar_source_state", "")
+            )[:40],
             "high_impact_event_count": int(
                 value.get("high_impact_event_count", 0) or 0
             ),
             "nbp_effective_date": str(value.get("nbp_effective_date", "")),
+            "nbp_source_state": str(value.get("nbp_source_state", ""))[:40],
             "pln_conversion_ready": bool(value.get("pln_conversion_ready")),
         }
 

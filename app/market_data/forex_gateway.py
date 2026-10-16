@@ -5,10 +5,18 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Iterable
+from pathlib import Path
+from typing import Iterable, NoReturn
 
 from app.market_data.forex_environment import ForexDataSettings
-from app.market_data.forex_models import EconomicCalendarSnapshot, ForexDataBundle, IndependentRate
+from app.market_data.forex_models import (
+    EconomicCalendarSnapshot,
+    ForexDataBundle,
+    IndependentRate,
+    PlnReferenceRate,
+)
+from app.market_data.forex_reference_cache import ForexReferenceCache
+from app.market_data.http_json import MarketDataTransportError
 from app.market_data.mt5_demo import Mt5DemoReadOnlySource
 from app.market_data.forex_sources import (
     FmpForexReadOnlySource,
@@ -70,6 +78,7 @@ class ForexReadOnlyDataGateway:
         policy: ForexDataGatePolicy | None = None,
         universe: Iterable[ForexPair] = MAJOR_FOREX_PAIRS,
         mt5_module: object | None = None,
+        project_root: str | Path | None = None,
     ) -> None:
         self.settings = settings
         self.policy = policy or ForexDataGatePolicy()
@@ -78,6 +87,7 @@ class ForexReadOnlyDataGateway:
             raise TradingValidationError("forex_data_gate: unsupported_universe")
         self._transport = transport
         self._mt5_module = mt5_module
+        self._reference_cache = ForexReferenceCache(project_root)
 
     def status(self) -> dict[str, object]:
         return {
@@ -114,16 +124,28 @@ class ForexReadOnlyDataGateway:
         )
         nbp_source = NbpPlnReadOnlySource(self._transport)
 
-        quotes, bars = self._primary_market(selected_now)
-        if isinstance(independent_source, FmpForexReadOnlySource):
-            independent = independent_source.fetch_rates(
-                self.universe,
-                fetched_at=selected_now,
-            )
-        else:
-            independent = independent_source.fetch_rates(self.universe)
-        pln_reference = nbp_source.fetch_usd_pln(fetched_at=selected_now)
-        calendar = calendar_source.fetch_calendar(now=selected_now)
+        try:
+            quotes, bars = self._primary_market(selected_now)
+        except MarketDataTransportError as error:
+            self._raise_provider_error(self.settings.primary_provider, error)
+        try:
+            if isinstance(independent_source, FmpForexReadOnlySource):
+                independent = independent_source.fetch_rates(
+                    self.universe,
+                    fetched_at=selected_now,
+                )
+            else:
+                independent = independent_source.fetch_rates(self.universe)
+        except MarketDataTransportError as error:
+            self._raise_provider_error(independent_name, error)
+        pln_reference, nbp_source_state = self._nbp_reference(
+            nbp_source,
+            selected_now,
+        )
+        calendar, calendar_source_state = self._economic_calendar(
+            calendar_source,
+            selected_now,
+        )
 
         conversion_ready = self._pln_reference_ready(
             pln_reference.effective_date, selected_now
@@ -134,9 +156,12 @@ class ForexReadOnlyDataGateway:
                 pair=USD_PLN_CONVERSION_PAIR,
                 bid=pln_reference.midpoint_pln,
                 ask=pln_reference.midpoint_pln,
-                timestamp=pln_reference.fetched_at,
+                timestamp=selected_now,
             ),)
-        calendar_ready = self._calendar_ready(calendar, selected_now)
+        calendar_ready = (
+            calendar_source_state == "LIVE"
+            and self._calendar_ready(calendar, selected_now)
+        )
         contexts: dict[str, ForexSafetyContext] = {}
         cross_checked: list[str] = []
         for pair in self.universe:
@@ -171,14 +196,73 @@ class ForexReadOnlyDataGateway:
                 "primary_closed_bar_count": self.policy.primary_closed_bar_count,
                 "cross_checked_pairs": tuple(cross_checked),
                 "calendar_ready": calendar_ready,
+                "calendar_source_state": calendar_source_state,
                 "high_impact_event_count": sum(
                     event.importance == 3 for event in calendar.events
                 ),
                 "nbp_effective_date": pln_reference.effective_date.isoformat(),
+                "nbp_source_state": nbp_source_state,
                 "pln_conversion_ready": conversion_ready,
                 "live_orders_sent": False,
             },
         )
+
+    def _nbp_reference(
+        self,
+        source: NbpPlnReadOnlySource,
+        now: datetime,
+    ) -> tuple[PlnReferenceRate, str]:
+        try:
+            value = source.fetch_usd_pln(fetched_at=now)
+        except MarketDataTransportError as error:
+            if self._transient_reference_error(error):
+                cached = self._reference_cache.load_nbp(
+                    now=now,
+                    max_age_seconds=30 * 60 * 60,
+                    max_effective_age_days=self.policy.max_nbp_business_age_days,
+                )
+                if cached is not None:
+                    return cached, "CACHE_FALLBACK"
+            self._raise_provider_error("NBP", error)
+        self._reference_cache.save_nbp(value)
+        return value, "LIVE"
+
+    def _economic_calendar(
+        self,
+        source: ForexFactoryEconomicCalendarReadOnlySource,
+        now: datetime,
+    ) -> tuple[EconomicCalendarSnapshot, str]:
+        try:
+            value = source.fetch_calendar(now=now)
+        except MarketDataTransportError as error:
+            if self._transient_reference_error(error):
+                cached = self._reference_cache.load_calendar(
+                    now=now,
+                    max_age_seconds=90 * 60,
+                )
+                if cached is not None:
+                    return cached, "CACHE_FAILSAFE"
+            self._raise_provider_error("FOREX_FACTORY", error)
+        self._reference_cache.save_calendar(value)
+        return value, "LIVE"
+
+    @staticmethod
+    def _transient_reference_error(error: MarketDataTransportError) -> bool:
+        return str(error) in {
+            "market_data_response: http_429",
+            "market_data_response: unavailable",
+        }
+
+    @staticmethod
+    def _raise_provider_error(
+        provider: object,
+        error: MarketDataTransportError,
+    ) -> NoReturn:
+        code = str(error).rsplit(":", 1)[-1].strip().upper()
+        selected_provider = str(provider or "UNKNOWN").strip().upper()
+        raise MarketDataTransportError(
+            f"market_data_provider: {selected_provider}_{code}"
+        ) from error
 
     def _primary_market(
         self, now: datetime,

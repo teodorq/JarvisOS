@@ -53,6 +53,7 @@ class FakeForexTransport:
         event_impact: str = "",
         event_time: datetime | None = None,
         nbp_age_days: int = 0,
+        rate_limited_host: str = "",
     ) -> None:
         self.calls: list[PreparedJsonRequest] = []
         self.divergent_pair = divergent_pair
@@ -60,10 +61,13 @@ class FakeForexTransport:
         self.event_impact = event_impact
         self.event_time = event_time
         self.nbp_age_days = nbp_age_days
+        self.rate_limited_host = rate_limited_host
 
     def __call__(self, request: PreparedJsonRequest) -> object:
         self.calls.append(request)
         parsed = urlsplit(request.url)
+        if parsed.hostname == self.rate_limited_host:
+            raise MarketDataTransportError("market_data_response: http_429")
         query = parse_qs(parsed.query)
         if parsed.hostname == OandaPracticeReadOnlySource.HOST:
             if parsed.path.endswith("/pricing"):
@@ -611,6 +615,82 @@ class ProviderParserTests(unittest.TestCase):
 
 
 class ForexDataGatewayTests(unittest.TestCase):
+    def test_calendar_429_uses_short_cache_only_for_close_only_safety(self) -> None:
+        with TemporaryDirectory() as directory:
+            ForexReadOnlyDataGateway(
+                cloud_settings(),
+                transport=FakeForexTransport(),
+                project_root=directory,
+            ).collect(now=NOW)
+            bundle = ForexReadOnlyDataGateway(
+                cloud_settings(),
+                transport=FakeForexTransport(
+                    rate_limited_host=ForexFactoryEconomicCalendarReadOnlySource.HOST
+                ),
+                project_root=directory,
+            ).collect(now=NOW)
+
+        self.assertEqual(bundle.diagnostics["calendar_source_state"], "CACHE_FAILSAFE")
+        self.assertFalse(bundle.diagnostics["calendar_ready"])
+        self.assertTrue(all(
+            "ECONOMIC_CALENDAR_UNAVAILABLE" in context.opening_blocks
+            for context in bundle.contexts.values()
+        ))
+
+    def test_nbp_429_uses_bounded_validated_reference_cache(self) -> None:
+        with TemporaryDirectory() as directory:
+            ForexReadOnlyDataGateway(
+                cloud_settings(),
+                transport=FakeForexTransport(),
+                project_root=directory,
+            ).collect(now=NOW)
+            bundle = ForexReadOnlyDataGateway(
+                cloud_settings(),
+                transport=FakeForexTransport(
+                    rate_limited_host=NbpPlnReadOnlySource.HOST
+                ),
+                project_root=directory,
+            ).collect(now=NOW)
+
+        self.assertEqual(bundle.diagnostics["nbp_source_state"], "CACHE_FALLBACK")
+        self.assertTrue(bundle.diagnostics["pln_conversion_ready"])
+
+    def test_rate_limit_without_cache_names_provider_and_fails_closed(self) -> None:
+        with TemporaryDirectory() as directory:
+            gateway = ForexReadOnlyDataGateway(
+                cloud_settings(),
+                transport=FakeForexTransport(
+                    rate_limited_host=ForexFactoryEconomicCalendarReadOnlySource.HOST
+                ),
+                project_root=directory,
+            )
+            with self.assertRaisesRegex(
+                MarketDataTransportError,
+                "FOREX_FACTORY_HTTP_429",
+            ):
+                gateway.collect(now=NOW)
+
+    def test_expired_reference_cache_is_never_used(self) -> None:
+        with TemporaryDirectory() as directory:
+            ForexReadOnlyDataGateway(
+                cloud_settings(),
+                transport=FakeForexTransport(),
+                project_root=directory,
+            ).collect(now=NOW)
+            gateway = ForexReadOnlyDataGateway(
+                cloud_settings(),
+                transport=FakeForexTransport(
+                    rate_limited_host=ForexFactoryEconomicCalendarReadOnlySource.HOST
+                ),
+                project_root=directory,
+            )
+            with self.assertRaisesRegex(
+                MarketDataTransportError,
+                "FOREX_FACTORY_HTTP_429",
+            ):
+                gateway.collect(now=NOW + timedelta(minutes=91))
+
+
     def test_cloud_sources_form_complete_fail_closed_bundle(self) -> None:
         bundle = ForexReadOnlyDataGateway(
             cloud_settings(),
