@@ -313,6 +313,7 @@ class RequestBoundaryTests(unittest.TestCase):
             (config / "forex.env").write_text(
                 "JARVIS_OS_FOREX_DATA_ENABLED=true\n"
                 "JARVIS_OS_FOREX_PAPER_AUTOPILOT_ENABLED=true\n"
+                "JARVIS_OS_FOREX_BASE_NEW_ENTRIES_ENABLED=false\n"
                 "JARVIS_OS_TWELVE_DATA_API_KEY=file-key\n"
                 "UNREVIEWED_KEY=blocked\n",
                 encoding="utf-8",
@@ -324,10 +325,14 @@ class RequestBoundaryTests(unittest.TestCase):
                 (
                     "JARVIS_OS_FOREX_DATA_ENABLED",
                     "JARVIS_OS_FOREX_PAPER_AUTOPILOT_ENABLED",
+                    "JARVIS_OS_FOREX_BASE_NEW_ENTRIES_ENABLED",
                 ),
             )
             self.assertTrue(
                 ForexDataSettings.from_environment().paper_autopilot_enabled
+            )
+            self.assertFalse(
+                ForexDataSettings.from_environment().base_new_entries_enabled
             )
             self.assertEqual(os.environ["JARVIS_OS_TWELVE_DATA_API_KEY"], "process-key")
             self.assertNotIn("UNREVIEWED_KEY", os.environ)

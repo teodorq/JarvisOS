@@ -13,6 +13,7 @@ ALLOWED_FOREX_ENVIRONMENT_KEYS = frozenset(
     {
         "JARVIS_OS_FOREX_DATA_ENABLED",
         "JARVIS_OS_FOREX_PAPER_AUTOPILOT_ENABLED",
+        "JARVIS_OS_FOREX_BASE_NEW_ENTRIES_ENABLED",
         "JARVIS_OS_FOREX_PRIMARY_PROVIDER",
         "JARVIS_OS_MT5_SYMBOL_SUFFIX",
         "JARVIS_OS_OANDA_PRACTICE_ACCOUNT_ID",
@@ -55,6 +56,7 @@ def load_forex_environment(project_root: str | Path) -> tuple[str, ...]:
 class ForexDataSettings:
     enabled: bool
     paper_autopilot_enabled: bool = False
+    base_new_entries_enabled: bool = True
     primary_provider: str = "MT5_DEMO"
     mt5_symbol_suffix: str = ""
     oanda_practice_account_id: str = field(default="", repr=False)
@@ -83,6 +85,9 @@ class ForexDataSettings:
             == "true",
             paper_autopilot_enabled=os.getenv(
                 "JARVIS_OS_FOREX_PAPER_AUTOPILOT_ENABLED", ""
+            ).strip().lower() == "true",
+            base_new_entries_enabled=os.getenv(
+                "JARVIS_OS_FOREX_BASE_NEW_ENTRIES_ENABLED", ""
             ).strip().lower() == "true",
             primary_provider=os.getenv("JARVIS_OS_FOREX_PRIMARY_PROVIDER", "MT5_DEMO"),
             mt5_symbol_suffix=os.getenv("JARVIS_OS_MT5_SYMBOL_SUFFIX", ""),
@@ -128,6 +133,7 @@ class ForexDataSettings:
         return {
             "enabled": self.enabled,
             "paper_autopilot_enabled": self.paper_autopilot_enabled,
+            "base_new_entries_enabled": self.base_new_entries_enabled,
             "primary_provider": self.primary_provider,
             "mt5_demo": bool(self.enabled and self.primary_provider == "MT5_DEMO"),
             "oanda_practice": self.oanda_ready,

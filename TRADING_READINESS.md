@@ -114,6 +114,9 @@ Lokalny cykl autonomiczny wykonuje kolejno:
 Powtórzenie identycznego identyfikatora cyklu nie tworzy drugiej pozycji.
 Kill switch blokuje nowe wejścia, ale nie usuwa możliwości bezpiecznego
 zamknięcia istniejącej pozycji. Sygnały LONG i SHORT są wyłącznie symulowane.
+Nowe wejścia niezwalidowanej strategii bazowej są dodatkowo domyślnie
+wyłączone przez `JARVIS_OS_FOREX_BASE_NEW_ENTRIES_ENABLED=false`. Obserwacje,
+ochrona i zamknięcia istniejących pozycji PAPER pozostają aktywne.
 Próg 20 zamkniętych transakcji oznacza jedynie próbkę gotową do ręcznego
 przeglądu. Nie uruchamia optymalizacji, zmiany strategii ani promocji LIVE.
 Wyniki są również rozdzielane na siedem par. Dodatkowy raport kohortowy przypina

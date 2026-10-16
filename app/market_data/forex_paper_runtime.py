@@ -141,7 +141,10 @@ class ForexDemoPaperRuntime:
                 contexts=bundle.contexts,
                 conversion_quotes=bundle.conversion_quotes,
                 cycle_id=f"paper-cycle-{selected_id}",
-                allow_new_entries=not close_only,
+                allow_new_entries=(
+                    self.settings.base_new_entries_enabled
+                    and not close_only
+                ),
                 now=selected_now,
             )
             performance_review = self._refresh_performance_review(
@@ -160,7 +163,12 @@ class ForexDemoPaperRuntime:
             "observed_at": selected_now.isoformat(),
             "primary_provider": self.settings.primary_provider,
             "strategy": "PAPER_BASE_SCANNER_10_30",
-            "unvalidated_strategy_demo_override": True,
+            "unvalidated_strategy_demo_override": (
+                self.settings.base_new_entries_enabled
+            ),
+            "base_new_entries_enabled": (
+                self.settings.base_new_entries_enabled
+            ),
             "observation": observation,
             "forward_evidence": forward_evidence,
             "v3_forward_evidence": v3_forward_evidence,

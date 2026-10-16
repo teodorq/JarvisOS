@@ -196,10 +196,17 @@ class ForexPaperRuntimeTests(unittest.TestCase):
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
 
-    def settings(self, *, enabled: bool = True, provider: str = "MT5_DEMO"):
+    def settings(
+        self,
+        *,
+        enabled: bool = True,
+        provider: str = "MT5_DEMO",
+        base_entries: bool = True,
+    ):
         return ForexDataSettings(
             enabled=True,
             paper_autopilot_enabled=enabled,
+            base_new_entries_enabled=base_entries,
             primary_provider=provider,
         )
 
@@ -298,6 +305,26 @@ class ForexPaperRuntimeTests(unittest.TestCase):
         self.assertFalse(result["broker_orders_sent"])
         self.assertFalse(result["live_orders_sent"])
         self.assertFalse(result["real_money_access"])
+
+    def test_base_entry_gate_keeps_runtime_close_only(self) -> None:
+        result = ForexDemoPaperRuntime(
+            self.root,
+            settings=self.settings(base_entries=False),
+            gateway=FakeGateway(),  # type: ignore[arg-type]
+            journal=_ready_journal(self.root),
+        ).run_once(
+            cycle_id="base-entry-gate",
+            now=NOW,
+            capture_origin="SCHEDULED_FORWARD",
+            capture_attestation=_scheduled_attestation("base-entry-gate"),
+        )
+
+        self.assertEqual(result["status"], "PAPER_CYCLE_COMPLETED")
+        self.assertFalse(result["base_new_entries_enabled"])
+        self.assertFalse(result["unvalidated_strategy_demo_override"])
+        self.assertFalse(result["paper"]["new_entries_allowed"])
+        self.assertEqual(result["paper"]["account"]["position_count"], 0)
+        self.assertEqual(result["paper"]["execution"]["status"], "NO_EXECUTION")
 
     def test_post_freeze_scheduled_cycle_persists_strict_forward_report(
         self,
