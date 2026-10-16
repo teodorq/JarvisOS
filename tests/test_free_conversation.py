@@ -86,6 +86,7 @@ def test_local_model_uses_lighter_defaults_for_low_resource_profile(
         "load_performance_profile",
         lambda _root: LOW_RESOURCE,
     )
+    monkeypatch.setattr(local_chat_model.os, "cpu_count", lambda: 8)
 
     model = local_chat_model.LocalChatModel(project_root=tmp_path)
 
