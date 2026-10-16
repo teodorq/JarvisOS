@@ -14,6 +14,8 @@ ALLOWED_FOREX_ENVIRONMENT_KEYS = frozenset(
         "JARVIS_OS_FOREX_DATA_ENABLED",
         "JARVIS_OS_FOREX_PAPER_AUTOPILOT_ENABLED",
         "JARVIS_OS_FOREX_BASE_NEW_ENTRIES_ENABLED",
+        "JARVIS_OS_FOREX_V3_SHADOW_SIMULATION_ENABLED",
+        "JARVIS_OS_FOREX_V3_SHADOW_REVIEW_FINGERPRINT",
         "JARVIS_OS_FOREX_PRIMARY_PROVIDER",
         "JARVIS_OS_MT5_SYMBOL_SUFFIX",
         "JARVIS_OS_OANDA_PRACTICE_ACCOUNT_ID",
@@ -57,6 +59,8 @@ class ForexDataSettings:
     enabled: bool
     paper_autopilot_enabled: bool = False
     base_new_entries_enabled: bool = True
+    v3_shadow_simulation_enabled: bool = False
+    v3_shadow_review_fingerprint: str = field(default="", repr=False)
     primary_provider: str = "MT5_DEMO"
     mt5_symbol_suffix: str = ""
     oanda_practice_account_id: str = field(default="", repr=False)
@@ -77,6 +81,14 @@ class ForexDataSettings:
             raise ValueError("invalid MT5 symbol suffix")
         object.__setattr__(self, "primary_provider", provider)
         object.__setattr__(self, "mt5_symbol_suffix", suffix)
+        fingerprint = str(self.v3_shadow_review_fingerprint or "").strip()
+        if fingerprint and not re.fullmatch(r"[0-9a-f]{64}", fingerprint):
+            raise ValueError("invalid V3 shadow review fingerprint")
+        object.__setattr__(
+            self,
+            "v3_shadow_review_fingerprint",
+            fingerprint,
+        )
 
     @classmethod
     def from_environment(cls) -> "ForexDataSettings":
@@ -89,6 +101,12 @@ class ForexDataSettings:
             base_new_entries_enabled=os.getenv(
                 "JARVIS_OS_FOREX_BASE_NEW_ENTRIES_ENABLED", ""
             ).strip().lower() == "true",
+            v3_shadow_simulation_enabled=os.getenv(
+                "JARVIS_OS_FOREX_V3_SHADOW_SIMULATION_ENABLED", ""
+            ).strip().lower() == "true",
+            v3_shadow_review_fingerprint=os.getenv(
+                "JARVIS_OS_FOREX_V3_SHADOW_REVIEW_FINGERPRINT", ""
+            ).strip(),
             primary_provider=os.getenv("JARVIS_OS_FOREX_PRIMARY_PROVIDER", "MT5_DEMO"),
             mt5_symbol_suffix=os.getenv("JARVIS_OS_MT5_SYMBOL_SUFFIX", ""),
             oanda_practice_account_id=os.getenv(
@@ -134,6 +152,12 @@ class ForexDataSettings:
             "enabled": self.enabled,
             "paper_autopilot_enabled": self.paper_autopilot_enabled,
             "base_new_entries_enabled": self.base_new_entries_enabled,
+            "v3_shadow_simulation_enabled": (
+                self.v3_shadow_simulation_enabled
+            ),
+            "v3_shadow_review_fingerprint_configured": bool(
+                self.v3_shadow_review_fingerprint
+            ),
             "primary_provider": self.primary_provider,
             "mt5_demo": bool(self.enabled and self.primary_provider == "MT5_DEMO"),
             "oanda_practice": self.oanda_ready,

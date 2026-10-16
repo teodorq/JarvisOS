@@ -10,6 +10,11 @@ param containerImage string
 @description('Exact Git commit represented by the deployed container image.')
 param buildSha string
 
+@minLength(64)
+@maxLength(64)
+@description('Exact manually reviewed V3 shadow plan-sample fingerprint.')
+param v3ShadowReviewFingerprint string = '58bdd20567b2093b5883a181a3bcab7c0c2e6c0eb6a65d08ae68c255dc9affd2'
+
 @description('Existing Storage account used for private PAPER state.')
 param storageAccountName string
 
@@ -108,6 +113,18 @@ resource paperJob 'Microsoft.App/jobs@2024-03-01' = {
             {
               name: 'JARVIS_OS_FOREX_PAPER_AUTOPILOT_ENABLED'
               value: 'true'
+            }
+            {
+              name: 'JARVIS_OS_FOREX_BASE_NEW_ENTRIES_ENABLED'
+              value: 'false'
+            }
+            {
+              name: 'JARVIS_OS_FOREX_V3_SHADOW_SIMULATION_ENABLED'
+              value: 'true'
+            }
+            {
+              name: 'JARVIS_OS_FOREX_V3_SHADOW_REVIEW_FINGERPRINT'
+              value: v3ShadowReviewFingerprint
             }
             {
               name: 'JARVIS_OS_FOREX_PRIMARY_PROVIDER'

@@ -53,12 +53,20 @@ class ForexV3ShadowReadiness:
             initialization = dict(
                 ledger_state.get("initialization", {}) or {}
             )
+            initialization_status = str(initialization.get("status", ""))
+            expected_execution = (
+                initialization_status
+                == "INITIALIZED_SHADOW_SIMULATION_ACTIVE"
+            )
             if (
                 ledger_state.get("mode")
                 != "FOREX_V3_SHADOW_PAPER_ONLY"
-                or initialization.get("status")
-                != "INITIALIZED_SHADOW_INACTIVE"
-                or initialization.get("execution_enabled") is not False
+                or initialization_status not in {
+                    "INITIALIZED_SHADOW_INACTIVE",
+                    "INITIALIZED_SHADOW_SIMULATION_ACTIVE",
+                }
+                or initialization.get("execution_enabled")
+                is not expected_execution
             ):
                 return self.blocked_status(
                     "UNEXPECTED_SHADOW_LEDGER_PRESENT"
@@ -91,9 +99,17 @@ class ForexV3ShadowReadiness:
                 "SHADOW_LEDGER_BEFORE_FORWARD_SAMPLE_COMPLETE"
             )
         initialized = ledger_state is not None
+        simulation_active = bool(
+            initialized
+            and dict(ledger_state.get("initialization", {}) or {}).get(
+                "status"
+            ) == "INITIALIZED_SHADOW_SIMULATION_ACTIVE"
+        )
         return {
             "status": (
-                "SHADOW_INITIALIZED_INACTIVE"
+                "SHADOW_SIMULATION_ACTIVE"
+                if simulation_active
+                else "SHADOW_INITIALIZED_INACTIVE"
                 if initialized
                 else (
                     "READY_FOR_MANUAL_SHADOW_INITIALIZATION"
@@ -116,7 +132,7 @@ class ForexV3ShadowReadiness:
             "manual_initialization_required": not initialized,
             "shadow_initialization_ready": complete and not initialized,
             "shadow_ledger_initialized": initialized,
-            "shadow_execution_enabled": False,
+            "shadow_execution_enabled": simulation_active,
             "current_paper_strategy_changed": False,
             "paper_orders_sent": False,
             "broker_orders_sent": False,

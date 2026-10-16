@@ -164,6 +164,73 @@ class FailingV3ShadowObserver:
         raise RuntimeError("simulated V3 observer failure")
 
 
+class FakeV3ActivationReadiness:
+    @staticmethod
+    def status() -> dict:
+        return {
+            "status": "READY_FOR_MANUAL_SIMULATION_INITIALIZATION",
+            "review_fingerprint_sha256": "d" * 64,
+        }
+
+
+class FakeV3Activator:
+    readiness = FakeV3ActivationReadiness()
+
+    @staticmethod
+    def confirmation_for(fingerprint: object) -> str:
+        return f"ACTIVATE V3 SHADOW {fingerprint}"
+
+    @staticmethod
+    def activate(*, confirmation: object) -> dict:
+        return {
+            "status": "SIMULATION_ACTIVATED",
+            "confirmation": str(confirmation),
+            "shadow_execution_enabled": True,
+            "live_orders_sent": False,
+            "real_money_access": False,
+        }
+
+
+class FakeV3Observer:
+    @staticmethod
+    def observe(**_kwargs: object) -> dict:
+        return {
+            "status": "SHADOW_PLAN_OBSERVED",
+            "plan": {"cycle_id": "shadow-plan-runtime-v3"},
+        }
+
+
+class FakeV3Executor:
+    class Policy:
+        max_conversion_age_seconds = 90
+
+    policy = Policy()
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def apply_plan(self, plan: dict, **_kwargs: object) -> dict:
+        self.calls += 1
+        return {
+            "status": "APPLIED",
+            "mode": "FOREX_V3_SHADOW_PAPER_ONLY",
+            "cycle_id": plan["cycle_id"],
+            "executions": [],
+            "live_orders_sent": False,
+            "real_money_access": False,
+        }
+
+    @staticmethod
+    def status(**_kwargs: object) -> dict:
+        return {
+            "status": "READY",
+            "mode": "FOREX_V3_SHADOW_PAPER_ONLY",
+            "position_count": 1,
+            "closed_trade_count": 0,
+            "realized_pnl_pln": "0.00",
+        }
+
+
 def _ready_journal(root: Path) -> ForexObservationJournal:
     journal = ForexObservationJournal(root)
     for index in range(20):
@@ -202,13 +269,52 @@ class ForexPaperRuntimeTests(unittest.TestCase):
         enabled: bool = True,
         provider: str = "MT5_DEMO",
         base_entries: bool = True,
+        v3_simulation: bool = False,
     ):
         return ForexDataSettings(
             enabled=True,
             paper_autopilot_enabled=enabled,
             base_new_entries_enabled=base_entries,
+            v3_shadow_simulation_enabled=v3_simulation,
+            v3_shadow_review_fingerprint=(
+                "d" * 64 if v3_simulation else ""
+            ),
             primary_provider=provider,
         )
+
+    def test_enabled_v3_simulation_is_routed_to_its_isolated_executor(
+        self,
+    ) -> None:
+        executor = FakeV3Executor()
+        result = ForexDemoPaperRuntime(
+            self.root,
+            settings=self.settings(
+                base_entries=False,
+                v3_simulation=True,
+            ),
+            gateway=FakeGateway(),  # type: ignore[arg-type]
+            journal=_ready_journal(self.root),
+            v3_shadow_activator=FakeV3Activator(),  # type: ignore[arg-type]
+            v3_shadow_observer=FakeV3Observer(),  # type: ignore[arg-type]
+            v3_shadow_executor=executor,  # type: ignore[arg-type]
+        ).run_once(cycle_id="runtime-v3-route", now=NOW)
+
+        self.assertEqual(result["status"], "PAPER_CYCLE_COMPLETED")
+        self.assertEqual(
+            result["v3_shadow_activation"]["status"],
+            "SIMULATION_ACTIVATED",
+        )
+        self.assertEqual(
+            result["v3_shadow_simulation"]["mode"],
+            "FOREX_V3_SHADOW_PAPER_ONLY",
+        )
+        self.assertEqual(
+            result["v3_shadow_simulation"]["account"]["position_count"],
+            1,
+        )
+        self.assertEqual(executor.calls, 1)
+        self.assertFalse(result["base_new_entries_enabled"])
+        self.assertFalse(result["live_orders_sent"])
 
     def test_disabled_runtime_does_not_read_market_or_modify_ledger(self) -> None:
         gateway = FakeGateway()

@@ -146,9 +146,12 @@ class ForexV3ShadowPlanner:
             return self._blocked("INVALID_CYCLE_ID", selected_now)
         readiness = self.readiness.status()
         if (
-            readiness.get("status") != "SHADOW_INITIALIZED_INACTIVE"
+            readiness.get("status") not in {
+                "SHADOW_INITIALIZED_INACTIVE",
+                "SHADOW_SIMULATION_ACTIVE",
+            }
             or readiness.get("shadow_ledger_initialized") is not True
-            or readiness.get("shadow_execution_enabled") is not False
+            or type(readiness.get("shadow_execution_enabled")) is not bool
         ):
             return self._blocked(
                 str(readiness.get("status", "SHADOW_NOT_INITIALIZED")),
@@ -156,11 +159,19 @@ class ForexV3ShadowPlanner:
             )
         state = self.ledger.snapshot()
         initialization = dict(state.get("initialization", {}) or {})
+        initialization_status = str(initialization.get("status", ""))
+        expected_execution = (
+            initialization_status
+            == "INITIALIZED_SHADOW_SIMULATION_ACTIVE"
+        )
         if (
             state.get("mode") != "FOREX_V3_SHADOW_PAPER_ONLY"
-            or initialization.get("status")
-            != "INITIALIZED_SHADOW_INACTIVE"
-            or initialization.get("execution_enabled") is not False
+            or initialization_status not in {
+                "INITIALIZED_SHADOW_INACTIVE",
+                "INITIALIZED_SHADOW_SIMULATION_ACTIVE",
+            }
+            or initialization.get("execution_enabled")
+            is not expected_execution
             or not self.ledger.verify_audit(state)
         ):
             return self._blocked("SHADOW_LEDGER_INVALID", selected_now)

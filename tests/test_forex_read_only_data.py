@@ -314,6 +314,10 @@ class RequestBoundaryTests(unittest.TestCase):
                 "JARVIS_OS_FOREX_DATA_ENABLED=true\n"
                 "JARVIS_OS_FOREX_PAPER_AUTOPILOT_ENABLED=true\n"
                 "JARVIS_OS_FOREX_BASE_NEW_ENTRIES_ENABLED=false\n"
+                "JARVIS_OS_FOREX_V3_SHADOW_SIMULATION_ENABLED=true\n"
+                "JARVIS_OS_FOREX_V3_SHADOW_REVIEW_FINGERPRINT="
+                + "e" * 64
+                + "\n"
                 "JARVIS_OS_TWELVE_DATA_API_KEY=file-key\n"
                 "UNREVIEWED_KEY=blocked\n",
                 encoding="utf-8",
@@ -326,6 +330,8 @@ class RequestBoundaryTests(unittest.TestCase):
                     "JARVIS_OS_FOREX_DATA_ENABLED",
                     "JARVIS_OS_FOREX_PAPER_AUTOPILOT_ENABLED",
                     "JARVIS_OS_FOREX_BASE_NEW_ENTRIES_ENABLED",
+                    "JARVIS_OS_FOREX_V3_SHADOW_SIMULATION_ENABLED",
+                    "JARVIS_OS_FOREX_V3_SHADOW_REVIEW_FINGERPRINT",
                 ),
             )
             self.assertTrue(
@@ -334,8 +340,24 @@ class RequestBoundaryTests(unittest.TestCase):
             self.assertFalse(
                 ForexDataSettings.from_environment().base_new_entries_enabled
             )
+            self.assertTrue(
+                ForexDataSettings.from_environment()
+                .v3_shadow_simulation_enabled
+            )
+            self.assertTrue(
+                ForexDataSettings.from_environment()
+                .readiness()["v3_shadow_review_fingerprint_configured"]
+            )
             self.assertEqual(os.environ["JARVIS_OS_TWELVE_DATA_API_KEY"], "process-key")
             self.assertNotIn("UNREVIEWED_KEY", os.environ)
+
+    def test_invalid_v3_review_fingerprint_is_rejected(self) -> None:
+        with self.assertRaisesRegex(ValueError, "review fingerprint"):
+            ForexDataSettings(
+                enabled=True,
+                v3_shadow_simulation_enabled=True,
+                v3_shadow_review_fingerprint="not-a-sha256",
+            )
 
 
 class ProviderParserTests(unittest.TestCase):

@@ -65,6 +65,8 @@ class ForexV3ShadowLedger(ForexPaperLedger):
                 "forward_evidence_content_sha256": "",
                 "source_head_hash": "",
                 "source_cutoff_sequence": 0,
+                "simulation_activated_at": "",
+                "simulation_review_fingerprint_sha256": "",
                 "execution_enabled": False,
             },
         })
@@ -87,9 +89,9 @@ class ForexV3ShadowLedger(ForexPaperLedger):
         for key, default in expected_initialization.items():
             initialization.setdefault(key, default)
         status = str(initialization.get("status", ""))
-        if initialization.get("execution_enabled") is not False:
-            state["mode"] = "INVALID"
         if status == "NOT_INITIALIZED":
+            if initialization.get("execution_enabled") is not False:
+                state["mode"] = "INVALID"
             if any(
                 initialization.get(key) not in ("", 0)
                 for key in (
@@ -97,12 +99,15 @@ class ForexV3ShadowLedger(ForexPaperLedger):
                     "forward_evidence_content_sha256",
                     "source_head_hash",
                     "source_cutoff_sequence",
+                    "simulation_activated_at",
+                    "simulation_review_fingerprint_sha256",
                 )
             ):
                 state["mode"] = "INVALID"
         elif status == "INITIALIZED_SHADOW_INACTIVE":
             if (
-                not str(initialization.get("initialized_at", ""))
+                initialization.get("execution_enabled") is not False
+                or not str(initialization.get("initialized_at", ""))
                 or len(
                     str(initialization.get(
                         "forward_evidence_content_sha256",
@@ -112,6 +117,26 @@ class ForexV3ShadowLedger(ForexPaperLedger):
                 or len(str(initialization.get("source_head_hash", ""))) != 64
                 or type(initialization.get("source_cutoff_sequence")) is not int
                 or initialization.get("source_cutoff_sequence", 0) <= 0
+                or initialization.get("simulation_activated_at") != ""
+                or initialization.get(
+                    "simulation_review_fingerprint_sha256"
+                ) != ""
+            ):
+                state["mode"] = "INVALID"
+        elif status == "INITIALIZED_SHADOW_SIMULATION_ACTIVE":
+            if (
+                initialization.get("execution_enabled") is not True
+                or not str(initialization.get("initialized_at", ""))
+                or len(str(initialization.get(
+                    "forward_evidence_content_sha256", ""
+                ))) != 64
+                or len(str(initialization.get("source_head_hash", ""))) != 64
+                or type(initialization.get("source_cutoff_sequence")) is not int
+                or initialization.get("source_cutoff_sequence", 0) <= 0
+                or not str(initialization.get("simulation_activated_at", ""))
+                or len(str(initialization.get(
+                    "simulation_review_fingerprint_sha256", ""
+                ))) != 64
             ):
                 state["mode"] = "INVALID"
         else:

@@ -22,8 +22,13 @@ from app.trading.forex_observation import (
 from app.trading.forex_performance_review import (
     ForexPaperPerformanceReviewPacket,
 )
+from app.trading.forex_risk import ForexRateBook
 from app.trading.forex_v3_shadow_plan_observer import (
     ForexV3ShadowPlanObserver,
+)
+from app.trading.forex_v3_shadow_simulation import (
+    ForexV3ShadowSimulationActivator,
+    ForexV3ShadowSimulationEngine,
 )
 from app.trading.models import TradingValidationError, aware_utc
 
@@ -44,6 +49,8 @@ class ForexDemoPaperRuntime:
         forward_review: ForexV2OwnerReviewPacket | None = None,
         performance_review: ForexPaperPerformanceReviewPacket | None = None,
         v3_shadow_observer: ForexV3ShadowPlanObserver | None = None,
+        v3_shadow_activator: ForexV3ShadowSimulationActivator | None = None,
+        v3_shadow_executor: ForexV3ShadowSimulationEngine | None = None,
     ) -> None:
         self.project_root = project_root
         self.settings = settings
@@ -65,6 +72,14 @@ class ForexDemoPaperRuntime:
         self.v3_shadow_observer = (
             v3_shadow_observer
             or ForexV3ShadowPlanObserver(project_root)
+        )
+        self.v3_shadow_executor = (
+            v3_shadow_executor
+            or ForexV3ShadowSimulationEngine(project_root)
+        )
+        self.v3_shadow_activator = (
+            v3_shadow_activator
+            or ForexV3ShadowSimulationActivator(project_root)
         )
 
     def run_once(
@@ -130,9 +145,15 @@ class ForexDemoPaperRuntime:
                     v3_forward_evidence=v3_forward_evidence,
                     forward_review=forward_review,
                 )
+            v3_shadow_activation = self._activate_v3_shadow_simulation()
             v3_shadow_plan = self._observe_v3_shadow_plan(
                 bundle=bundle,
                 cycle_id=selected_id,
+                now=selected_now,
+            )
+            v3_shadow_simulation = self._execute_v3_shadow_plan(
+                bundle=bundle,
+                observation=v3_shadow_plan,
                 now=selected_now,
             )
             paper = self.autopilot.run_cycle(
@@ -174,10 +195,138 @@ class ForexDemoPaperRuntime:
             "v3_forward_evidence": v3_forward_evidence,
             "forward_review": forward_review,
             "v3_shadow_plan_observation": v3_shadow_plan,
+            "v3_shadow_activation": v3_shadow_activation,
+            "v3_shadow_simulation": v3_shadow_simulation,
             "paper": paper,
             "performance_review": performance_review,
             "broker_orders_sent": False,
             "live_orders_sent": False,
+            "real_money_access": False,
+        }
+
+    def _activate_v3_shadow_simulation(self) -> dict[str, Any]:
+        if not self.settings.v3_shadow_simulation_enabled:
+            return self._v3_simulation_result(
+                "SHADOW_SIMULATION_DISABLED",
+                "CONFIGURATION_DISABLED",
+            )
+        try:
+            existing = self.v3_shadow_activator.activate(confirmation="")
+            if existing.get("status") == "ALREADY_ACTIVE":
+                return existing
+            gate = self.v3_shadow_activator.readiness.status()
+            fingerprint = str(gate.get("review_fingerprint_sha256", ""))
+            if (
+                not self.settings.v3_shadow_review_fingerprint
+                or fingerprint
+                != self.settings.v3_shadow_review_fingerprint
+            ):
+                return self._v3_simulation_result(
+                    "SHADOW_SIMULATION_ACTIVATION_BLOCKED",
+                    "REVIEW_FINGERPRINT_MISMATCH",
+                )
+            confirmation = (
+                self.v3_shadow_activator.confirmation_for(fingerprint)
+                if gate.get("status")
+                == "READY_FOR_MANUAL_SIMULATION_INITIALIZATION"
+                else ""
+            )
+            return self.v3_shadow_activator.activate(
+                confirmation=confirmation,
+            )
+        except (
+            OSError,
+            RuntimeError,
+            TradingValidationError,
+            TypeError,
+            ValueError,
+        ) as error:
+            return self._v3_simulation_result(
+                "SHADOW_SIMULATION_ACTIVATION_BLOCKED",
+                str(error)[:160] or "ACTIVATION_FAILED",
+            )
+
+    def _execute_v3_shadow_plan(
+        self,
+        *,
+        bundle: ForexDataBundle,
+        observation: Mapping[str, Any],
+        now: datetime,
+    ) -> dict[str, Any]:
+        if not self.settings.v3_shadow_simulation_enabled:
+            return self._v3_simulation_result(
+                "SHADOW_SIMULATION_DISABLED",
+                "CONFIGURATION_DISABLED",
+            )
+        plan = observation.get("plan")
+        if not isinstance(plan, Mapping) or observation.get("status") not in {
+            "SHADOW_PLAN_OBSERVED",
+            "SHADOW_PLAN_ALREADY_OBSERVED",
+        }:
+            return self._v3_simulation_result(
+                "SHADOW_SIMULATION_WAITING",
+                str(observation.get("status", "PLAN_UNAVAILABLE")),
+            )
+        try:
+            all_quotes = [
+                *bundle.quotes.values(),
+                *bundle.conversion_quotes,
+            ]
+            rates = ForexRateBook(
+                all_quotes,
+                now=now,
+                max_age_seconds=(
+                    self.v3_shadow_executor.policy.max_conversion_age_seconds
+                ),
+            )
+            execution = self.v3_shadow_executor.apply_plan(
+                plan,
+                quotes=bundle.quotes,
+                rates=rates,
+                cycle_id=str(plan.get("cycle_id", "")),
+                now=now,
+            )
+            account = self.v3_shadow_executor.status(
+                quotes=bundle.quotes,
+                rates=rates,
+                now=now,
+            )
+            return {
+                "status": "SHADOW_SIMULATION_CYCLE_COMPLETED",
+                "mode": "FOREX_V3_SHADOW_PAPER_ONLY",
+                "execution": execution,
+                "account": account,
+                "shadow_execution_enabled": True,
+                "paper_orders_sent": bool(execution.get("executions")),
+                "broker_orders_sent": False,
+                "live_orders_sent": False,
+                "network_access": False,
+                "real_money_access": False,
+            }
+        except (
+            OSError,
+            RuntimeError,
+            TradingValidationError,
+            TypeError,
+            ValueError,
+        ) as error:
+            return self._v3_simulation_result(
+                "SHADOW_SIMULATION_BLOCKED",
+                str(error)[:160] or "SIMULATION_FAILED",
+            )
+
+    @staticmethod
+    def _v3_simulation_result(status: str, reason: str) -> dict[str, Any]:
+        return {
+            "status": status,
+            "mode": "FOREX_V3_SHADOW_PAPER_ONLY",
+            "reason": str(reason)[:160],
+            "executions": [],
+            "shadow_execution_enabled": False,
+            "paper_orders_sent": False,
+            "broker_orders_sent": False,
+            "live_orders_sent": False,
+            "network_access": False,
             "real_money_access": False,
         }
 
@@ -350,6 +499,8 @@ class ForexDemoPaperRuntime:
         v3_forward_evidence: dict[str, Any] | None = None,
         forward_review: dict[str, Any] | None = None,
         v3_shadow_plan_observation: dict[str, Any] | None = None,
+        v3_shadow_activation: dict[str, Any] | None = None,
+        v3_shadow_simulation: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         return {
             "status": "PAPER_CYCLE_BLOCKED",
@@ -363,6 +514,8 @@ class ForexDemoPaperRuntime:
             "v3_shadow_plan_observation": (
                 v3_shadow_plan_observation or {}
             ),
+            "v3_shadow_activation": v3_shadow_activation or {},
+            "v3_shadow_simulation": v3_shadow_simulation or {},
             "broker_orders_sent": False,
             "live_orders_sent": False,
             "real_money_access": False,

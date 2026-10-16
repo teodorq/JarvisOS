@@ -205,6 +205,10 @@ def _public_result(result: dict[str, Any]) -> dict[str, Any]:
     paper = paper if isinstance(paper, dict) else {}
     account = paper.get("account")
     account = account if isinstance(account, dict) else {}
+    v3 = result.get("v3_shadow_simulation")
+    v3 = v3 if isinstance(v3, dict) else {}
+    v3_account = v3.get("account")
+    v3_account = v3_account if isinstance(v3_account, dict) else {}
     return {
         "status": str(result.get("status", "UNKNOWN")),
         "mode": str(result.get("mode", "AUTONOMOUS_AZURE_FOREX_PAPER")),
@@ -212,6 +216,14 @@ def _public_result(result: dict[str, Any]) -> dict[str, Any]:
         "observed_at": str(result.get("observed_at", "")),
         "reason": str(result.get("reason", "")),
         "position_count": int(account.get("position_count", 0) or 0),
+        "v3_status": str(v3.get("status", "")),
+        "v3_position_count": int(v3_account.get("position_count", 0) or 0),
+        "v3_closed_trade_count": int(
+            v3_account.get("closed_trade_count", 0) or 0
+        ),
+        "v3_realized_pnl_pln": str(
+            v3_account.get("realized_pnl_pln", "0.00")
+        ),
         "broker_orders_sent": False,
         "live_orders_sent": False,
         "real_money_access": False,

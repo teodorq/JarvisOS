@@ -117,6 +117,12 @@ zamknięcia istniejącej pozycji. Sygnały LONG i SHORT są wyłącznie symulowa
 Nowe wejścia niezwalidowanej strategii bazowej są dodatkowo domyślnie
 wyłączone przez `JARVIS_OS_FOREX_BASE_NEW_ENTRIES_ENABLED=false`. Obserwacje,
 ochrona i zamknięcia istniejących pozycji PAPER pozostają aktywne.
+Podpisane plany V3 mogą być kierowane wyłącznie do osobnego rejestru symulacji
+po ręcznej aktywacji i ustawieniu
+`JARVIS_OS_FOREX_V3_SHADOW_SIMULATION_ENABLED=true`. Ten przełącznik nie daje
+dostępu do brokera, pieniędzy ani wykonania LIVE. Aktywacja wymaga dodatkowo
+dokładnego, ręcznie sprawdzonego odcisku w
+`JARVIS_OS_FOREX_V3_SHADOW_REVIEW_FINGERPRINT`; inna próbka zostaje zablokowana.
 Próg 20 zamkniętych transakcji oznacza jedynie próbkę gotową do ręcznego
 przeglądu. Nie uruchamia optymalizacji, zmiany strategii ani promocji LIVE.
 Wyniki są również rozdzielane na siedem par. Dodatkowy raport kohortowy przypina

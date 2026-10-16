@@ -58,6 +58,11 @@ class ForexPaperExecutionEngine:
     """Apply a validated paper plan and independently recheck every entry."""
 
     RELEASE_CONFIRMATION = "FOREX PAPER ODBLOKUJ"
+    LEDGER_MODE = "FOREX_PAPER_ONLY"
+    PLAN_MODE = "FOREX_PAPER_ONLY"
+    EXECUTION_EVENT = "FOREX_PAPER_CYCLE"
+    FILL_PREFIX = "forex-paper"
+    MODE_ERROR_CODE = "MODE_NOT_PAPER"
 
     def __init__(
         self,
@@ -73,9 +78,33 @@ class ForexPaperExecutionEngine:
         selected_contract = sample_contract or build_forex_paper_sample_contract(
             paper_policy=self.policy
         )
-        if not verify_forex_paper_sample_contract(selected_contract):
+        if not self._verify_sample_contract(selected_contract):
             raise TradingValidationError("forex_execution: invalid_sample_contract")
         self.sample_contract = deepcopy(dict(selected_contract))
+
+    @staticmethod
+    def _verify_sample_contract(value: object) -> bool:
+        return verify_forex_paper_sample_contract(value)
+
+    @staticmethod
+    def _sample_contracts_match(left: object, right: object) -> bool:
+        return sample_contracts_match(left, right)
+
+    def _validate_plan(self, plan: Mapping[str, Any]) -> None:
+        if str(plan.get("mode", "")) != self.PLAN_MODE:
+            raise TradingValidationError("forex_plan: paper_mode_required")
+        if bool(plan.get("live_orders_sent")):
+            raise TradingValidationError("forex_plan: live_flag_forbidden")
+
+    def _state_allows_execution(self, state: Mapping[str, Any]) -> bool:
+        return state.get("mode") == self.LEDGER_MODE
+
+    def _plan_matches_state(
+        self,
+        plan: Mapping[str, Any],
+        state: Mapping[str, Any],
+    ) -> bool:
+        return True
 
     def apply_plan(
         self,
@@ -99,10 +128,7 @@ class ForexPaperExecutionEngine:
                 raise TradingValidationError("forex_execution: stale_quote")
             if quote not in rates.quotes:
                 raise TradingValidationError("forex_execution: rate_book_mismatch")
-        if str(plan.get("mode", "")) != "FOREX_PAPER_ONLY":
-            raise TradingValidationError("forex_plan: paper_mode_required")
-        if bool(plan.get("live_orders_sent")):
-            raise TradingValidationError("forex_plan: live_flag_forbidden")
+        self._validate_plan(plan)
         raw_instructions = [
             dict(item) for item in list(plan.get("instructions", []) or [])
             if isinstance(item, Mapping)
@@ -116,7 +142,7 @@ class ForexPaperExecutionEngine:
                 raise TradingValidationError(
                     "forex_plan: sample_contract_required"
                 )
-            if not sample_contracts_match(
+            if not self._sample_contracts_match(
                 provided_contract,
                 self.sample_contract,
             ):
@@ -137,13 +163,23 @@ class ForexPaperExecutionEngine:
             if previous:
                 previous["idempotent_replay"] = True
                 return previous
-            if state.get("mode") != "FOREX_PAPER_ONLY":
+            if not self._state_allows_execution(state):
                 return self._remember_blocked(
-                    state, selected_cycle, "MODE_NOT_PAPER", selected_now
+                    state,
+                    selected_cycle,
+                    self.MODE_ERROR_CODE,
+                    selected_now,
                 )
             if not self.ledger.verify_audit(state):
                 return self._remember_blocked(
                     state, selected_cycle, "AUDIT_CHAIN_INVALID", selected_now
+                )
+            if not self._plan_matches_state(plan, state):
+                return self._remember_blocked(
+                    state,
+                    selected_cycle,
+                    "PLAN_STATE_MISMATCH",
+                    selected_now,
                 )
             self._roll_session(state, selected_now)
             self._mark_positions(state, quotes, selected_now)
@@ -212,7 +248,7 @@ class ForexPaperExecutionEngine:
                 ]
             outcome = {
                 "status": "APPLIED" if executions else "NO_EXECUTION",
-                "mode": "FOREX_PAPER_ONLY",
+                "mode": self.LEDGER_MODE,
                 "cycle_id": selected_cycle,
                 "executions": executions,
                 "rejections": rejections,
@@ -229,7 +265,7 @@ class ForexPaperExecutionEngine:
             state["processed_cycles"] = cycles
             self.ledger.append_event(
                 state,
-                "FOREX_PAPER_CYCLE",
+                self.EXECUTION_EVENT,
                 {
                     "cycle_id": selected_cycle,
                     "execution_count": len(executions),
@@ -342,7 +378,7 @@ class ForexPaperExecutionEngine:
         raw_positions[position.pair.symbol] = stored
         state["positions"] = raw_positions
         fill = {
-            "fill_id": f"forex-paper-{uuid4().hex}",
+            "fill_id": f"{self.FILL_PREFIX}-{uuid4().hex}",
             "action": f"OPEN_{side}",
             **stored,
             "realized_pnl_pln": "0.00",
@@ -383,7 +419,7 @@ class ForexPaperExecutionEngine:
         raw_positions.pop(pair_name, None)
         state["positions"] = raw_positions
         fill = {
-            "fill_id": f"forex-paper-{uuid4().hex}",
+            "fill_id": f"{self.FILL_PREFIX}-{uuid4().hex}",
             "action": f"CLOSE_{position.side}",
             "pair": pair_name,
             "side": position.side,
@@ -558,7 +594,7 @@ class ForexPaperExecutionEngine:
         for event in reversed(list(state.get("audit", []) or [])):
             details = dict(dict(event or {}).get("details", {}) or {})
             if (
-                event.get("event_type") == "FOREX_PAPER_CYCLE"
+                event.get("event_type") == self.EXECUTION_EVENT
                 and details.get("cycle_id") == latest_cycle_id
             ):
                 latest_created_at = str(event.get("created_at", ""))
@@ -574,7 +610,7 @@ class ForexPaperExecutionEngine:
         audited_closed_fills: list[dict[str, Any]] = []
         for raw_event in list(state.get("audit", []) or []):
             event = dict(raw_event or {})
-            if event.get("event_type") != "FOREX_PAPER_CYCLE":
+            if event.get("event_type") != self.EXECUTION_EVENT:
                 continue
             details = dict(event.get("details", {}) or {})
             for raw_fill in list(details.get("executions", []) or []):
@@ -594,7 +630,7 @@ class ForexPaperExecutionEngine:
         loss_streak_safety = self._loss_streak_safety(state, selected_now)
         weekly_loss_safety = self._weekly_loss_safety(state, selected_now)
         return {
-            "status": "READY" if state.get("mode") == "FOREX_PAPER_ONLY" else "BLOCKED",
+            "status": "READY" if self._state_allows_execution(state) else "BLOCKED",
             "mode": str(state.get("mode", "")),
             "balance_pln": _text(balance),
             "unrealized_pnl_pln": _text(unrealized),
@@ -731,7 +767,7 @@ class ForexPaperExecutionEngine:
         audited_closed: list[dict[str, Any]] = []
         for raw_event in list(state.get("audit", []) or []):
             event = dict(raw_event) if isinstance(raw_event, Mapping) else {}
-            if event.get("event_type") != "FOREX_PAPER_CYCLE":
+            if event.get("event_type") != self.EXECUTION_EVENT:
                 continue
             details = dict(event.get("details", {}) or {})
             for raw_fill in list(details.get("executions", []) or []):
@@ -971,13 +1007,16 @@ class ForexPaperExecutionEngine:
         state["session_date"] = session_date
         state["daily_pnl_pln"] = "0"
 
-    @staticmethod
     def _remember_blocked(
-        state: dict[str, Any], cycle_id: str, code: str, now: datetime
+        self,
+        state: dict[str, Any],
+        cycle_id: str,
+        code: str,
+        now: datetime,
     ) -> dict[str, Any]:
         outcome = {
             "status": "BLOCKED",
-            "mode": "FOREX_PAPER_ONLY",
+            "mode": self.LEDGER_MODE,
             "cycle_id": cycle_id,
             "executions": [],
             "rejections": [{"pair": "", "code": code}],

@@ -18,6 +18,9 @@ class CloudForexPaperInfrastructureTests(unittest.TestCase):
         self.assertIn("replicaCompletionCount: 1", bicep)
         self.assertIn("JARVIS_OS_FOREX_PRIMARY_PROVIDER", bicep)
         self.assertIn("value: 'TWELVE_DATA_CLOUD'", bicep)
+        self.assertIn("JARVIS_OS_FOREX_BASE_NEW_ENTRIES_ENABLED", bicep)
+        self.assertIn("JARVIS_OS_FOREX_V3_SHADOW_SIMULATION_ENABLED", bicep)
+        self.assertIn("JARVIS_OS_FOREX_V3_SHADOW_REVIEW_FINGERPRINT", bicep)
         self.assertNotIn("OANDA_PRACTICE_TOKEN", bicep)
 
     def test_state_is_private_and_uses_managed_identity(self) -> None:

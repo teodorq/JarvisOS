@@ -53,12 +53,23 @@ class CloudForexPaperJobTests(unittest.TestCase):
             "status": "PAPER_CYCLE_COMPLETED",
             "cycle_id": "azure-cycle",
             "paper": {"account": {"position_count": 2}},
+            "v3_shadow_simulation": {
+                "status": "SHADOW_SIMULATION_CYCLE_COMPLETED",
+                "account": {
+                    "position_count": 1,
+                    "closed_trade_count": 3,
+                    "realized_pnl_pln": "12.34",
+                },
+            },
             "broker_orders_sent": True,
             "live_orders_sent": True,
             "real_money_access": True,
             "secret": "must-not-leak",
         })
         self.assertEqual(result["position_count"], 2)
+        self.assertEqual(result["v3_position_count"], 1)
+        self.assertEqual(result["v3_closed_trade_count"], 3)
+        self.assertEqual(result["v3_realized_pnl_pln"], "12.34")
         self.assertFalse(result["broker_orders_sent"])
         self.assertFalse(result["live_orders_sent"])
         self.assertFalse(result["real_money_access"])
