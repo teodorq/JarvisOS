@@ -404,6 +404,7 @@ class ForexFactoryEconomicCalendarReadOnlySource:
         if not isinstance(payload, list) or not 1 <= len(payload) <= 1_000:
             raise TradingValidationError("forex_factory_calendar: invalid_response")
         events: list[EconomicEvent] = []
+        source_times: list[datetime] = []
         for raw in payload:
             row = _mapping(raw, "forex_factory_calendar: invalid_event")
             currency = str(row.get("country", "")).strip().upper()
@@ -438,13 +439,21 @@ class ForexFactoryEconomicCalendarReadOnlySource:
                 block_start_at=block_start,
                 block_end_at=block_end,
             ))
+            source_times.append(source_time)
         events.sort(key=lambda item: item.event_at)
         if not events:
             raise TradingValidationError("forex_factory_calendar: coverage_missing")
-        anchor = events[0].event_at
+        anchor = min(source_times)
         start_day = anchor.date() - timedelta(days=(anchor.weekday() + 1) % 7)
-        coverage_start = datetime.combine(start_day, time.min, tzinfo=timezone.utc)
-        coverage_end = coverage_start + timedelta(days=7)
+        source_start = datetime.combine(
+            start_day,
+            time.min,
+            tzinfo=anchor.tzinfo,
+        )
+        coverage_start = source_start.astimezone(timezone.utc)
+        coverage_end = (source_start + timedelta(days=7)).astimezone(
+            timezone.utc
+        )
         if any(
             not coverage_start <= event.event_at < coverage_end for event in events
         ):

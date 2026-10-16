@@ -564,6 +564,36 @@ class ProviderParserTests(unittest.TestCase):
             datetime(2026, 9, 1, 4, 0, tzinfo=UTC),
         )
 
+    def test_forex_factory_week_uses_source_timezone_boundaries(self) -> None:
+        source = ForexFactoryEconomicCalendarReadOnlySource(lambda request: [
+            {
+                "date": "2026-10-11T19:00:00-04:00",
+                "country": "JPY",
+                "title": "Bank Holiday",
+                "impact": "Holiday",
+            },
+            {
+                "date": "2026-10-17T20:00:00-04:00",
+                "country": "AUD",
+                "title": "Weekend speech",
+                "impact": "Low",
+            },
+        ])
+
+        snapshot = source.fetch_calendar(
+            now=datetime(2026, 10, 16, 17, 0, tzinfo=UTC),
+        )
+
+        self.assertEqual(
+            snapshot.coverage_start,
+            datetime(2026, 10, 11, 4, 0, tzinfo=UTC),
+        )
+        self.assertEqual(
+            snapshot.coverage_end,
+            datetime(2026, 10, 18, 4, 0, tzinfo=UTC),
+        )
+        self.assertEqual(len(snapshot.events), 2)
+
     def test_forex_factory_unknown_impact_still_fails_closed(self) -> None:
         source = ForexFactoryEconomicCalendarReadOnlySource(lambda request: [{
             "date": NOW.isoformat(),
