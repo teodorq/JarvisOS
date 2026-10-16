@@ -8,7 +8,6 @@ from typing import Any
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
-    QAbstractItemView,
     QFrame,
     QGridLayout,
     QHeaderView,
@@ -26,6 +25,7 @@ from app.gui.business_widgets import MetricCard, SectionCard, StatusPill
 from app.gui.forex_pair_results_table import ForexPairResultsTable
 from app.gui.forex_performance_review_view import forex_performance_review_view
 from app.gui.forex_paper_safety_view import forex_paper_safety_view
+from app.gui.forex_paper_table_style import configure_forex_table
 from app.gui.forex_protection_view import forex_protection_view
 from app.gui.forex_runtime_cycle_view import forex_runtime_cycle_text
 from app.gui.forex_v2_research_view import forex_v2_research_text
@@ -111,7 +111,7 @@ class ForexPaperPage(QWidget):
         )
         self.table = QTableWidget(0, len(self.HEADERS))
         self.table.setObjectName("ForexPaperPositions")
-        self._configure_table(self.table)
+        configure_forex_table(self.table)
         self.table.setHorizontalHeaderLabels(self.HEADERS)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         card.content_layout.addWidget(self.table)
@@ -127,7 +127,7 @@ class ForexPaperPage(QWidget):
         )
         self.history_table = QTableWidget(0, len(self.HISTORY_HEADERS))
         self.history_table.setObjectName("ForexPaperHistory")
-        self._configure_table(self.history_table)
+        configure_forex_table(self.history_table)
         self.history_table.setHorizontalHeaderLabels(self.HISTORY_HEADERS)
         header = self.history_table.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.ResizeToContents)
@@ -144,48 +144,9 @@ class ForexPaperPage(QWidget):
             "Postęp każdej próbki PAPER; status nigdy nie wybiera pary automatycznie.",
         )
         self.pair_table = ForexPairResultsTable()
-        self._configure_table(self.pair_table)
+        configure_forex_table(self.pair_table)
         card.content_layout.addWidget(self.pair_table)
         return card
-
-    @staticmethod
-    def _configure_table(table: QTableWidget) -> None:
-        table.setStyleSheet("""
-            QTableWidget {
-                background-color: #08101C;
-                alternate-background-color: #0B1626;
-                color: #E8EEF8;
-                border: 1px solid #22314A;
-                border-radius: 8px;
-                selection-background-color: #174B66;
-                selection-color: #FFFFFF;
-                outline: none;
-            }
-            QTableWidget::item {
-                border-bottom: 1px solid #17263D;
-                padding: 7px;
-            }
-            QHeaderView::section {
-                background-color: #111D2F;
-                color: #8FDCFF;
-                border: none;
-                border-right: 1px solid #22314A;
-                border-bottom: 1px solid #2B4568;
-                padding: 8px;
-                font-weight: 700;
-            }
-            QTableCornerButton::section {
-                background-color: #111D2F;
-                border: none;
-            }
-        """)
-        table.verticalHeader().setVisible(False)
-        table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        table.setAlternatingRowColors(True)
-        table.setShowGrid(False)
-        table.verticalHeader().setDefaultSectionSize(42)
-        table.setMinimumHeight(190)
 
     def _safety_card(self) -> SectionCard:
         card = SectionCard("Bezpieczeństwo", "Prawdziwe zlecenia pozostają twardo wyłączone.")

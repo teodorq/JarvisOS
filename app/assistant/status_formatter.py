@@ -91,8 +91,9 @@ class AssistantStatusFormatter:
             24: "24 godziny",
         }.get(context_hours, f"{context_hours} godzin")
         result = (
-            f"Historia sterowania zawiera {status['turn_count']} z maksymalnie "
-            f"{status['context_limit']} ostatnich wymian. W swobodnej rozmowie "
+            f"Pamiętam {status['turn_count']} z maksymalnie "
+            f"{status['context_limit']} ostatnich wymian sterowania. "
+            "W swobodnej rozmowie "
             f"łączę do {reply_limit} ostatnich wymian i zachowuję bieżący temat "
             f"przez {hour_label}. "
             f"Ostatnio wykonywałem: {cls._intent_label(status['last_intent'])}."
