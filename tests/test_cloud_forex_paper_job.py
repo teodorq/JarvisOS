@@ -52,6 +52,19 @@ class CloudForexPaperJobTests(unittest.TestCase):
         result = _public_result({
             "status": "PAPER_CYCLE_COMPLETED",
             "cycle_id": "azure-cycle",
+            "observation": {
+                "status": "DATA_BLOCKED",
+                "fully_cross_checked": False,
+                "positions_unchanged": True,
+                "opening_blocks": [
+                    "FOREX_OBSERVATION:_EXAMPLE_FAILURE",
+                    "unsafe value with spaces",
+                ],
+                "execution": {
+                    "status": "NOT_EXECUTED",
+                    "reason": "FOREX_OBSERVATION:_EXAMPLE_FAILURE",
+                },
+            },
             "paper": {"account": {"position_count": 2}},
             "v3_shadow_simulation": {
                 "status": "SHADOW_SIMULATION_CYCLE_COMPLETED",
@@ -70,6 +83,17 @@ class CloudForexPaperJobTests(unittest.TestCase):
         self.assertEqual(result["v3_position_count"], 1)
         self.assertEqual(result["v3_closed_trade_count"], 3)
         self.assertEqual(result["v3_realized_pnl_pln"], "12.34")
+        self.assertEqual(result["observation_status"], "DATA_BLOCKED")
+        self.assertEqual(
+            result["observation_reason"],
+            "FOREX_OBSERVATION:_EXAMPLE_FAILURE",
+        )
+        self.assertFalse(result["observation_fully_cross_checked"])
+        self.assertTrue(result["observation_positions_unchanged"])
+        self.assertEqual(
+            result["observation_opening_blocks"],
+            ["FOREX_OBSERVATION:_EXAMPLE_FAILURE"],
+        )
         self.assertFalse(result["broker_orders_sent"])
         self.assertFalse(result["live_orders_sent"])
         self.assertFalse(result["real_money_access"])

@@ -24,6 +24,7 @@ from app.trading.forex_activity_journal import ForexPaperActivityJournal
 _STORAGE_ACCOUNT = re.compile(r"^[a-z0-9]{3,24}$")
 _CONTAINER = re.compile(r"^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])$")
 _BLOB = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$")
+_DIAGNOSTIC_CODE = re.compile(r"^[A-Z0-9_:.-]{1,160}$")
 _STATE_ROOT = PurePosixPath("data/trading")
 
 
@@ -209,12 +210,40 @@ def _public_result(result: dict[str, Any]) -> dict[str, Any]:
     v3 = v3 if isinstance(v3, dict) else {}
     v3_account = v3.get("account")
     v3_account = v3_account if isinstance(v3_account, dict) else {}
+    observation = result.get("observation")
+    observation = observation if isinstance(observation, dict) else {}
+    observation_execution = observation.get("execution")
+    observation_execution = (
+        observation_execution if isinstance(observation_execution, dict) else {}
+    )
+    opening_blocks = observation.get("opening_blocks")
+    opening_blocks = opening_blocks if isinstance(opening_blocks, list) else []
+    safe_opening_blocks = [
+        code
+        for code in (str(value) for value in opening_blocks[:12])
+        if _DIAGNOSTIC_CODE.fullmatch(code)
+    ]
+    raw_observation_reason = str(observation_execution.get("reason", ""))
+    observation_reason = (
+        raw_observation_reason
+        if _DIAGNOSTIC_CODE.fullmatch(raw_observation_reason)
+        else ""
+    )
     return {
         "status": str(result.get("status", "UNKNOWN")),
         "mode": str(result.get("mode", "AUTONOMOUS_AZURE_FOREX_PAPER")),
         "cycle_id": str(result.get("cycle_id", "")),
         "observed_at": str(result.get("observed_at", "")),
         "reason": str(result.get("reason", "")),
+        "observation_status": str(observation.get("status", "")),
+        "observation_reason": observation_reason,
+        "observation_fully_cross_checked": (
+            observation.get("fully_cross_checked") is True
+        ),
+        "observation_positions_unchanged": (
+            observation.get("positions_unchanged") is True
+        ),
+        "observation_opening_blocks": safe_opening_blocks,
         "position_count": int(account.get("position_count", 0) or 0),
         "v3_status": str(v3.get("status", "")),
         "v3_position_count": int(v3_account.get("position_count", 0) or 0),

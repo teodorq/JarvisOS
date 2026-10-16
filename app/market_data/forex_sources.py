@@ -284,9 +284,11 @@ class TwelveDataCloudMarketSource:
                 pair=pair,
                 bid=midpoint - half_spread,
                 ask=midpoint + half_spread,
-                timestamp=closed[-1].timestamp + timedelta(
-                    minutes=self.INTERVAL_MINUTES
-                ),
+                # This is a synthetic PAPER quote created at collection time
+                # from the latest verified closed bar.  The underlying bar time
+                # remains preserved in ``histories`` and is independently
+                # freshness-checked by the gateway.
+                timestamp=selected_now,
             )
             histories[pair.symbol] = closed
         return quotes, histories

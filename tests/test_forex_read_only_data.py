@@ -498,15 +498,16 @@ class ProviderParserTests(unittest.TestCase):
     def test_cloud_market_uses_closed_bars_and_conservative_spread(self) -> None:
         fake = FakeForexTransport()
         pair = major_pair("EUR_USD")
+        captured_at = NOW + timedelta(minutes=12)
         quotes, histories = TwelveDataCloudMarketSource(
             "key",
             fake,
-        ).fetch_market((pair,), bar_count=31, now=NOW)
+        ).fetch_market((pair,), bar_count=31, now=captured_at)
         quote = quotes[pair.symbol]
         self.assertEqual(len(histories[pair.symbol]), 31)
-        self.assertEqual(quote.timestamp, NOW)
+        self.assertEqual(quote.timestamp, captured_at)
         self.assertEqual(quote.spread_pips, Decimal("2.5"))
-        self.assertLessEqual(histories[pair.symbol][-1].timestamp, NOW)
+        self.assertLessEqual(histories[pair.symbol][-1].timestamp, captured_at)
 
     def test_fmp_cloud_cross_check_requires_complete_universe(self) -> None:
         fake = FakeForexTransport()
