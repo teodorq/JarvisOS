@@ -125,7 +125,7 @@ try {
         $LASTEXITCODE -ne 0 -or
         $Verified.state -ne "Succeeded" -or
         $Verified.trigger -ne "Schedule" -or
-        $Verified.cron -ne "2,17,32,47 * * * *" -or
+        $Verified.cron -ne "2 * * * *" -or
         $Verified.identity -ne "SystemAssigned" -or
         $Verified.image -ne $ContainerImage
     ) {

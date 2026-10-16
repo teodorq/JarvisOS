@@ -99,11 +99,15 @@ class FakeForexTransport:
                 "timestamp": int(NOW.timestamp()),
             }
         if parsed.hostname == FmpForexReadOnlySource.HOST:
+            symbol = query["symbol"][0]
+            pair = major_pair(
+                f"{symbol[:3]}_{symbol[3:]}"
+            )
             return [{
-                "symbol": pair.symbol.replace("_", ""),
+                "symbol": symbol,
                 "price": str(PRICES[pair.symbol]),
                 "timestamp": int(NOW.timestamp()),
-            } for pair in MAJOR_FOREX_PAIRS]
+            }]
         if parsed.hostname == NbpPlnReadOnlySource.HOST:
             return {
                 "table": "A",
@@ -505,19 +509,31 @@ class ProviderParserTests(unittest.TestCase):
         self.assertLessEqual(histories[pair.symbol][-1].timestamp, NOW)
 
     def test_fmp_cloud_cross_check_requires_complete_universe(self) -> None:
+        fake = FakeForexTransport()
         rates = FmpForexReadOnlySource(
             "key",
-            FakeForexTransport(),
+            fake,
         ).fetch_rates(MAJOR_FOREX_PAIRS, fetched_at=NOW)
         self.assertEqual(set(rates), {pair.symbol for pair in MAJOR_FOREX_PAIRS})
         self.assertTrue(all(rate.source == "FMP" for rate in rates.values()))
+        calls = [
+            call for call in fake.calls
+            if urlsplit(call.url).hostname == FmpForexReadOnlySource.HOST
+        ]
+        self.assertEqual(len(calls), len(MAJOR_FOREX_PAIRS))
+        self.assertTrue(all(
+            urlsplit(call.url).path == "/stable/quote-short"
+            for call in calls
+        ))
 
     def test_fmp_short_payload_uses_bounded_fetch_timestamp(self) -> None:
-        def transport(_request: PreparedJsonRequest) -> object:
+        def transport(request: PreparedJsonRequest) -> object:
+            query = parse_qs(urlsplit(request.url).query)
+            symbol = query["symbol"][0]
             return [{
-                "symbol": pair.symbol.replace("_", ""),
-                "price": str(PRICES[pair.symbol]),
-            } for pair in MAJOR_FOREX_PAIRS]
+                "symbol": symbol,
+                "price": str(PRICES[f"{symbol[:3]}_{symbol[3:]}"]),
+            }]
 
         rates = FmpForexReadOnlySource("key", transport).fetch_rates(
             MAJOR_FOREX_PAIRS,

@@ -70,7 +70,8 @@ resource paperJob 'Microsoft.App/jobs@2024-03-01' = {
       replicaTimeout: 600
       replicaRetryLimit: 1
       scheduleTriggerConfig: {
-        cronExpression: '2,17,32,47 * * * *'
+        // Seven FMP quote checks per run keep the free 250-call daily quota bounded.
+        cronExpression: '2 * * * *'
         parallelism: 1
         replicaCompletionCount: 1
       }

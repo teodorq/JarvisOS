@@ -13,7 +13,7 @@ class CloudForexPaperInfrastructureTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn("resource paperJob 'Microsoft.App/jobs@2024-03-01'", bicep)
-        self.assertIn("cronExpression: '2,17,32,47 * * * *'", bicep)
+        self.assertIn("cronExpression: '2 * * * *'", bicep)
         self.assertIn("parallelism: 1", bicep)
         self.assertIn("replicaCompletionCount: 1", bicep)
         self.assertIn("JARVIS_OS_FOREX_PRIMARY_PROVIDER", bicep)
