@@ -212,6 +212,10 @@ def _public_result(result: dict[str, Any]) -> dict[str, Any]:
     v3_account = v3_account if isinstance(v3_account, dict) else {}
     observation = result.get("observation")
     observation = observation if isinstance(observation, dict) else {}
+    observation_data = observation.get("data")
+    observation_data = (
+        observation_data if isinstance(observation_data, dict) else {}
+    )
     observation_execution = observation.get("execution")
     observation_execution = (
         observation_execution if isinstance(observation_execution, dict) else {}
@@ -229,6 +233,18 @@ def _public_result(result: dict[str, Any]) -> dict[str, Any]:
         if _DIAGNOSTIC_CODE.fullmatch(raw_observation_reason)
         else ""
     )
+    raw_calendar_state = str(observation_data.get("calendar_source_state", ""))
+    calendar_source_state = (
+        raw_calendar_state
+        if _DIAGNOSTIC_CODE.fullmatch(raw_calendar_state)
+        else ""
+    )
+    raw_nbp_state = str(observation_data.get("nbp_source_state", ""))
+    nbp_source_state = (
+        raw_nbp_state
+        if _DIAGNOSTIC_CODE.fullmatch(raw_nbp_state)
+        else ""
+    )
     return {
         "status": str(result.get("status", "UNKNOWN")),
         "mode": str(result.get("mode", "AUTONOMOUS_AZURE_FOREX_PAPER")),
@@ -244,6 +260,8 @@ def _public_result(result: dict[str, Any]) -> dict[str, Any]:
             observation.get("positions_unchanged") is True
         ),
         "observation_opening_blocks": safe_opening_blocks,
+        "calendar_source_state": calendar_source_state,
+        "nbp_source_state": nbp_source_state,
         "position_count": int(account.get("position_count", 0) or 0),
         "v3_status": str(v3.get("status", "")),
         "v3_position_count": int(v3_account.get("position_count", 0) or 0),

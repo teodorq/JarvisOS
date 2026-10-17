@@ -64,6 +64,11 @@ class CloudForexPaperJobTests(unittest.TestCase):
                     "status": "NOT_EXECUTED",
                     "reason": "FOREX_OBSERVATION:_EXAMPLE_FAILURE",
                 },
+                "data": {
+                    "calendar_source_state": "CACHE_FAILSAFE",
+                    "nbp_source_state": "CACHE_FALLBACK",
+                    "ignored": "must-not-leak",
+                },
             },
             "paper": {"account": {"position_count": 2}},
             "v3_shadow_simulation": {
@@ -94,10 +99,26 @@ class CloudForexPaperJobTests(unittest.TestCase):
             result["observation_opening_blocks"],
             ["FOREX_OBSERVATION:_EXAMPLE_FAILURE"],
         )
+        self.assertEqual(result["calendar_source_state"], "CACHE_FAILSAFE")
+        self.assertEqual(result["nbp_source_state"], "CACHE_FALLBACK")
         self.assertFalse(result["broker_orders_sent"])
         self.assertFalse(result["live_orders_sent"])
         self.assertFalse(result["real_money_access"])
         self.assertNotIn("secret", result)
+        self.assertNotIn("ignored", result)
+
+    def test_public_result_drops_unsafe_reference_source_states(self) -> None:
+        result = _public_result({
+            "observation": {
+                "data": {
+                    "calendar_source_state": "unsafe state with spaces",
+                    "nbp_source_state": {"secret": "no"},
+                },
+            },
+        })
+
+        self.assertEqual(result["calendar_source_state"], "")
+        self.assertEqual(result["nbp_source_state"], "")
 
 
 if __name__ == "__main__":
