@@ -89,6 +89,13 @@ class CloudOperationsWorkflowTests(unittest.TestCase):
         )
         self.assertIn("- .dockerignore", source)
 
+    def test_cloud_publish_requires_owner_paper_status_tests(self) -> None:
+        workflow = Path(".github/workflows/cloud-image.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("tests/test_remote_forex_status.py", workflow)
+        self.assertIn("Test owner PAPER status", workflow)
+
     def test_failed_deploy_restores_previous_healthy_image(self) -> None:
         deploy = Path(".github/workflows/cloud-image.yml").read_text(
             encoding="utf-8"

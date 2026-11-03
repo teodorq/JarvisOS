@@ -31,9 +31,14 @@ class CloudForexPaperInfrastructureTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn("name: 'forex-paper'", paper)
+        self.assertIn("name: 'forex-paper-status'", paper)
         self.assertIn("publicAccess: 'None'", paper)
         self.assertIn("ba92f5b4-2d11-453d-a403-e96b0029c9fe", paper)
+        self.assertIn("2a2b9908-6ea1-4ae2-8e65-a410df84e7d1", paper)
         self.assertIn("principalId: paperJob.identity.principalId", paper)
+        self.assertIn("principalId: plannerPrincipalId", paper)
+        self.assertIn("scope: paperStatusContainer", paper)
+        self.assertIn("JARVIS_OS_FOREX_STATUS_CONTAINER", paper + main)
         self.assertIn("allowSharedKeyAccess: false", main)
         self.assertNotIn("FOREX_CLOUD_STORAGE_CONNECTION", paper + main)
 
@@ -55,6 +60,14 @@ class CloudForexPaperInfrastructureTests(unittest.TestCase):
                 r"@secure\(\)\s+@description\([^\n]+\)\s+param "
                 r"fmpApiKey string",
             )
+
+    def test_standalone_deployer_passes_planner_identity(self) -> None:
+        script = (
+            ROOT / "tools" / "deploy_cloud_forex_paper.ps1"
+        ).read_text(encoding="utf-8")
+        self.assertIn('--query "identity.principalId"', script)
+        self.assertIn('"plannerPrincipalId=$PlannerPrincipalId"', script)
+        self.assertIn('statusContainer -ne "forex-paper-status"', script)
 
 
 if __name__ == "__main__":

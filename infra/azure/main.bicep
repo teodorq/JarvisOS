@@ -149,6 +149,14 @@ resource plannerApp 'Microsoft.App/containerApps@2024-03-01' = {
               value: commandsQueue.name
             }
             {
+              name: 'JARVIS_OS_FOREX_STATUS_CONTAINER'
+              value: 'forex-paper-status'
+            }
+            {
+              name: 'JARVIS_OS_FOREX_STATUS_BLOB'
+              value: 'status/latest.json'
+            }
+            {
               name: 'JARVIS_OS_CLOUD_REQUESTS_PER_MINUTE'
               value: '30'
             }
@@ -322,6 +330,7 @@ module cloudPaper './paper-job.bicep' = {
     buildSha: buildSha
     storageAccountName: remoteStorage.name
     managedEnvironmentName: managedEnvironment.name
+    plannerPrincipalId: plannerApp.identity.principalId
     twelveDataApiKey: twelveDataApiKey
     fmpApiKey: fmpApiKey
   }
@@ -329,7 +338,9 @@ module cloudPaper './paper-job.bicep' = {
 output endpoint string = 'https://${plannerApp.properties.configuration.ingress.fqdn}'
 output healthUrl string = 'https://${plannerApp.properties.configuration.ingress.fqdn}/health'
 output phoneUrl string = 'https://${plannerApp.properties.configuration.ingress.fqdn}/phone'
+output tradingUrl string = 'https://${plannerApp.properties.configuration.ingress.fqdn}/trading'
 output remoteStorageAccountName string = remoteStorage.name
 output remoteQueueName string = commandsQueue.name
 output paperJobName string = cloudPaper.outputs.paperJobName
 output paperStateContainerName string = cloudPaper.outputs.paperStateContainerName
+output paperStatusContainerName string = cloudPaper.outputs.paperStatusContainerName

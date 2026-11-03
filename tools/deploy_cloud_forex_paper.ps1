@@ -97,6 +97,21 @@ try {
     if ($LASTEXITCODE -ne 0 -or $StorageAccount -notmatch '^[a-z0-9]{3,24}$') {
         throw "Nie udało się bezpiecznie odczytać konta Storage JARVIS OS."
     }
+    $PlannerPrincipalId = (& az containerapp show `
+        --name $PlannerName `
+        --resource-group $ResourceGroup `
+        --query "identity.principalId" `
+        --output tsv `
+        --only-show-errors).Trim()
+    if (
+        $LASTEXITCODE -ne 0 -or
+        $PlannerPrincipalId -notmatch (
+            '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-' +
+            '[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+        )
+    ) {
+        throw "Nie udało się bezpiecznie odczytać tożsamości planera."
+    }
 
     Invoke-Azure @(
         "deployment", "group", "create",
@@ -109,6 +124,7 @@ try {
         "buildSha=$BuildSha",
         "storageAccountName=$StorageAccount",
         "managedEnvironmentName=jarvis-os-env",
+        "plannerPrincipalId=$PlannerPrincipalId",
         "twelveDataApiKey=$TwelveDataKey",
         "fmpApiKey=$FmpKey",
         "--only-show-errors",
@@ -118,7 +134,7 @@ try {
     $Verified = (& az containerapp job show `
         --name $JobName `
         --resource-group $ResourceGroup `
-        --query "{state:properties.provisioningState,trigger:properties.configuration.triggerType,cron:properties.configuration.scheduleTriggerConfig.cronExpression,identity:identity.type,image:properties.template.containers[0].image}" `
+        --query "{state:properties.provisioningState,trigger:properties.configuration.triggerType,cron:properties.configuration.scheduleTriggerConfig.cronExpression,identity:identity.type,image:properties.template.containers[0].image,statusContainer:properties.template.containers[0].env[?name=='JARVIS_OS_FOREX_STATUS_CONTAINER'].value | [0],statusBlob:properties.template.containers[0].env[?name=='JARVIS_OS_FOREX_STATUS_BLOB'].value | [0]}" `
         --output json `
         --only-show-errors) | ConvertFrom-Json
     if (
@@ -127,7 +143,9 @@ try {
         $Verified.trigger -ne "Schedule" -or
         $Verified.cron -ne "2 * * * *" -or
         $Verified.identity -ne "SystemAssigned" -or
-        $Verified.image -ne $ContainerImage
+        $Verified.image -ne $ContainerImage -or
+        $Verified.statusContainer -ne "forex-paper-status" -or
+        $Verified.statusBlob -ne "status/latest.json"
     ) {
         throw "Zadanie PAPER nie przeszło kontroli konfiguracji."
     }

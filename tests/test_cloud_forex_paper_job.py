@@ -52,6 +52,7 @@ class CloudForexPaperJobTests(unittest.TestCase):
         result = _public_result({
             "status": "PAPER_CYCLE_COMPLETED",
             "cycle_id": "azure-cycle",
+            "observed_at": "2026-11-03T10:00:00+00:00",
             "observation": {
                 "status": "DATA_BLOCKED",
                 "fully_cross_checked": False,
@@ -76,7 +77,16 @@ class CloudForexPaperJobTests(unittest.TestCase):
                 "account": {
                     "position_count": 1,
                     "closed_trade_count": 3,
+                    "balance_pln": "10012.34",
+                    "equity_pln": "10014.00",
+                    "unrealized_pnl_pln": "1.66",
                     "realized_pnl_pln": "12.34",
+                    "winning_trade_count": 2,
+                    "losing_trade_count": 1,
+                    "breakeven_trade_count": 0,
+                    "win_rate_pct": "66.67",
+                    "open_positions": [],
+                    "performance": {"status": "COLLECTING_SAMPLE"},
                 },
             },
             "broker_orders_sent": True,
@@ -88,6 +98,12 @@ class CloudForexPaperJobTests(unittest.TestCase):
         self.assertEqual(result["v3_position_count"], 1)
         self.assertEqual(result["v3_closed_trade_count"], 3)
         self.assertEqual(result["v3_realized_pnl_pln"], "12.34")
+        self.assertEqual(result["v3_balance_pln"], "10012.34")
+        self.assertEqual(result["v3_equity_pln"], "10014.00")
+        self.assertEqual(result["v3_winning_trade_count"], 2)
+        self.assertEqual(
+            result["v3_performance"]["status"], "COLLECTING_SAMPLE"
+        )
         self.assertEqual(result["observation_status"], "DATA_BLOCKED")
         self.assertEqual(
             result["observation_reason"],

@@ -103,6 +103,14 @@ def _app() -> dict:
                                 "value": "commands",
                             },
                             {
+                                "name": "JARVIS_OS_FOREX_STATUS_CONTAINER",
+                                "value": "forex-paper-status",
+                            },
+                            {
+                                "name": "JARVIS_OS_FOREX_STATUS_BLOB",
+                                "value": "status/latest.json",
+                            },
+                            {
                                 "name": "JARVIS_OS_CLOUD_REQUESTS_PER_MINUTE",
                                 "value": "30",
                             },

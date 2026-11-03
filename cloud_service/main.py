@@ -34,10 +34,18 @@ from cloud_service.phone_ui import (
     PHONE_OFFLINE_PAGE,
     PHONE_SERVICE_WORKER,
     PHONE_START_PAGE,
+    forex_status_page,
     phone_diagnostics_page,
     phone_login_complete_page,
 )
 from cloud_service.phone_power_countdown import PHONE_PAGE
+from cloud_service.forex_status_store import (
+    ForexStatusNotReady,
+    ForexStatusStore,
+    ForexStatusStoreError,
+    forex_status_store_from_environment,
+    forex_status_view,
+)
 from cloud_service.remote_store import (
     RemoteCommandStore,
     RemoteStoreConflict,
@@ -49,7 +57,7 @@ from cloud_service.remote_store import (
 
 
 SERVICE_NAME = "jarvis-os-cloud-planner"
-SERVICE_VERSION = "0.9.5"
+SERVICE_VERSION = "0.10.0"
 MAX_BODY_BYTES = 16_384
 
 
@@ -148,6 +156,7 @@ class JarvisOSCloudServer(ThreadingHTTPServer):
         service: PlannerService,
         rate_limiter: PlanRateLimiter | None = None,
         remote_store: RemoteCommandStore | None = None,
+        forex_status_store: ForexStatusStore | None = None,
     ) -> None:
         self.config = config
         self.planner_service = service
@@ -155,6 +164,7 @@ class JarvisOSCloudServer(ThreadingHTTPServer):
             config.requests_per_minute
         )
         self.remote_store = remote_store
+        self.forex_status_store = forex_status_store
         super().__init__(server_address, JarvisOSCloudHandler)
 
 
@@ -176,7 +186,16 @@ class JarvisOSCloudHandler(BaseHTTPRequestHandler):
                 "remote_configured": self._remote_ready(),
                 "remote_transport": self._remote_transport(),
                 "remote_access_verified": self._remote_access_verified(),
+                "forex_status_configured": bool(
+                    self.server.forex_status_store
+                ),
             })
+            return
+        if parsed.path == "/trading":
+            self._handle_forex_status_page()
+            return
+        if parsed.path == "/v1/forex/status":
+            self._handle_forex_status_api()
             return
         if parsed.path == "/phone":
             self._handle_phone_page()
@@ -678,6 +697,68 @@ class JarvisOSCloudHandler(BaseHTTPRequestHandler):
             {"name": name or "Konto Microsoft", "session_minutes": 60},
         )
 
+    def _read_forex_status(self) -> dict[str, Any]:
+        if self.server.forex_status_store is None:
+            raise ForexStatusNotReady("forex_status: not_configured")
+        return forex_status_view(self.server.forex_status_store.read())
+
+    def _handle_forex_status_api(self) -> None:
+        if not self._phone_identity_authorized():
+            self._json(HTTPStatus.UNAUTHORIZED, {"error": "unauthorized"})
+            return
+        allowed, retry_after = self.server.rate_limiter.allow(
+            "forex:" + self.client_address[0]
+        )
+        if not allowed:
+            self._json(
+                HTTPStatus.TOO_MANY_REQUESTS,
+                {"error": "rate_limited"},
+                headers={"Retry-After": str(retry_after)},
+            )
+            return
+        try:
+            snapshot = self._read_forex_status()
+        except ForexStatusNotReady:
+            self._json(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"error": "forex_status_not_ready"},
+            )
+            return
+        except ForexStatusStoreError:
+            self._json(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"error": "forex_status_unavailable"},
+            )
+            return
+        self._json(HTTPStatus.OK, snapshot)
+
+    def _handle_forex_status_page(self) -> None:
+        principal_id = self.headers.get(
+            "X-MS-CLIENT-PRINCIPAL-ID", ""
+        ).strip()
+        if not principal_id:
+            self._html(
+                PHONE_LOGIN_PAGE.replace("%2Fphone", "%2Ftrading")
+            )
+            return
+        if not self._phone_identity_authorized():
+            self._html(
+                PHONE_FORBIDDEN_PAGE.replace(
+                    'href="/mobile-start"', 'href="/mobile-logout"'
+                ),
+                status=HTTPStatus.FORBIDDEN,
+            )
+            return
+        try:
+            snapshot = self._read_forex_status()
+        except ForexStatusStoreError:
+            self._html(
+                forex_status_page(None, unavailable=True),
+                status=HTTPStatus.SERVICE_UNAVAILABLE,
+            )
+            return
+        self._html(forex_status_page(snapshot))
+
     @staticmethod
     def _device_from_query(parsed) -> str:
         value = parse_qs(parsed.query).get("device_id", [""])[0]
@@ -856,6 +937,7 @@ def build_server(
     service: PlannerService | None = None,
     rate_limiter: PlanRateLimiter | None = None,
     remote_store: RemoteCommandStore | None = None,
+    forex_status_store: ForexStatusStore | None = None,
 ) -> JarvisOSCloudServer:
     selected_config = config or ServiceConfig.from_environment()
     return JarvisOSCloudServer(
@@ -864,6 +946,11 @@ def build_server(
         service or PlannerService(),
         rate_limiter=rate_limiter,
         remote_store=remote_store if remote_store is not None else remote_store_from_environment(),
+        forex_status_store=(
+            forex_status_store
+            if forex_status_store is not None
+            else forex_status_store_from_environment()
+        ),
     )
 
 

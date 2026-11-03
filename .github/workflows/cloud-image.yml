@@ -10,6 +10,7 @@ on:
       - tests/test_cloud*.py
       - tests/test_remote_command_bridge.py
       - tests/test_remote_power_control.py
+      - tests/test_remote_forex_status.py
       - infra/azure/**
       - .dockerignore
       - .github/workflows/cloud-image.yml
@@ -92,6 +93,9 @@ jobs:
 
       - name: Test phone command relay
         run: python -m unittest discover -s tests -p "test_remote_command_bridge.py" -v
+
+      - name: Test owner PAPER status
+        run: python -m unittest discover -s tests -p "test_remote_forex_status.py" -v
 
       - name: Validate Azure templates
         uses: azure/cli@9f7ce6f37c31b777ec6c6b6d1dfe7db79f497956 # v2
@@ -224,6 +228,8 @@ jobs:
                 "JARVIS_OS_REMOTE_STORAGE_ACCOUNT=${{ steps.previous.outputs.storage_account }}" \
                 "JARVIS_OS_REMOTE_TABLE=commands" \
                 "JARVIS_OS_REMOTE_QUEUE=commands" \
+                "JARVIS_OS_FOREX_STATUS_CONTAINER=forex-paper-status" \
+                "JARVIS_OS_FOREX_STATUS_BLOB=status/latest.json" \
                 "JARVIS_OS_CLOUD_REQUESTS_PER_MINUTE=30" \
                 "PORT=8000" \
               --only-show-errors \
@@ -272,7 +278,10 @@ jobs:
               --image "ghcr.io/${{ github.repository_owner }}/jarvis-os-cloud:sha-${{ github.sha }}" \
               --cpu 0.25 \
               --memory 0.5Gi \
-              --set-env-vars "JARVIS_OS_BUILD_SHA=${{ github.sha }}" \
+              --set-env-vars \
+                "JARVIS_OS_BUILD_SHA=${{ github.sha }}" \
+                "JARVIS_OS_FOREX_STATUS_CONTAINER=forex-paper-status" \
+                "JARVIS_OS_FOREX_STATUS_BLOB=status/latest.json" \
               --only-show-errors \
               --output none
           else

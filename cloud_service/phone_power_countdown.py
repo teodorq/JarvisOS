@@ -29,6 +29,13 @@ def enhance_phone_page(page: str) -> str:
     replacements = (
         ("</style></head>", _POWER_COUNTDOWN_CSS + "</style></head>"),
         (
+            '<button type="button" data-command="status chmury">'
+            'STATUS CHMURY</button></div>',
+            '<button type="button" data-command="status chmury">'
+            'STATUS CHMURY</button></div><a class="button secondary" '
+            'href="/trading">TRADING PAPER</a>',
+        ),
+        (
             '<div class="actions"><button id="powerOpen"',
             _POWER_COUNTDOWN_HTML
             + '<div class="actions"><button id="powerOpen"',

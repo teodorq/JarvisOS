@@ -21,6 +21,9 @@ param storageAccountName string
 @description('Existing Container Apps environment name.')
 param managedEnvironmentName string = '${namePrefix}-env'
 
+@description('Managed identity of the planner, granted read-only status access.')
+param plannerPrincipalId string
+
 @secure()
 @description('Read-only Twelve Data key used by the Azure PAPER job.')
 param twelveDataApiKey string
@@ -47,6 +50,14 @@ resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01'
 resource paperStateContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
   parent: blobService
   name: 'forex-paper'
+  properties: {
+    publicAccess: 'None'
+  }
+}
+
+resource paperStatusContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
+  parent: blobService
+  name: 'forex-paper-status'
   properties: {
     publicAccess: 'None'
   }
@@ -151,6 +162,14 @@ resource paperJob 'Microsoft.App/jobs@2024-03-01' = {
               name: 'JARVIS_OS_FOREX_CLOUD_STATE_BLOB'
               value: 'state/paper-state.zip'
             }
+            {
+              name: 'JARVIS_OS_FOREX_STATUS_CONTAINER'
+              value: paperStatusContainer.name
+            }
+            {
+              name: 'JARVIS_OS_FOREX_STATUS_BLOB'
+              value: 'status/latest.json'
+            }
           ]
           resources: {
             cpu: json('0.25')
@@ -167,6 +186,11 @@ var storageBlobDataContributorRoleId = subscriptionResourceId(
   'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
 )
 
+var storageBlobDataReaderRoleId = subscriptionResourceId(
+  'Microsoft.Authorization/roleDefinitions',
+  '2a2b9908-6ea1-4ae2-8e65-a410df84e7d1'
+)
+
 resource paperJobStateAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(paperStateContainer.id, paperJob.id, storageBlobDataContributorRoleId)
   scope: paperStateContainer
@@ -177,5 +201,26 @@ resource paperJobStateAccess 'Microsoft.Authorization/roleAssignments@2022-04-01
   }
 }
 
+resource paperJobStatusAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(paperStatusContainer.id, paperJob.id, storageBlobDataContributorRoleId)
+  scope: paperStatusContainer
+  properties: {
+    principalId: paperJob.identity.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: storageBlobDataContributorRoleId
+  }
+}
+
+resource plannerStatusAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(paperStatusContainer.id, plannerPrincipalId, storageBlobDataReaderRoleId)
+  scope: paperStatusContainer
+  properties: {
+    principalId: plannerPrincipalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: storageBlobDataReaderRoleId
+  }
+}
+
 output paperJobName string = paperJob.name
 output paperStateContainerName string = paperStateContainer.name
+output paperStatusContainerName string = paperStatusContainer.name

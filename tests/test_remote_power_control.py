@@ -362,6 +362,7 @@ def test_remote_runtime_routes_power_away_from_natural_commands() -> None:
 
 
 def test_phone_page_contains_two_step_power_controls() -> None:
+    assert 'href="/trading">TRADING PAPER</a>' in PHONE_PAGE
     assert 'id="powerOpen"' in PHONE_PAGE
     assert 'id="powerPhrase"' in PHONE_PAGE
     assert 'id="powerCancel"' in PHONE_PAGE

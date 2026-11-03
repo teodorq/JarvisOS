@@ -23,12 +23,16 @@ paid service.
   messages. Shared Key authorization is disabled. The Container App uses its
   managed identity, while the owner receives message-processing access only to
   the `commands` queue.
-- A scheduled Container Apps Job runs at minutes 02, 17, 32, and 47 UTC. It
+- A scheduled Container Apps Job runs at minute 02 of every hour UTC. It
   stops after each PAPER cycle, so it incurs no job compute charge between
   executions. The job uses 0.25 vCPU and 0.5 GiB, with one replica and one
   retry. Its tamper-evident PAPER state is stored in a private Blob container.
   Shared Key access stays disabled; only the job's managed identity receives
   Blob Data Contributor on that one container.
+- A second private `forex-paper-status` container receives only the strict,
+  sanitized latest PAPER summary. The job can write that container; the
+  planner can only read it. The planner has no access to the full PAPER state
+  container, and neither path uses an account key or connection string.
 - The cloud PAPER path uses closed M15 bars from Twelve Data and FMP only as an
   independent midpoint check. It applies a conservative synthetic spread and
   exposes no broker-order method, OANDA order endpoint, LIVE promotion, or
@@ -109,6 +113,13 @@ Forex PAPER job is independent and continues on schedule while the computer is
 off. The phone cannot
 approve actions: anything protected by the normal confirmation policy still
 waits for local confirmation on the computer.
+
+The phone panel links to `/trading`, a script-free owner-only PAPER report.
+It shows freshness, sanitized V3 balances, PAPER positions and per-pair sample
+metrics. `/v1/forex/status` exposes the same allowlisted summary to the owner.
+Both routes fail closed if the owner identity or report is unavailable and
+never expose the private ledger, market-data credentials, broker access, or a
+LIVE-order capability.
 
 The Entra sign-in uses the confidential authorization-code flow and returns
 the code in the callback query, not a browser fragment. This avoids the

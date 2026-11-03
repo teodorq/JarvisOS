@@ -1,0 +1,100 @@
+from __future__ import annotations
+
+import json
+import threading
+import unittest
+import urllib.error
+import urllib.request
+
+from cloud_service.forex_status_store import MemoryForexStatusStore
+from cloud_service.main import ServiceConfig, build_server
+from tests.test_cloud_forex_status import sample_status
+
+
+class RemoteForexStatusTests(unittest.TestCase):
+    owner_id = "77f4b7fe-8e18-498b-8898-84befa780edb"
+
+    def setUp(self) -> None:
+        self.store = MemoryForexStatusStore(sample_status())
+        self.server = build_server(
+            "127.0.0.1",
+            0,
+            config=ServiceConfig(
+                api_token="desktop-token-with-enough-entropy",
+                environment="test",
+                phone_principal_id=self.owner_id,
+            ),
+            forex_status_store=self.store,
+        )
+        self.thread = threading.Thread(
+            target=self.server.serve_forever, daemon=True
+        )
+        self.thread.start()
+        host, port = self.server.server_address
+        self.base_url = f"http://{host}:{port}"
+
+    def tearDown(self) -> None:
+        self.server.shutdown()
+        self.server.server_close()
+        self.thread.join(timeout=2)
+
+    def owner_request(self, path: str) -> urllib.request.Request:
+        return urllib.request.Request(
+            self.base_url + path,
+            headers={
+                "X-MS-CLIENT-PRINCIPAL-ID": self.owner_id,
+                "X-MS-CLIENT-PRINCIPAL-IDP": "aad",
+            },
+        )
+
+    def test_owner_can_read_sanitized_json_status(self) -> None:
+        with urllib.request.urlopen(
+            self.owner_request("/v1/forex/status"), timeout=2
+        ) as response:
+            value = json.loads(response.read().decode("utf-8"))
+
+        self.assertEqual(value["cycle_id"], "cycle-123")
+        self.assertFalse(value["real_money_access"])
+        self.assertIn("fresh", value)
+        self.assertNotIn("secret", value)
+
+    def test_status_api_rejects_missing_or_wrong_owner(self) -> None:
+        requests = (
+            urllib.request.Request(self.base_url + "/v1/forex/status"),
+            urllib.request.Request(
+                self.base_url + "/v1/forex/status",
+                headers={
+                    "X-MS-CLIENT-PRINCIPAL-ID": "wrong-owner",
+                    "X-MS-CLIENT-PRINCIPAL-IDP": "aad",
+                },
+            ),
+        )
+        for request in requests:
+            with self.subTest(headers=dict(request.headers)):
+                with self.assertRaises(urllib.error.HTTPError) as caught:
+                    urllib.request.urlopen(request, timeout=2)
+                self.assertEqual(caught.exception.code, 401)
+
+    def test_owner_page_is_script_free_and_explicitly_paper(self) -> None:
+        with urllib.request.urlopen(
+            self.owner_request("/trading"), timeout=2
+        ) as response:
+            body = response.read().decode("utf-8")
+            policy = response.headers["Content-Security-Policy"]
+
+        self.assertIn("WYLACZNIE PAPER", body)
+        self.assertIn("EUR_USD", body)
+        self.assertNotIn("<script", body.lower())
+        self.assertIn("script-src 'none'", policy)
+
+    def test_report_not_ready_returns_controlled_503(self) -> None:
+        self.server.forex_status_store = MemoryForexStatusStore()
+        with self.assertRaises(urllib.error.HTTPError) as caught:
+            urllib.request.urlopen(self.owner_request("/trading"), timeout=2)
+        self.assertEqual(caught.exception.code, 503)
+        body = caught.exception.read().decode("utf-8")
+        self.assertIn("RAPORT JESZCZE NIEDOSTEPNY", body)
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -19,6 +19,11 @@ from app.core.json_store import JsonStore
 from app.market_data.forex_environment import ForexDataSettings
 from app.market_data.forex_paper_runtime import ForexDemoPaperRuntime
 from app.trading.forex_activity_journal import ForexPaperActivityJournal
+from cloud_service.forex_status_store import (
+    FOREX_STATUS_SCHEMA_VERSION,
+    ForexStatusStoreError,
+    forex_status_store_from_environment,
+)
 
 
 _STORAGE_ACCOUNT = re.compile(r"^[a-z0-9]{3,24}$")
@@ -210,6 +215,12 @@ def _public_result(result: dict[str, Any]) -> dict[str, Any]:
     v3 = v3 if isinstance(v3, dict) else {}
     v3_account = v3.get("account")
     v3_account = v3_account if isinstance(v3_account, dict) else {}
+    v3_positions = v3_account.get("open_positions")
+    v3_positions = v3_positions if isinstance(v3_positions, list) else []
+    v3_performance = v3_account.get("performance")
+    v3_performance = (
+        v3_performance if isinstance(v3_performance, dict) else {}
+    )
     observation = result.get("observation")
     observation = observation if isinstance(observation, dict) else {}
     observation_data = observation.get("data")
@@ -245,12 +256,19 @@ def _public_result(result: dict[str, Any]) -> dict[str, Any]:
         if _DIAGNOSTIC_CODE.fullmatch(raw_nbp_state)
         else ""
     )
+    raw_result_reason = str(result.get("reason", ""))
+    result_reason = (
+        raw_result_reason
+        if _DIAGNOSTIC_CODE.fullmatch(raw_result_reason)
+        else ""
+    )
     return {
+        "schema_version": FOREX_STATUS_SCHEMA_VERSION,
         "status": str(result.get("status", "UNKNOWN")),
         "mode": str(result.get("mode", "AUTONOMOUS_AZURE_FOREX_PAPER")),
         "cycle_id": str(result.get("cycle_id", "")),
         "observed_at": str(result.get("observed_at", "")),
-        "reason": str(result.get("reason", "")),
+        "reason": result_reason,
         "observation_status": str(observation.get("status", "")),
         "observation_reason": observation_reason,
         "observation_fully_cross_checked": (
@@ -268,9 +286,28 @@ def _public_result(result: dict[str, Any]) -> dict[str, Any]:
         "v3_closed_trade_count": int(
             v3_account.get("closed_trade_count", 0) or 0
         ),
+        "v3_balance_pln": str(v3_account.get("balance_pln", "0")),
+        "v3_equity_pln": str(v3_account.get("equity_pln", "0")),
+        "v3_unrealized_pnl_pln": str(
+            v3_account.get("unrealized_pnl_pln", "0")
+        ),
         "v3_realized_pnl_pln": str(
             v3_account.get("realized_pnl_pln", "0.00")
         ),
+        "v3_winning_trade_count": int(
+            v3_account.get("winning_trade_count", 0) or 0
+        ),
+        "v3_losing_trade_count": int(
+            v3_account.get("losing_trade_count", 0) or 0
+        ),
+        "v3_breakeven_trade_count": int(
+            v3_account.get("breakeven_trade_count", 0) or 0
+        ),
+        "v3_win_rate_pct": str(v3_account.get("win_rate_pct", "0")),
+        "v3_open_positions": [
+            dict(item) for item in v3_positions[:20] if isinstance(item, dict)
+        ],
+        "v3_performance": dict(v3_performance),
         "broker_orders_sent": False,
         "live_orders_sent": False,
         "real_money_access": False,
@@ -331,7 +368,17 @@ def run() -> dict[str, Any]:
                     "cloud_paper_state: upload_failed"
                 ) from error
             renewer.check()
-            return _public_result(result)
+            public_result = _public_result(result)
+            try:
+                status_store = forex_status_store_from_environment()
+                if status_store is not None:
+                    status_store.write(public_result)
+                    public_result["status_snapshot_persisted"] = True
+                else:
+                    public_result["status_snapshot_persisted"] = False
+            except ForexStatusStoreError:
+                public_result["status_snapshot_persisted"] = False
+            return public_result
     finally:
         try:
             lease.release()

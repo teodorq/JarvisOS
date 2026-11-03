@@ -201,6 +201,8 @@ def verify_deployment(
         "JARVIS_OS_REMOTE_STORAGE_ACCOUNT": expected_storage_account,
         "JARVIS_OS_REMOTE_TABLE": "commands",
         "JARVIS_OS_REMOTE_QUEUE": "commands",
+        "JARVIS_OS_FOREX_STATUS_CONTAINER": "forex-paper-status",
+        "JARVIS_OS_FOREX_STATUS_BLOB": "status/latest.json",
         "JARVIS_OS_CLOUD_REQUESTS_PER_MINUTE": "30",
         "PORT": "8000",
     }
