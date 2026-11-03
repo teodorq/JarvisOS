@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 import json
 import os
+import sys
+import types
 import unittest
 from unittest.mock import patch
 
@@ -113,6 +115,11 @@ class FakeBlob:
         self.options = options
 
 
+class FakeContentSettings:
+    def __init__(self, *, content_type: str) -> None:
+        self.content_type = content_type
+
+
 class CloudForexStatusTests(unittest.TestCase):
     def test_sanitizer_is_strict_allowlist_and_paper_only(self) -> None:
         value = sample_status()
@@ -165,11 +172,20 @@ class CloudForexStatusTests(unittest.TestCase):
         store = AzureBlobForexStatusStore(blob)
         value = sample_status()
         value["secret"] = "must-not-leak"
-        store.write(value)
+        fake_blob_module = types.ModuleType("azure.storage.blob")
+        fake_blob_module.ContentSettings = FakeContentSettings
+        with patch.dict(
+            sys.modules, {"azure.storage.blob": fake_blob_module}
+        ):
+            store.write(value)
 
         raw = json.loads((blob.value or b"").decode("utf-8"))
         self.assertNotIn("secret", raw)
         self.assertTrue(blob.options["overwrite"])
+        self.assertEqual(
+            blob.options["content_settings"].content_type,
+            "application/json; charset=utf-8",
+        )
         self.assertEqual(store.read()["cycle_id"], "cycle-123")
         self.assertTrue(store.access_verified)
 
