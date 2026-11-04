@@ -263,6 +263,11 @@ class TwelveDataCloudMarketSource:
                 timestamp = aware_utc(timestamp, "bar_time")
                 if timestamp + timedelta(minutes=self.INTERVAL_MINUTES) > selected_now:
                     continue
+                # Twelve Data currency series legitimately omit volume.  Keep
+                # that distinct from an explicitly supplied zero-volume bar so
+                # the scanner can retain its volume gate for capable sources.
+                raw_volume = row.get("volume")
+                volume_available = raw_volume not in (None, "")
                 bars.append(ForexBar.create(
                     pair=pair,
                     timestamp=timestamp,
@@ -270,7 +275,8 @@ class TwelveDataCloudMarketSource:
                     high=row.get("high"),
                     low=row.get("low"),
                     close=row.get("close"),
-                    tick_volume=row.get("volume") or 0,
+                    tick_volume=raw_volume if volume_available else 0,
+                    volume_available=volume_available,
                 ))
             bars.sort(key=lambda item: item.timestamp)
             if len(bars) < bar_count:

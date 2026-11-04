@@ -210,12 +210,24 @@ class ForexMarketScanner:
             return self._blocked(
                 pair, "QUOTE_BAR_DIVERGENCE", selected_now, spread=spread
             )
-        positive_volume = sum(bar.tick_volume > 0 for bar in recent)
-        volume_ratio = Decimal(positive_volume) / Decimal(len(recent))
-        if volume_ratio < self.policy.minimum_positive_volume_ratio:
+        volume_availability = {bar.volume_available for bar in recent}
+        if len(volume_availability) > 1:
             return self._blocked(
-                pair, "INSUFFICIENT_TICK_VOLUME", selected_now, spread=spread
+                pair,
+                "INCONSISTENT_TICK_VOLUME_AVAILABILITY",
+                selected_now,
+                spread=spread,
             )
+        if volume_availability == {True}:
+            positive_volume = sum(bar.tick_volume > 0 for bar in recent)
+            volume_ratio = Decimal(positive_volume) / Decimal(len(recent))
+            if volume_ratio < self.policy.minimum_positive_volume_ratio:
+                return self._blocked(
+                    pair,
+                    "INSUFFICIENT_TICK_VOLUME",
+                    selected_now,
+                    spread=spread,
+                )
 
         closes = [bar.close for bar in recent]
         fast = self._mean(closes[-self.policy.fast_window:])

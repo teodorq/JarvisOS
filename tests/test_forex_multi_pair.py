@@ -50,6 +50,7 @@ def series(
     *,
     direction: str = "FLAT",
     positive_volume: bool = True,
+    volume_available: bool = True,
 ) -> list[ForexBar]:
     base = BASE_PRICES[pair.symbol]
     prices = [base] * 31
@@ -66,6 +67,7 @@ def series(
             low=price - pair.pip_size,
             close=price,
             tick_volume="100" if positive_volume else "0",
+            volume_available=volume_available,
         )
         for index, price in enumerate(prices)
     ]
@@ -169,6 +171,20 @@ class ForexModelTests(unittest.TestCase):
                 conversion_to_pln_ready=True,
                 independent_source_count=2,
             )
+        with self.assertRaisesRegex(
+            TradingValidationError,
+            "unavailable_volume_must_be_zero",
+        ):
+            ForexBar.create(
+                pair=major_pair("EUR_USD"),
+                timestamp=now,
+                open="1.10",
+                high="1.11",
+                low="1.09",
+                close="1.10",
+                tick_volume="1",
+                volume_available=False,
+            )
 
 
 class ForexScannerTests(unittest.TestCase):
@@ -246,6 +262,60 @@ class ForexScannerTests(unittest.TestCase):
                 )
                 self.assertEqual(result.status, "BLOCKED")
                 self.assertIn(expected, result.reason_codes)
+
+    def test_provider_without_forex_volume_uses_remaining_data_gates(self) -> None:
+        pair = major_pair("EUR_USD")
+        bars = series(
+            pair,
+            self.now,
+            direction="UP",
+            positive_volume=False,
+            volume_available=False,
+        )
+
+        result = self.scanner.assess(
+            pair=pair,
+            quote=quote_for(pair, self.now, price=bars[-1].close),
+            bars=bars,
+            context=ready_context(self.now),
+            now=self.now,
+        )
+
+        self.assertEqual(result.status, "READY")
+        self.assertNotIn("INSUFFICIENT_TICK_VOLUME", result.reason_codes)
+
+    def test_mixed_volume_availability_fails_closed(self) -> None:
+        pair = major_pair("EUR_USD")
+        bars = series(
+            pair,
+            self.now,
+            positive_volume=False,
+            volume_available=False,
+        )
+        bars[-1] = ForexBar.create(
+            pair=bars[-1].pair,
+            timestamp=bars[-1].timestamp,
+            open=bars[-1].open,
+            high=bars[-1].high,
+            low=bars[-1].low,
+            close=bars[-1].close,
+            tick_volume=0,
+            volume_available=True,
+        )
+
+        result = self.scanner.assess(
+            pair=pair,
+            quote=quote_for(pair, self.now, price=bars[-1].close),
+            bars=bars,
+            context=ready_context(self.now),
+            now=self.now,
+        )
+
+        self.assertEqual(result.status, "BLOCKED")
+        self.assertIn(
+            "INCONSISTENT_TICK_VOLUME_AVAILABILITY",
+            result.reason_codes,
+        )
 
     def test_previous_closed_mt5_bar_is_accepted_for_full_m15_window(self) -> None:
         pair = major_pair("EUR_USD")

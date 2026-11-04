@@ -285,6 +285,7 @@ def _source_evidence(
                 "low": str(bar.low),
                 "close": str(bar.close),
                 "tick_volume": str(bar.tick_volume),
+                "volume_available": bar.volume_available,
             }
             digest.update(json.dumps(
                 row,

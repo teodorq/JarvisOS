@@ -54,6 +54,7 @@ class FakeForexTransport:
         event_time: datetime | None = None,
         nbp_age_days: int = 0,
         rate_limited_host: str = "",
+        include_twelve_volume: bool = True,
     ) -> None:
         self.calls: list[PreparedJsonRequest] = []
         self.divergent_pair = divergent_pair
@@ -62,6 +63,7 @@ class FakeForexTransport:
         self.event_time = event_time
         self.nbp_age_days = nbp_age_days
         self.rate_limited_host = rate_limited_host
+        self.include_twelve_volume = include_twelve_volume
 
     def __call__(self, request: PreparedJsonRequest) -> object:
         self.calls.append(request)
@@ -94,7 +96,11 @@ class FakeForexTransport:
                         "high": str(PRICES[symbol] + major_pair(symbol).pip_size),
                         "low": str(PRICES[symbol] - major_pair(symbol).pip_size),
                         "close": str(PRICES[symbol]),
-                        "volume": "100",
+                        **(
+                            {"volume": "100"}
+                            if self.include_twelve_volume
+                            else {}
+                        ),
                     } for index in range(count)],
                 }
             return {
@@ -512,6 +518,20 @@ class ProviderParserTests(unittest.TestCase):
         self.assertEqual(quote.timestamp, captured_at)
         self.assertEqual(quote.spread_pips, Decimal("2.5"))
         self.assertLessEqual(histories[pair.symbol][-1].timestamp, captured_at)
+
+    def test_cloud_forex_marks_provider_volume_as_unavailable(self) -> None:
+        fake = FakeForexTransport(include_twelve_volume=False)
+        pair = major_pair("EUR_USD")
+
+        _, histories = TwelveDataCloudMarketSource(
+            "key",
+            fake,
+        ).fetch_market((pair,), bar_count=31, now=NOW + timedelta(minutes=12))
+
+        self.assertTrue(all(
+            bar.tick_volume == 0 and bar.volume_available is False
+            for bar in histories[pair.symbol]
+        ))
 
     def test_fmp_cloud_cross_check_requires_complete_universe(self) -> None:
         fake = FakeForexTransport()

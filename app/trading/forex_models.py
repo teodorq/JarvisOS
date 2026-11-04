@@ -133,6 +133,7 @@ class ForexBar:
     low: Decimal
     close: Decimal
     tick_volume: Decimal
+    volume_available: bool = True
 
     def __post_init__(self) -> None:
         if not isinstance(self.pair, ForexPair):
@@ -142,6 +143,10 @@ class ForexBar:
         low_price = decimal_value(self.low, "low")
         close_price = decimal_value(self.close, "close")
         volume = decimal_value(self.tick_volume, "tick_volume", allow_zero=True)
+        if not isinstance(self.volume_available, bool):
+            raise TradingValidationError("forex_bar: volume_available_boolean_required")
+        if not self.volume_available and volume != 0:
+            raise TradingValidationError("forex_bar: unavailable_volume_must_be_zero")
         if high_price < max(open_price, low_price, close_price):
             raise TradingValidationError("forex_bar: high_inconsistent")
         if low_price > min(open_price, high_price, close_price):
@@ -164,6 +169,7 @@ class ForexBar:
         low: object,
         close: object,
         tick_volume: object,
+        volume_available: bool = True,
     ) -> "ForexBar":
         return cls(
             pair=pair,
@@ -173,6 +179,7 @@ class ForexBar:
             low=low,
             close=close,
             tick_volume=tick_volume,
+            volume_available=volume_available,
         )
 
 
