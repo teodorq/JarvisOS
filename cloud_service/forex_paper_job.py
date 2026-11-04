@@ -19,6 +19,7 @@ from app.core.json_store import JsonStore
 from app.market_data.forex_environment import ForexDataSettings
 from app.market_data.forex_paper_runtime import ForexDemoPaperRuntime
 from app.trading.forex_activity_journal import ForexPaperActivityJournal
+from app.trading.forex_runtime_summary import ForexRuntimeCycleSummary
 from cloud_service.forex_status_store import (
     FOREX_STATUS_SCHEMA_VERSION,
     ForexStatusStoreError,
@@ -262,6 +263,31 @@ def _public_result(result: dict[str, Any]) -> dict[str, Any]:
         if _DIAGNOSTIC_CODE.fullmatch(raw_result_reason)
         else ""
     )
+    try:
+        runtime = ForexRuntimeCycleSummary.project(result)
+    except (TypeError, ValueError, OverflowError, RecursionError, MemoryError):
+        runtime = ForexRuntimeCycleSummary.empty_snapshot()
+    raw_runtime_reasons = runtime.get("reason_codes")
+    raw_runtime_reasons = (
+        raw_runtime_reasons if isinstance(raw_runtime_reasons, dict) else {}
+    )
+    runtime_reason_codes: dict[str, int] = {}
+    for raw_code, raw_count in list(raw_runtime_reasons.items())[:32]:
+        code = str(raw_code)
+        if not _DIAGNOSTIC_CODE.fullmatch(code):
+            continue
+        try:
+            count = int(raw_count)
+        except (TypeError, ValueError, OverflowError):
+            continue
+        if 0 < count <= 1_000_000:
+            runtime_reason_codes[code] = count
+    raw_runtime_decision = str(runtime.get("decision", ""))
+    runtime_decision = (
+        raw_runtime_decision
+        if _DIAGNOSTIC_CODE.fullmatch(raw_runtime_decision)
+        else ""
+    )
     return {
         "schema_version": FOREX_STATUS_SCHEMA_VERSION,
         "status": str(result.get("status", "UNKNOWN")),
@@ -280,6 +306,20 @@ def _public_result(result: dict[str, Any]) -> dict[str, Any]:
         "observation_opening_blocks": safe_opening_blocks,
         "calendar_source_state": calendar_source_state,
         "nbp_source_state": nbp_source_state,
+        "runtime_decision": runtime_decision,
+        "runtime_ready_pair_count": int(
+            runtime.get("ready_pair_count", 0) or 0
+        ),
+        "runtime_blocked_pair_count": int(
+            runtime.get("blocked_pair_count", 0) or 0
+        ),
+        "runtime_execution_count": int(
+            runtime.get("execution_count", 0) or 0
+        ),
+        "runtime_reason_codes": runtime_reason_codes,
+        "runtime_high_impact_event_window": (
+            runtime.get("high_impact_event_window") is True
+        ),
         "position_count": int(account.get("position_count", 0) or 0),
         "v3_status": str(v3.get("status", "")),
         "v3_position_count": int(v3_account.get("position_count", 0) or 0),

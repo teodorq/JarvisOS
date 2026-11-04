@@ -5,6 +5,7 @@ from __future__ import annotations
 from copy import deepcopy
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
+import re
 import threading
 import time
 from typing import Any, Callable
@@ -18,6 +19,7 @@ _PAIRS = {
     "EUR_USD", "GBP_USD", "USD_JPY", "USD_CHF",
     "AUD_USD", "USD_CAD", "NZD_USD",
 }
+_CODE = re.compile(r"^[A-Z0-9][A-Z0-9_:.-]{0,159}$")
 
 
 def _count(value: object, maximum: int = 1_000_000) -> int:
@@ -161,6 +163,23 @@ def _performance(value: object) -> dict[str, Any]:
     }
 
 
+def _runtime_reason_codes(value: object) -> dict[str, int]:
+    if value in (None, {}):
+        return {}
+    if not isinstance(value, dict) or len(value) > 32:
+        raise ValueError("invalid runtime reasons")
+    result: dict[str, int] = {}
+    for raw_code, raw_count in value.items():
+        code = str(raw_code).strip().upper()
+        if not _CODE.fullmatch(code):
+            raise ValueError("invalid runtime reason")
+        count = _count(raw_count)
+        if count <= 0:
+            raise ValueError("invalid runtime reason count")
+        result[code] = count
+    return dict(sorted(result.items(), key=lambda item: (-item[1], item[0])))
+
+
 def project_cloud_forex_status(
     value: object,
     *,
@@ -214,6 +233,17 @@ def project_cloud_forex_status(
         balance = _number(value.get("v3_balance_pln"), 2)
         equity = _number(value.get("v3_equity_pln"), 2)
         unrealized = _number(value.get("v3_unrealized_pnl_pln"), 2)
+        runtime_decision = str(value.get("runtime_decision", "")).strip().upper()
+        if runtime_decision and not _CODE.fullmatch(runtime_decision):
+            raise ValueError("invalid runtime decision")
+        ready_pair_count = _count(value.get("runtime_ready_pair_count", 0), 20)
+        blocked_pair_count = _count(
+            value.get("runtime_blocked_pair_count", 0), 20
+        )
+        execution_count = _count(value.get("runtime_execution_count", 0), 20)
+        runtime_reasons = _runtime_reason_codes(
+            value.get("runtime_reason_codes", {})
+        )
     except (InvalidOperation, TypeError, ValueError, OverflowError):
         return _blocked("Raport Azure PAPER nie przeszedł kontroli spójności.")
     closed = performance["valid_closed_trade_count"]
@@ -246,11 +276,14 @@ def project_cloud_forex_status(
         "last_runtime_cycle": {
             "available": True,
             "status": str(value.get("status", ""))[:80],
-            "decision": str(value.get("reason", ""))[:80],
-            "ready_pair_count": 0,
-            "blocked_pair_count": 0,
-            "execution_count": 0,
-            "reason_codes": {},
+            "decision": runtime_decision or str(value.get("reason", ""))[:80],
+            "ready_pair_count": ready_pair_count,
+            "blocked_pair_count": blocked_pair_count,
+            "execution_count": execution_count,
+            "reason_codes": runtime_reasons,
+            "high_impact_event_window": (
+                value.get("runtime_high_impact_event_window") is True
+            ),
             "live_orders_sent": False,
             "real_money_access": False,
         },

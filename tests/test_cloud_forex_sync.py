@@ -34,6 +34,14 @@ def test_fresh_cloud_status_projects_current_paper_position() -> None:
     assert snapshot["source"] == "AZURE_PAPER_STATUS"
     assert snapshot["data_fresh"] is True
     assert snapshot["positions"][0]["pair"] == "EUR_USD"
+    assert snapshot["last_runtime_cycle"]["decision"] == "NO_ENTRY_SIGNAL"
+    assert snapshot["last_runtime_cycle"]["ready_pair_count"] == 6
+    assert snapshot["last_runtime_cycle"]["blocked_pair_count"] == 1
+    assert snapshot["last_runtime_cycle"]["execution_count"] == 0
+    assert snapshot["last_runtime_cycle"]["reason_codes"] == {
+        "NO_ENTRY_SIGNAL": 6,
+        "SPREAD_TOO_WIDE": 1,
+    }
     assert snapshot["broker_orders_sent"] is False
     assert snapshot["live_orders_sent"] is False
     assert snapshot["real_money_access"] is False

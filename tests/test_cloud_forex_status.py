@@ -34,6 +34,12 @@ def sample_status() -> dict:
         "observation_opening_blocks": [],
         "calendar_source_state": "FRESH",
         "nbp_source_state": "FRESH",
+        "runtime_decision": "NO_ENTRY_SIGNAL",
+        "runtime_ready_pair_count": 6,
+        "runtime_blocked_pair_count": 1,
+        "runtime_execution_count": 0,
+        "runtime_reason_codes": {"NO_ENTRY_SIGNAL": 6, "SPREAD_TOO_WIDE": 1},
+        "runtime_high_impact_event_window": False,
         "position_count": 1,
         "v3_status": "SHADOW_SIMULATION_CYCLE_COMPLETED",
         "v3_balance_pln": "10005.00",
@@ -129,6 +135,8 @@ class CloudForexStatusTests(unittest.TestCase):
         self.assertNotIn("secret", result)
         self.assertFalse(result["broker_orders_sent"])
         self.assertEqual(result["v3_open_positions"][0]["pair"], "EUR_USD")
+        self.assertEqual(result["runtime_ready_pair_count"], 6)
+        self.assertEqual(result["runtime_reason_codes"]["NO_ENTRY_SIGNAL"], 6)
 
         value["real_money_access"] = True
         with self.assertRaisesRegex(ForexStatusStoreError, "unsafe_mode"):

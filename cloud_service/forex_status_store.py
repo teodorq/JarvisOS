@@ -183,6 +183,21 @@ def _performance(value: object) -> dict[str, Any]:
     }
 
 
+def _reason_counts(value: object) -> dict[str, int]:
+    if value in (None, {}):
+        return {}
+    if not isinstance(value, dict) or len(value) > 32:
+        raise ForexStatusStoreError("forex_status: invalid_reason_counts")
+    result: dict[str, int] = {}
+    for raw_code, raw_count in sorted(value.items()):
+        code = _code(raw_code, required=True)
+        count = _count(raw_count)
+        if count <= 0:
+            raise ForexStatusStoreError("forex_status: invalid_reason_counts")
+        result[code] = count
+    return result
+
+
 def sanitize_forex_status(value: object) -> dict[str, Any]:
     """Return the strict public PAPER status allowlist or fail closed."""
 
@@ -229,6 +244,22 @@ def sanitize_forex_status(value: object) -> dict[str, Any]:
             value.get("calendar_source_state", "")
         ),
         "nbp_source_state": _code(value.get("nbp_source_state", "")),
+        "runtime_decision": _code(value.get("runtime_decision", "")),
+        "runtime_ready_pair_count": _count(
+            value.get("runtime_ready_pair_count", 0)
+        ),
+        "runtime_blocked_pair_count": _count(
+            value.get("runtime_blocked_pair_count", 0)
+        ),
+        "runtime_execution_count": _count(
+            value.get("runtime_execution_count", 0)
+        ),
+        "runtime_reason_codes": _reason_counts(
+            value.get("runtime_reason_codes", {})
+        ),
+        "runtime_high_impact_event_window": (
+            value.get("runtime_high_impact_event_window") is True
+        ),
         "position_count": _count(value.get("position_count", 0)),
         "v3_status": _code(value.get("v3_status", "")),
         "v3_balance_pln": _decimal_text(value.get("v3_balance_pln", "0")),

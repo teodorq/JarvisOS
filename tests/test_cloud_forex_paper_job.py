@@ -71,7 +71,14 @@ class CloudForexPaperJobTests(unittest.TestCase):
                     "ignored": "must-not-leak",
                 },
             },
-            "paper": {"account": {"position_count": 2}},
+            "paper": {
+                "account": {"position_count": 2},
+                "assessments": [
+                    {"status": "READY", "reason_codes": ["NO_ENTRY_SIGNAL"]},
+                    {"status": "BLOCKED", "reason_codes": ["SPREAD_TOO_WIDE"]},
+                ],
+                "execution": {"executions": []},
+            },
             "v3_shadow_simulation": {
                 "status": "SHADOW_SIMULATION_CYCLE_COMPLETED",
                 "account": {
@@ -117,6 +124,14 @@ class CloudForexPaperJobTests(unittest.TestCase):
         )
         self.assertEqual(result["calendar_source_state"], "CACHE_FAILSAFE")
         self.assertEqual(result["nbp_source_state"], "CACHE_FALLBACK")
+        self.assertEqual(result["runtime_decision"], "NO_ENTRY_SIGNAL")
+        self.assertEqual(result["runtime_ready_pair_count"], 1)
+        self.assertEqual(result["runtime_blocked_pair_count"], 1)
+        self.assertEqual(result["runtime_execution_count"], 0)
+        self.assertEqual(
+            result["runtime_reason_codes"],
+            {"NO_ENTRY_SIGNAL": 1, "SPREAD_TOO_WIDE": 1},
+        )
         self.assertFalse(result["broker_orders_sent"])
         self.assertFalse(result["live_orders_sent"])
         self.assertFalse(result["real_money_access"])
