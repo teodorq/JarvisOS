@@ -141,12 +141,17 @@ def forex_status_page(
     positions = positions_value if isinstance(positions_value, list) else []
     pair_value = performance.get("pair_breakdown", {})
     pairs = pair_value if isinstance(pair_value, dict) else {}
+    if selected.get("fresh") is not True:
+        positions = []
+        pairs = {}
 
     def safe(value: object, fallback: str = "-") -> str:
         text = str(value if value not in (None, "") else fallback)
         return escape(text)
 
     def money(key: str) -> str:
+        if selected.get("fresh") is not True:
+            return "N/D"
         return safe(selected.get(key, "0")) + " PLN"
 
     if unavailable:

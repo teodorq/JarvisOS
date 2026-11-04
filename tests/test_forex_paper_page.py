@@ -166,6 +166,17 @@ class _UnavailableValuationDashboard(_Dashboard):
         return value
 
 
+class _StaleCloudDashboard(_Dashboard):
+    def snapshot(self) -> dict:
+        value = super().snapshot()
+        value.update({
+            "status": "STALE_DATA_BLOCKED",
+            "data_fresh": False,
+            "message": "Dane PAPER są nieaktualne; pozycje ukryto.",
+        })
+        return value
+
+
 def test_forex_page_shows_position_and_has_no_execution_controls() -> None:
     app = QApplication.instance() or QApplication([])
     page = ForexPaperPage(_Dashboard(), activity=_Activity())
@@ -240,6 +251,22 @@ def test_forex_page_does_not_present_missing_valuation_as_zero() -> None:
         assert "ŚWIEŻYCH NOTOWAŃ" in (
             page.metrics["unrealized"].hint_label.text()
         )
+    finally:
+        page.timer.stop()
+        page.deleteLater()
+        app.processEvents()
+
+
+def test_forex_page_hides_positions_and_warns_when_cloud_status_is_stale() -> None:
+    app = QApplication.instance() or QApplication([])
+    page = ForexPaperPage(_StaleCloudDashboard())
+    try:
+        assert page.table.rowCount() == 1
+        assert "BRAK OTWARTYCH POZYCJI" in page.table.item(0, 0).text()
+        assert not page.data_warning.isHidden()
+        assert "NIEAKTUALNE" in page.data_warning.text()
+        assert page.updated.text().startswith("Dane nieaktualne od:")
+        assert page.overall.full_text == "WYMAGA UWAGI"
     finally:
         page.timer.stop()
         page.deleteLater()

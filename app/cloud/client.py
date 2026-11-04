@@ -108,6 +108,17 @@ class CloudPlannerClient:
         self._validate_endpoint()
         return self._request_json("/health", None)
 
+    def forex_status(self) -> dict[str, Any]:
+        """Read the private sanitized PAPER report with the desktop token."""
+
+        if not self.is_configured:
+            raise CloudPlannerUnavailable("cloud planner is not configured")
+        self._validate_endpoint()
+        result = self._remote_request_json("GET", "/v1/forex/status")
+        if not isinstance(result, dict):
+            raise CloudPlannerUnavailable("invalid forex status response")
+        return result
+
     @property
     def remote_enabled(self) -> bool:
         device_id = self.settings.remote_device_id

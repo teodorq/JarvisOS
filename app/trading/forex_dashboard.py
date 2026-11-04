@@ -37,6 +37,7 @@ class ForexPaperDashboard:
         performance_review: Any | None = None,
         v2_research: Any | None = None,
         runtime_summary: Any | None = None,
+        cloud_status_source: Any | None = None,
     ) -> None:
         root = resolve_project_root(project_root)
         self.result_path = root / "data" / "trading" / "forex_paper_last.json"
@@ -59,8 +60,27 @@ class ForexPaperDashboard:
             if runtime_summary is not None
             else ForexRuntimeCycleSummary(root)
         )
+        self.cloud_status_source = cloud_status_source
 
     def snapshot(self) -> dict[str, Any]:
+        if (
+            self.cloud_status_source is not None
+            and self.cloud_status_source.is_configured
+        ):
+            try:
+                remote = self.cloud_status_source.snapshot()
+            except Exception:
+                remote = None
+            if isinstance(remote, dict):
+                return remote
+            blocked = self._blocked(
+                "Brak aktualnego potwierdzenia Azure PAPER; pozycje ukryto."
+            )
+            blocked.update({
+                "source": "AZURE_PAPER_STATUS",
+                "data_fresh": False,
+            })
+            return blocked
         payload = self._load_result()
         if payload is not None:
             if self._result_is_paper_only(payload):

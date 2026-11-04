@@ -5,7 +5,9 @@ import threading
 import unittest
 import urllib.error
 import urllib.request
+from datetime import datetime, timezone
 
+from app.cloud.client import CloudPlannerClient, CloudPlannerSettings
 from cloud_service.forex_status_store import MemoryForexStatusStore
 from cloud_service.main import ServiceConfig, build_server
 from tests.test_cloud_forex_status import sample_status
@@ -15,7 +17,9 @@ class RemoteForexStatusTests(unittest.TestCase):
     owner_id = "77f4b7fe-8e18-498b-8898-84befa780edb"
 
     def setUp(self) -> None:
-        self.store = MemoryForexStatusStore(sample_status())
+        status = sample_status()
+        status["observed_at"] = datetime.now(timezone.utc).isoformat()
+        self.store = MemoryForexStatusStore(status)
         self.server = build_server(
             "127.0.0.1",
             0,
@@ -56,6 +60,19 @@ class RemoteForexStatusTests(unittest.TestCase):
         self.assertEqual(value["cycle_id"], "cycle-123")
         self.assertFalse(value["real_money_access"])
         self.assertIn("fresh", value)
+        self.assertNotIn("secret", value)
+
+    def test_desktop_client_can_read_status_with_existing_api_token(self) -> None:
+        client = CloudPlannerClient(CloudPlannerSettings(
+            base_url=self.base_url,
+            api_token="desktop-token-with-enough-entropy",
+            timeout_seconds=2,
+        ))
+
+        value = client.forex_status()
+
+        self.assertEqual(value["cycle_id"], "cycle-123")
+        self.assertFalse(value["live_orders_sent"])
         self.assertNotIn("secret", value)
 
     def test_status_api_rejects_missing_or_wrong_owner(self) -> None:

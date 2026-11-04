@@ -121,6 +121,14 @@ Both routes fail closed if the owner identity or report is unavailable and
 never expose the private ledger, market-data credentials, broker access, or a
 LIVE-order capability.
 
+When the desktop cloud configuration is present, the local Forex panel reads
+the same private `/v1/forex/status` endpoint with the existing desktop bearer
+token. It never reads Storage directly. The panel recalculates freshness using
+the local UTC clock and treats Azure as authoritative: an unavailable, future,
+unsafe, inconsistent, or older-than-two-hours report hides every current
+position and shows an explicit stale-data warning instead of falling back to a
+previous local ledger snapshot.
+
 The Entra sign-in uses the confidential authorization-code flow and returns
 the code in the callback query, not a browser fragment. This avoids the
 JavaScript fragment-completion page that embedded iOS browsers can download or

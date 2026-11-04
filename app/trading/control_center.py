@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from app.cloud.forex_status import CloudForexStatusSource
 from app.core.project_paths import resolve_project_root
 from app.market_data.forex_environment import (
     ForexDataSettings,
@@ -113,6 +114,7 @@ class TradingControlCenter:
             performance_review=self.forex_performance_review,
             v2_research=self.forex_v2_dashboard,
             runtime_summary=self.forex_runtime_summary,
+            cloud_status_source=CloudForexStatusSource(),
         )
 
     def status(self) -> dict[str, Any]:

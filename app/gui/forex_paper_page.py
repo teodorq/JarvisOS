@@ -115,6 +115,14 @@ class ForexPaperPage(QWidget):
         self.table.setHorizontalHeaderLabels(self.HEADERS)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         card.content_layout.addWidget(self.table)
+        self.data_warning = QLabel(
+            "⚠ DANE PAPER SĄ NIEAKTUALNE — ukryto pozycje do czasu "
+            "świeżego potwierdzenia z Azure."
+        )
+        self.data_warning.setObjectName("Danger")
+        self.data_warning.setWordWrap(True)
+        self.data_warning.hide()
+        card.content_layout.addWidget(self.data_warning)
         self.updated = QLabel("Ostatnia aktualizacja: —")
         self.updated.setObjectName("Muted")
         card.content_layout.addWidget(self.updated)
@@ -180,6 +188,8 @@ class ForexPaperPage(QWidget):
             snapshot = dict(value) if isinstance(value, dict) else {}
         except Exception:
             snapshot = {"status": "BLOCKED", "positions": [], "message": "Podgląd jest chwilowo niedostępny."}
+        stale_data = snapshot.get("data_fresh") is False
+        self.data_warning.setVisible(stale_data)
         label, tone, safety_banner = forex_paper_safety_view(snapshot)
         self.overall.set_status(label, tone)
         review_label, review_tone, review_detail = (
@@ -214,7 +224,7 @@ class ForexPaperPage(QWidget):
             self.metrics["unrealized"].set_hint(
                 "Wynik pojawi się po otrzymaniu świeżych notowań."
             )
-        raw_positions = snapshot.get("positions")
+        raw_positions = [] if stale_data else snapshot.get("positions")
         raw_positions = raw_positions if isinstance(raw_positions, list) else []
         positions = [dict(item) for item in raw_positions[:5] if isinstance(item, dict)]
         self.metrics["positions"].set_value(str(len(positions)))
@@ -257,8 +267,11 @@ class ForexPaperPage(QWidget):
             except Exception:
                 history = []
         self._fill_history(history)
+        update_prefix = (
+            "Dane nieaktualne od: " if stale_data else "Ostatnia aktualizacja: "
+        )
         self.updated.setText(
-            "Ostatnia aktualizacja: " + self._visible_time(snapshot.get("observed_at"))
+            update_prefix + self._visible_time(snapshot.get("observed_at"))
         )
         self.safety.setText(safety_banner)
         message = str(snapshot.get("message", "Gotowy."))[:240]

@@ -271,12 +271,31 @@ def forex_status_view(
     snapshot = sanitize_forex_status(value)
     selected_now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
     observed = datetime.fromisoformat(snapshot["observed_at"])
-    age_seconds = max(0, int((selected_now - observed).total_seconds()))
-    return {
+    raw_age_seconds = int((selected_now - observed).total_seconds())
+    age_seconds = max(0, raw_age_seconds)
+    fresh = bool(
+        raw_age_seconds >= -300
+        and age_seconds <= FOREX_STATUS_FRESH_SECONDS
+    )
+    result = {
         **snapshot,
         "age_seconds": age_seconds,
-        "fresh": age_seconds <= FOREX_STATUS_FRESH_SECONDS,
+        "fresh": fresh,
     }
+    if not fresh:
+        result.update({
+            "status": "PAPER_STATUS_STALE",
+            "reason": (
+                "STATUS_TIMESTAMP_IN_FUTURE"
+                if raw_age_seconds < -300
+                else "STATUS_SNAPSHOT_STALE"
+            ),
+            "position_count": 0,
+            "v3_position_count": 0,
+            "v3_open_positions": [],
+            "v3_unrealized_pnl_pln": "0",
+        })
+    return result
 
 
 class MemoryForexStatusStore:

@@ -162,6 +162,18 @@ class CloudForexStatusTests(unittest.TestCase):
         )
         self.assertTrue(fresh["fresh"])
         self.assertFalse(stale["fresh"])
+        self.assertEqual(stale["status"], "PAPER_STATUS_STALE")
+        self.assertEqual(stale["reason"], "STATUS_SNAPSHOT_STALE")
+        self.assertEqual(stale["v3_position_count"], 0)
+        self.assertEqual(stale["v3_open_positions"], [])
+
+        future = forex_status_view(
+            store.read(),
+            now=datetime(2026, 11, 3, 9, 40, tzinfo=timezone.utc),
+        )
+        self.assertFalse(future["fresh"])
+        self.assertEqual(future["reason"], "STATUS_TIMESTAMP_IN_FUTURE")
+        self.assertEqual(future["v3_open_positions"], [])
 
     def test_empty_memory_store_is_not_ready(self) -> None:
         with self.assertRaises(ForexStatusNotReady):

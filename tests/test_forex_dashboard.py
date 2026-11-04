@@ -33,6 +33,16 @@ class _V2Research:
         return dict(self.value)
 
 
+class _CloudStatus:
+    is_configured = True
+
+    def __init__(self, value: dict | None) -> None:
+        self.value = value
+
+    def snapshot(self) -> dict | None:
+        return dict(self.value) if self.value is not None else None
+
+
 def _account() -> dict:
     return {
         "mode": "FOREX_PAPER_ONLY",
@@ -615,6 +625,48 @@ def test_dashboard_uses_safe_local_ledger_when_result_is_missing() -> None:
         assert snapshot["status"] == "READY"
         assert snapshot["source"] == "LOCAL_PAPER_LEDGER"
         assert snapshot["position_count"] == 1
+
+
+def test_dashboard_never_falls_back_to_old_local_position_when_cloud_enabled() -> None:
+    with TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        _write_result(root, _account())
+        remote = {
+            "status": "STALE_DATA_BLOCKED",
+            "source": "AZURE_PAPER_STATUS",
+            "data_fresh": False,
+            "positions": [],
+            "position_count": 0,
+            "broker_orders_sent": False,
+            "live_orders_sent": False,
+            "real_money_access": False,
+            "message": "Dane PAPER są nieaktualne; pozycje ukryto.",
+        }
+
+        snapshot = ForexPaperDashboard(
+            root,
+            executor=_Executor(_account()),
+            cloud_status_source=_CloudStatus(remote),
+        ).snapshot()
+
+        assert snapshot["source"] == "AZURE_PAPER_STATUS"
+        assert snapshot["data_fresh"] is False
+        assert snapshot["positions"] == []
+        assert snapshot["position_count"] == 0
+
+
+def test_dashboard_blocks_when_configured_cloud_source_returns_nothing() -> None:
+    with TemporaryDirectory() as temporary:
+        snapshot = ForexPaperDashboard(
+            Path(temporary),
+            executor=_Executor(_account()),
+            cloud_status_source=_CloudStatus(None),
+        ).snapshot()
+
+        assert snapshot["status"] == "BLOCKED"
+        assert snapshot["source"] == "AZURE_PAPER_STATUS"
+        assert snapshot["data_fresh"] is False
+        assert snapshot["positions"] == []
 
 
 def test_dashboard_rebuilds_metrics_from_ledger_after_report_upgrade() -> None:

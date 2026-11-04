@@ -57,7 +57,7 @@ from cloud_service.remote_store import (
 
 
 SERVICE_NAME = "jarvis-os-cloud-planner"
-SERVICE_VERSION = "0.10.0"
+SERVICE_VERSION = "0.10.1"
 MAX_BODY_BYTES = 16_384
 
 
@@ -703,7 +703,7 @@ class JarvisOSCloudHandler(BaseHTTPRequestHandler):
         return forex_status_view(self.server.forex_status_store.read())
 
     def _handle_forex_status_api(self) -> None:
-        if not self._phone_identity_authorized():
+        if not (self._phone_identity_authorized() or self._authorized()):
             self._json(HTTPStatus.UNAUTHORIZED, {"error": "unauthorized"})
             return
         allowed, retry_after = self.server.rate_limiter.allow(
