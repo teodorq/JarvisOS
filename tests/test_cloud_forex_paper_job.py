@@ -79,6 +79,9 @@ class CloudForexPaperJobTests(unittest.TestCase):
                 ],
                 "execution": {"executions": []},
             },
+            "v3_shadow_activation": {
+                "status": "ALREADY_ACTIVE",
+            },
             "v3_shadow_plan_observation": {
                 "status": "SHADOW_PLAN_OBSERVED",
                 "plan": {
@@ -134,7 +137,11 @@ class CloudForexPaperJobTests(unittest.TestCase):
         self.assertEqual(
             result["v3_plan_observation_status"], "SHADOW_PLAN_OBSERVED"
         )
+        self.assertEqual(result["v3_activation_status"], "ALREADY_ACTIVE")
+        self.assertEqual(result["v3_activation_reason"], "")
+        self.assertEqual(result["v3_plan_reason"], "")
         self.assertEqual(result["v3_decision_status"], "ENTRIES_READY")
+        self.assertEqual(result["v3_simulation_reason"], "")
         self.assertEqual(result["v3_ready_pair_count"], 1)
         self.assertEqual(result["v3_blocked_pair_count"], 1)
         self.assertEqual(result["v3_instruction_count"], 1)
@@ -185,10 +192,24 @@ class CloudForexPaperJobTests(unittest.TestCase):
                     "nbp_source_state": {"secret": "no"},
                 },
             },
+            "v3_shadow_activation": {
+                "status": "unsafe status with spaces",
+                "reason": {"secret": "no"},
+            },
+            "v3_shadow_plan_observation": {
+                "plan": {"reason": "unsafe reason with spaces"},
+            },
+            "v3_shadow_simulation": {
+                "reason": "unsafe simulation reason",
+            },
         })
 
         self.assertEqual(result["calendar_source_state"], "")
         self.assertEqual(result["nbp_source_state"], "")
+        self.assertEqual(result["v3_activation_status"], "")
+        self.assertEqual(result["v3_activation_reason"], "")
+        self.assertEqual(result["v3_plan_reason"], "")
+        self.assertEqual(result["v3_simulation_reason"], "")
 
 
 if __name__ == "__main__":

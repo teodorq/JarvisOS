@@ -42,8 +42,12 @@ def sample_status() -> dict:
         "runtime_high_impact_event_window": False,
         "position_count": 1,
         "v3_status": "SHADOW_SIMULATION_CYCLE_COMPLETED",
+        "v3_activation_status": "ALREADY_ACTIVE",
+        "v3_activation_reason": "",
         "v3_plan_observation_status": "SHADOW_PLAN_OBSERVED",
+        "v3_plan_reason": "",
         "v3_decision_status": "NO_ACTION",
+        "v3_simulation_reason": "",
         "v3_ready_pair_count": 6,
         "v3_blocked_pair_count": 1,
         "v3_instruction_count": 0,
@@ -149,6 +153,7 @@ class CloudForexStatusTests(unittest.TestCase):
         self.assertEqual(result["runtime_ready_pair_count"], 6)
         self.assertEqual(result["runtime_reason_codes"]["NO_ENTRY_SIGNAL"], 6)
         self.assertEqual(result["v3_decision_status"], "NO_ACTION")
+        self.assertEqual(result["v3_activation_status"], "ALREADY_ACTIVE")
         self.assertEqual(result["v3_ready_pair_count"], 6)
         self.assertEqual(result["v3_reason_codes"]["NO_NEW_CROSSOVER"], 5)
 
@@ -194,6 +199,8 @@ class CloudForexStatusTests(unittest.TestCase):
         self.assertEqual(stale["v3_position_count"], 0)
         self.assertEqual(stale["v3_open_positions"], [])
         self.assertEqual(stale["v3_decision_status"], "STATUS_UNAVAILABLE")
+        self.assertEqual(stale["v3_activation_status"], "STATUS_UNAVAILABLE")
+        self.assertEqual(stale["v3_plan_reason"], "")
         self.assertEqual(stale["v3_reason_codes"], {})
 
         future = forex_status_view(

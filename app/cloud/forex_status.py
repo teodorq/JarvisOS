@@ -264,10 +264,30 @@ def project_cloud_forex_status(
         v3_status = str(
             value.get("v3_plan_observation_status", "")
         ).strip().upper()
-        if v3_decision and not _CODE.fullmatch(v3_decision):
-            raise ValueError("invalid V3 decision")
-        if v3_status and not _CODE.fullmatch(v3_status):
-            raise ValueError("invalid V3 status")
+        v3_activation_status = str(
+            value.get("v3_activation_status", "")
+        ).strip().upper()
+        v3_activation_reason = str(
+            value.get("v3_activation_reason", "")
+        ).strip().upper()
+        v3_plan_reason = str(
+            value.get("v3_plan_reason", "")
+        ).strip().upper()
+        v3_simulation_reason = str(
+            value.get("v3_simulation_reason", "")
+        ).strip().upper()
+        if any(
+            code and not _CODE.fullmatch(code)
+            for code in (
+                v3_decision,
+                v3_status,
+                v3_activation_status,
+                v3_activation_reason,
+                v3_plan_reason,
+                v3_simulation_reason,
+            )
+        ):
+            raise ValueError("invalid V3 diagnostic code")
         if (
             v3_ready_pair_count + v3_blocked_pair_count > 7
             or v3_execution_count > v3_instruction_count
@@ -318,8 +338,12 @@ def project_cloud_forex_status(
         },
         "last_v3_cycle": {
             "available": True,
+            "activation_status": v3_activation_status,
+            "activation_reason": v3_activation_reason,
             "status": v3_status,
+            "plan_reason": v3_plan_reason,
             "decision": v3_decision,
+            "simulation_reason": v3_simulation_reason,
             "ready_pair_count": v3_ready_pair_count,
             "blocked_pair_count": v3_blocked_pair_count,
             "instruction_count": v3_instruction_count,

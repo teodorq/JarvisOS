@@ -262,11 +262,21 @@ def sanitize_forex_status(value: object) -> dict[str, Any]:
         ),
         "position_count": _count(value.get("position_count", 0)),
         "v3_status": _code(value.get("v3_status", "")),
+        "v3_activation_status": _code(
+            value.get("v3_activation_status", "")
+        ),
+        "v3_activation_reason": _code(
+            value.get("v3_activation_reason", "")
+        ),
         "v3_plan_observation_status": _code(
             value.get("v3_plan_observation_status", "")
         ),
+        "v3_plan_reason": _code(value.get("v3_plan_reason", "")),
         "v3_decision_status": _code(
             value.get("v3_decision_status", "")
+        ),
+        "v3_simulation_reason": _code(
+            value.get("v3_simulation_reason", "")
         ),
         "v3_ready_pair_count": _count(
             value.get("v3_ready_pair_count", 0), maximum=7
@@ -346,7 +356,11 @@ def forex_status_view(
             "v3_position_count": 0,
             "v3_open_positions": [],
             "v3_unrealized_pnl_pln": "0",
+            "v3_activation_status": "STATUS_UNAVAILABLE",
+            "v3_activation_reason": "",
+            "v3_plan_reason": "",
             "v3_decision_status": "STATUS_UNAVAILABLE",
+            "v3_simulation_reason": "",
             "v3_ready_pair_count": 0,
             "v3_blocked_pair_count": 0,
             "v3_instruction_count": 0,

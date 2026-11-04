@@ -211,6 +211,7 @@ def _persist_result(root: Path, result: dict[str, Any]) -> None:
 def _v3_cycle_diagnostics(
     observation: object,
     simulation: object,
+    activation: object,
 ) -> dict[str, Any]:
     """Project a small allowlisted explanation of the latest V3 decision."""
 
@@ -219,6 +220,9 @@ def _v3_cycle_diagnostics(
     plan = dict(plan_value) if isinstance(plan_value, dict) else {}
     simulation_value = (
         dict(simulation) if isinstance(simulation, dict) else {}
+    )
+    activation_value = (
+        dict(activation) if isinstance(activation, dict) else {}
     )
     execution_value = simulation_value.get("execution")
     execution = (
@@ -261,8 +265,12 @@ def _v3_cycle_diagnostics(
         return selected if _DIAGNOSTIC_CODE.fullmatch(selected) else ""
 
     return {
+        "v3_activation_status": safe_code(activation_value.get("status")),
+        "v3_activation_reason": safe_code(activation_value.get("reason")),
         "v3_plan_observation_status": safe_code(observed.get("status")),
+        "v3_plan_reason": safe_code(plan.get("reason")),
         "v3_decision_status": safe_code(plan.get("decision_status")),
+        "v3_simulation_reason": safe_code(simulation_value.get("reason")),
         "v3_ready_pair_count": sum(
             item.get("status") == "READY" for item in assessments
         ),
@@ -291,7 +299,12 @@ def _public_result(result: dict[str, Any]) -> dict[str, Any]:
         v3_performance if isinstance(v3_performance, dict) else {}
     )
     v3_plan_observation = result.get("v3_shadow_plan_observation")
-    v3_diagnostics = _v3_cycle_diagnostics(v3_plan_observation, v3)
+    v3_activation = result.get("v3_shadow_activation")
+    v3_diagnostics = _v3_cycle_diagnostics(
+        v3_plan_observation,
+        v3,
+        v3_activation,
+    )
     observation = result.get("observation")
     observation = observation if isinstance(observation, dict) else {}
     observation_data = observation.get("data")
