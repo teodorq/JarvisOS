@@ -6,6 +6,7 @@ import hashlib
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 
 from app.market_data.forex_environment import ForexDataSettings
 from app.market_data.forex_models import ForexDataBundle
@@ -22,6 +23,12 @@ from app.market_data.forex_paper_runtime import ForexDemoPaperRuntime
 
 UTC = timezone.utc
 NOW = datetime(2026, 8, 17, 10, 0, tzinfo=UTC)
+AZURE_JOB_ENV = {
+    "CONTAINER_APP_JOB_NAME": "jarvis-os-forex-paper",
+    "CONTAINER_APP_JOB_EXECUTION_NAME": "jarvis-os-forex-paper-abc1234",
+    "CONTAINER_APP_REPLICA_NAME": "jarvis-os-forex-paper-abc1234-def56",
+    "JARVIS_OS_BUILD_SHA": "a" * 40,
+}
 BASE = {
     "EUR_USD": Decimal("1.1000"),
     "GBP_USD": Decimal("1.2800"),
@@ -342,16 +349,17 @@ class ForexPaperRuntimeTests(unittest.TestCase):
 
     def test_approved_cloud_primary_runs_without_mt5(self) -> None:
         gateway = FakeGateway()
-        result = ForexDemoPaperRuntime(
-            self.root,
-            settings=self.settings(provider="TWELVE_DATA_CLOUD"),
-            gateway=gateway,  # type: ignore[arg-type]
-            journal=_ready_journal(self.root),
-        ).run_once(
-            cycle_id="azure-cloud-cycle",
-            now=NOW,
-            capture_origin="AZURE_SCHEDULED",
-        )
+        with patch.dict("os.environ", AZURE_JOB_ENV, clear=False):
+            result = ForexDemoPaperRuntime(
+                self.root,
+                settings=self.settings(provider="TWELVE_DATA_CLOUD"),
+                gateway=gateway,  # type: ignore[arg-type]
+                journal=_ready_journal(self.root),
+            ).run_once(
+                cycle_id="azure-cloud-cycle",
+                now=NOW,
+                capture_origin="AZURE_SCHEDULED",
+            )
 
         self.assertEqual(result["status"], "PAPER_CYCLE_COMPLETED")
         self.assertEqual(result["mode"], "AUTONOMOUS_AZURE_FOREX_PAPER")
@@ -359,6 +367,13 @@ class ForexPaperRuntimeTests(unittest.TestCase):
         self.assertEqual(
             result["observation"]["capture_origin"],
             "AZURE_SCHEDULED",
+        )
+        self.assertEqual(
+            result["observation"]["capture_attestation"]["build_sha"],
+            "a" * 40,
+        )
+        self.assertTrue(
+            result["observation"]["capture_attestation"]["verified"]
         )
         self.assertEqual(gateway.calls, 1)
         self.assertFalse(result["broker_orders_sent"])

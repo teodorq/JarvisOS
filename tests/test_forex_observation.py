@@ -22,6 +22,7 @@ from app.trading.forex_models import (
 from app.trading.forex_observation import (
     ForexObservationJournal,
     ForexObservationService,
+    azure_capture_nonce_sha256,
     forex_candidate_implementation_sha256,
     forex_candidate_v3_implementation_sha256,
 )
@@ -247,6 +248,61 @@ class ForexObservationTests(unittest.TestCase):
         self.assertTrue(
             (self.root / "data/trading/forex_observations.json").exists()
         )
+
+    def test_azure_capture_is_bound_to_immutable_job_metadata(self) -> None:
+        environment = {
+            "CONTAINER_APP_JOB_NAME": "jarvis-os-forex-paper",
+            "CONTAINER_APP_JOB_EXECUTION_NAME": (
+                "jarvis-os-forex-paper-abc1234"
+            ),
+            "CONTAINER_APP_REPLICA_NAME": (
+                "jarvis-os-forex-paper-abc1234-def56"
+            ),
+            "JARVIS_OS_BUILD_SHA": "a" * 40,
+        }
+        with patch.dict(os.environ, environment, clear=False):
+            result = self.service().observe_once(
+                observation_id="forex-observation-azure-0001",
+                now=self.now,
+                capture_origin="AZURE_SCHEDULED",
+            )
+
+        attestation = result["capture_attestation"]
+        self.assertEqual(
+            attestation["kind"],
+            "AZURE_CONTAINER_APPS_JOB_EXECUTION_V1",
+        )
+        self.assertTrue(attestation["verified"])
+        self.assertEqual(attestation["build_sha"], "a" * 40)
+        self.assertEqual(
+            attestation["nonce_sha256"],
+            azure_capture_nonce_sha256(
+                job_name=environment["CONTAINER_APP_JOB_NAME"],
+                execution_name=environment[
+                    "CONTAINER_APP_JOB_EXECUTION_NAME"
+                ],
+                replica_name=environment["CONTAINER_APP_REPLICA_NAME"],
+                build_sha=environment["JARVIS_OS_BUILD_SHA"],
+            ),
+        )
+
+    def test_azure_capture_without_runtime_metadata_fails_closed(self) -> None:
+        missing = {
+            "CONTAINER_APP_JOB_NAME": "",
+            "CONTAINER_APP_JOB_EXECUTION_NAME": "",
+            "CONTAINER_APP_REPLICA_NAME": "",
+            "JARVIS_OS_BUILD_SHA": "",
+        }
+        with patch.dict(os.environ, missing, clear=False):
+            with self.assertRaisesRegex(
+                TradingValidationError,
+                "azure_attestation_invalid",
+            ):
+                self.service().observe_once(
+                    observation_id="forex-observation-azure-0002",
+                    now=self.now,
+                    capture_origin="AZURE_SCHEDULED",
+                )
 
     def test_journal_compaction_preserves_verified_observations(self) -> None:
         journal = ForexObservationJournal(self.root)

@@ -51,6 +51,10 @@ _NON_FORWARD_ORIGINS = {
     "IDEMPOTENT_REPLAY": "REPLAY_CAPTURE",
     "LEDGER_BACKFILL": "LEGACY_BACKFILL",
 }
+_FORWARD_CAPTURE_ORIGINS = frozenset({
+    "SCHEDULED_FORWARD",
+    "AZURE_SCHEDULED",
+})
 _MISSING = object()
 
 
@@ -383,16 +387,43 @@ def _observation_contract_issues(
         dict(raw_attestation) if isinstance(raw_attestation, Mapping) else {}
     )
     nonce_sha256 = str(attestation.get("nonce_sha256", ""))
+    origin = str(observation.get("capture_origin", ""))
+    local_attestation_valid = bool(
+        origin == "SCHEDULED_FORWARD"
+        and attestation.get("kind")
+        == "LOCAL_WATCHDOG_ANCESTRY_NONCE_V1"
+        and attestation.get("verified") is True
+        and attestation.get("trust_level") == "BEST_EFFORT_LOCAL_PROCESS"
+        and attestation.get("verified_scope")
+        == "WATCHDOG_ANCESTRY_AND_NONCE_FORMAT"
+        and _SHA256.fullmatch(nonce_sha256)
+        and type(attestation.get("watchdog_process_id")) is int
+        and int(attestation["watchdog_process_id"]) > 0
+    )
+    azure_attestation_valid = False
     if (
-        attestation.get("kind") != "LOCAL_WATCHDOG_ANCESTRY_NONCE_V1"
-        or attestation.get("verified") is not True
-        or attestation.get("trust_level") != "BEST_EFFORT_LOCAL_PROCESS"
-        or attestation.get("verified_scope")
-        != "WATCHDOG_ANCESTRY_AND_NONCE_FORMAT"
-        or not _SHA256.fullmatch(nonce_sha256)
-        or type(attestation.get("watchdog_process_id")) is not int
-        or int(attestation["watchdog_process_id"]) <= 0
+        origin == "AZURE_SCHEDULED"
+        and attestation.get("kind")
+        == "AZURE_CONTAINER_APPS_JOB_EXECUTION_V1"
+        and attestation.get("verified") is True
+        and attestation.get("trust_level")
+        == "AZURE_MANAGED_IDENTITY_BLOB_ARCHIVE"
+        and attestation.get("verified_scope")
+        == "IMMUTABLE_BUILD_AND_JOB_EXECUTION_METADATA"
+        and _SHA256.fullmatch(nonce_sha256)
     ):
+        try:
+            expected_nonce = observation_module.azure_capture_nonce_sha256(
+                job_name=attestation.get("job_name"),
+                execution_name=attestation.get("execution_name"),
+                replica_name=attestation.get("replica_name"),
+                build_sha=attestation.get("build_sha"),
+            )
+        except TradingValidationError:
+            pass
+        else:
+            azure_attestation_valid = nonce_sha256 == expected_nonce
+    if not (local_attestation_valid or azure_attestation_valid):
         issues.append("CAPTURE_ATTESTATION_INVALID")
     try:
         captured_at = _timestamp(observation.get("captured_at"), "captured_at")
@@ -635,7 +666,7 @@ def _build_forex_candidate_forward_evidence_report(
             else {}
         )
         declared_nonce = str(attestation.get("nonce_sha256", ""))
-        if origin == "SCHEDULED_FORWARD" and _SHA256.fullmatch(
+        if origin in _FORWARD_CAPTURE_ORIGINS and _SHA256.fullmatch(
             declared_nonce
         ):
             if declared_nonce in seen_capture_nonces:
@@ -654,7 +685,17 @@ def _build_forex_candidate_forward_evidence_report(
         if source_evidence.get("recovery_replay") is True:
             exclude("RECOVERY_REPLAY")
             continue
-        if origin != "SCHEDULED_FORWARD":
+        if (
+            origin == "AZURE_SCHEDULED"
+            and (
+                attestation.get("kind")
+                != "AZURE_CONTAINER_APPS_JOB_EXECUTION_V1"
+                or attestation.get("verified") is not True
+            )
+        ):
+            exclude("AZURE_ATTESTATION_UNVERIFIED")
+            continue
+        if origin not in _FORWARD_CAPTURE_ORIGINS:
             exclude(_NON_FORWARD_ORIGINS.get(
                 origin,
                 "UNSUPPORTED_CAPTURE_ORIGIN",

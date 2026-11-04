@@ -39,6 +39,12 @@ class CloudPaperJobError(RuntimeError):
     """Raised when the scheduled PAPER job cannot preserve state safely."""
 
 
+def _diagnostic_code(value: object) -> str:
+    raw = str(value or "").upper()
+    cleaned = re.sub(r"[^A-Z0-9_:.-]+", "_", raw).strip("_")
+    return cleaned[:160] if _DIAGNOSTIC_CODE.fullmatch(cleaned[:160]) else ""
+
+
 @dataclass(frozen=True, slots=True)
 class PaperStateArchive:
     max_compressed_bytes: int = 32 * 1024 * 1024
@@ -403,12 +409,7 @@ def _public_result(result: dict[str, Any]) -> dict[str, Any]:
         if _DIAGNOSTIC_CODE.fullmatch(raw_nbp_state)
         else ""
     )
-    raw_result_reason = str(result.get("reason", ""))
-    result_reason = (
-        raw_result_reason
-        if _DIAGNOSTIC_CODE.fullmatch(raw_result_reason)
-        else ""
-    )
+    result_reason = _diagnostic_code(result.get("reason", ""))
     try:
         runtime = ForexRuntimeCycleSummary.project(result)
     except (TypeError, ValueError, OverflowError, RecursionError, MemoryError):

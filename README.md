@@ -385,6 +385,12 @@ data, an open market bar, an incomplete second-source check and duplicate input
 snapshots/nonces are explicitly excluded. Legacy observations remain available
 in the tamper-evident journal but are never retroactively upgraded to the stricter
 contract.
+Azure `AZURE_SCHEDULED` cycles can also enter the sample only when their
+attestation is bound to the injected Container Apps job, execution and replica
+names plus the exact immutable 40-character build SHA. The resulting nonce is
+recomputed during evidence review; forged metadata fails closed, while older
+unverified Azure declarations remain preserved but excluded. This cloud
+provenance is used only for PAPER evidence and cannot enable LIVE trading.
 
 Every automatic PAPER cycle atomically refreshes two isolated ignored reports:
 `data/trading/research/forward_v2_latest.json` and

@@ -7,6 +7,7 @@ from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import sys
@@ -38,6 +39,10 @@ if TYPE_CHECKING:
 
 _OBSERVATION_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,79}$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
+_GIT_SHA = re.compile(r"^[0-9a-f]{40}$")
+_AZURE_JOB_NAME = "jarvis-os-forex-paper"
+_AZURE_EXECUTION_SUFFIX = re.compile(r"^[a-z0-9]{7}$")
+_AZURE_REPLICA_SUFFIX = re.compile(r"^[a-z0-9]{5}$")
 _OBSERVATION_SCHEMA_VERSION = 3
 _CAPTURE_ORIGINS = frozenset({
     "AZURE_SCHEDULED",
@@ -69,6 +74,46 @@ def _capture_origin(value: object) -> str:
     return selected
 
 
+def azure_capture_nonce_sha256(
+    *,
+    job_name: object,
+    execution_name: object,
+    replica_name: object,
+    build_sha: object,
+) -> str:
+    """Bind one Azure PAPER capture to immutable job execution metadata."""
+
+    selected_job = str(job_name or "")
+    selected_execution = str(execution_name or "")
+    selected_replica = str(replica_name or "")
+    selected_build = str(build_sha or "")
+    execution_prefix = selected_job + "-"
+    replica_prefix = selected_execution + "-"
+    if (
+        selected_job != _AZURE_JOB_NAME
+        or not selected_execution.startswith(execution_prefix)
+        or not _AZURE_EXECUTION_SUFFIX.fullmatch(
+            selected_execution.removeprefix(execution_prefix)
+        )
+        or not selected_replica.startswith(replica_prefix)
+        or not _AZURE_REPLICA_SUFFIX.fullmatch(
+            selected_replica.removeprefix(replica_prefix)
+        )
+        or not _GIT_SHA.fullmatch(selected_build)
+    ):
+        raise TradingValidationError(
+            "forex_observation: azure_attestation_invalid"
+        )
+    canonical = "\0".join((
+        "AZURE_CONTAINER_APPS_JOB_EXECUTION_V1",
+        selected_job,
+        selected_execution,
+        selected_replica,
+        selected_build,
+    )).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
+
+
 def _capture_attestation(value: object, *, origin: str) -> dict[str, Any]:
     if origin == "SCHEDULED_FORWARD":
         selected = dict(value) if isinstance(value, Mapping) else {}
@@ -92,6 +137,30 @@ def _capture_attestation(value: object, *, origin: str) -> dict[str, Any]:
             "verified_scope": "WATCHDOG_ANCESTRY_AND_NONCE_FORMAT",
             "nonce_sha256": str(selected["nonce_sha256"]),
             "watchdog_process_id": int(selected["watchdog_process_id"]),
+        }
+    if origin == "AZURE_SCHEDULED":
+        job_name = os.getenv("CONTAINER_APP_JOB_NAME", "").strip()
+        execution_name = os.getenv(
+            "CONTAINER_APP_JOB_EXECUTION_NAME", ""
+        ).strip()
+        replica_name = os.getenv("CONTAINER_APP_REPLICA_NAME", "").strip()
+        build_sha = os.getenv("JARVIS_OS_BUILD_SHA", "").strip().lower()
+        nonce = azure_capture_nonce_sha256(
+            job_name=job_name,
+            execution_name=execution_name,
+            replica_name=replica_name,
+            build_sha=build_sha,
+        )
+        return {
+            "kind": "AZURE_CONTAINER_APPS_JOB_EXECUTION_V1",
+            "verified": True,
+            "trust_level": "AZURE_MANAGED_IDENTITY_BLOB_ARCHIVE",
+            "verified_scope": "IMMUTABLE_BUILD_AND_JOB_EXECUTION_METADATA",
+            "nonce_sha256": nonce,
+            "job_name": job_name,
+            "execution_name": execution_name,
+            "replica_name": replica_name,
+            "build_sha": build_sha,
         }
     if origin == "MANUAL":
         return {"kind": "MANUAL_DIRECT_V1", "verified": False}

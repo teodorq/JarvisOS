@@ -15,6 +15,25 @@ from cloud_service.forex_paper_job import (
 
 
 class CloudForexPaperJobTests(unittest.TestCase):
+    def test_public_result_sanitizes_provider_failure_reason(self) -> None:
+        result = _public_result({
+            "status": "PAPER_CYCLE_BLOCKED",
+            "cycle_id": "azure-provider-failure",
+            "observed_at": "2026-11-04T21:02:50+00:00",
+            "reason": "market_data_provider: TWELVE_DATA_CLOUD_HTTP_429",
+            "broker_orders_sent": False,
+            "live_orders_sent": False,
+            "real_money_access": False,
+        })
+
+        self.assertEqual(
+            result["reason"],
+            "MARKET_DATA_PROVIDER:_TWELVE_DATA_CLOUD_HTTP_429",
+        )
+        self.assertFalse(result["broker_orders_sent"])
+        self.assertFalse(result["live_orders_sent"])
+        self.assertFalse(result["real_money_access"])
+
     def test_state_archive_round_trip_keeps_only_trading_json(self) -> None:
         state = PaperStateArchive()
         with TemporaryDirectory() as source_dir, TemporaryDirectory() as target_dir:

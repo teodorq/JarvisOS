@@ -57,7 +57,7 @@ from cloud_service.remote_store import (
 
 
 SERVICE_NAME = "jarvis-os-cloud-planner"
-SERVICE_VERSION = "0.10.6"
+SERVICE_VERSION = "0.10.7"
 MAX_BODY_BYTES = 16_384
 
 

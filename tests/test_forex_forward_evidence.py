@@ -21,7 +21,10 @@ from app.trading.forex_forward_evidence import (
 )
 from app.trading.forex_forward_review import ForexV2OwnerReviewPacket
 from app.trading.forex_models import MAJOR_FOREX_PAIRS
-from app.trading.forex_observation import ForexObservationJournal
+from app.trading.forex_observation import (
+    ForexObservationJournal,
+    azure_capture_nonce_sha256,
+)
 from app.trading.forex_sample_contract import build_forex_paper_sample_contract
 from app.trading.forex_v2_research_dashboard import ForexV2ResearchDashboard
 
@@ -202,6 +205,34 @@ def _v3_record(
         "automatic_paper_promotion": False,
         "paper_orders_sent": False,
         "live_orders_sent": False,
+    }
+    return record
+
+
+def _azure_attested(
+    record: dict[str, object],
+    *,
+    execution_suffix: str = "abc1234",
+) -> dict[str, object]:
+    execution_name = f"jarvis-os-forex-paper-{execution_suffix}"
+    replica_name = f"{execution_name}-def56"
+    build_sha = "a" * 40
+    record["capture_origin"] = "AZURE_SCHEDULED"
+    record["capture_attestation"] = {
+        "kind": "AZURE_CONTAINER_APPS_JOB_EXECUTION_V1",
+        "verified": True,
+        "trust_level": "AZURE_MANAGED_IDENTITY_BLOB_ARCHIVE",
+        "verified_scope": "IMMUTABLE_BUILD_AND_JOB_EXECUTION_METADATA",
+        "nonce_sha256": azure_capture_nonce_sha256(
+            job_name="jarvis-os-forex-paper",
+            execution_name=execution_name,
+            replica_name=replica_name,
+            build_sha=build_sha,
+        ),
+        "job_name": "jarvis-os-forex-paper",
+        "execution_name": execution_name,
+        "replica_name": replica_name,
+        "build_sha": build_sha,
     }
     return record
 
@@ -1267,6 +1298,71 @@ def test_v3_report_accepts_only_strict_schema_three_forward_cycles(
         report,
         require_complete=True,
     ) is False
+
+
+def test_v3_report_accepts_strict_azure_job_attestation(
+    tmp_path: Path,
+) -> None:
+    record = _azure_attested(_v3_record())
+
+    report = build_forex_v3_forward_evidence_report(
+        _state(tmp_path, record),
+        generated_at=AFTER_V3_FREEZE + timedelta(hours=1),
+    )
+
+    assert report["status"] == "COLLECTING_FORWARD_EVIDENCE"
+    assert report["accepted_cycle_count"] == 1
+    assert report["excluded_cycle_count"] == 0
+    assert report["invalid_cycle_count"] == 0
+    assert verify_forex_v3_forward_evidence_report(report) is True
+
+
+def test_v3_report_excludes_legacy_unverified_azure_capture(
+    tmp_path: Path,
+) -> None:
+    record = _v3_record(
+        seed="v3-legacy-azure",
+        observation_id="forward-v3-observation-legacy-azure",
+    )
+    record["capture_origin"] = "AZURE_SCHEDULED"
+    record["capture_attestation"] = {
+        "kind": "AZURE_SCHEDULED_DECLARATION_V1",
+        "verified": False,
+    }
+
+    report = build_forex_v3_forward_evidence_report(
+        _state(tmp_path, record),
+        generated_at=AFTER_V3_FREEZE + timedelta(hours=1),
+    )
+
+    assert report["accepted_cycle_count"] == 0
+    assert report["excluded_cycle_count"] == 1
+    assert report["invalid_cycle_count"] == 0
+    assert report["exclusions"] == {"AZURE_ATTESTATION_UNVERIFIED": 1}
+
+
+def test_v3_report_rejects_forged_azure_attestation(
+    tmp_path: Path,
+) -> None:
+    record = _azure_attested(
+        _v3_record(
+            seed="v3-forged-azure",
+            observation_id="forward-v3-observation-forged-azure",
+        )
+    )
+    record["capture_attestation"]["nonce_sha256"] = "0" * 64
+
+    report = build_forex_v3_forward_evidence_report(
+        _state(tmp_path, record),
+        generated_at=AFTER_V3_FREEZE + timedelta(hours=1),
+    )
+
+    assert report["status"] == "BLOCKED_INVALID_FORWARD_EVIDENCE"
+    assert report["accepted_cycle_count"] == 0
+    assert report["invalid_cycle_count"] == 1
+    assert report["invalid_issues"] == {
+        "CAPTURE_ATTESTATION_INVALID": 1,
+    }
 
 
 def test_v3r2_excludes_only_the_preregistered_superseded_candidate(
