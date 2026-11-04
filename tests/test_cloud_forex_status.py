@@ -42,6 +42,17 @@ def sample_status() -> dict:
         "runtime_high_impact_event_window": False,
         "position_count": 1,
         "v3_status": "SHADOW_SIMULATION_CYCLE_COMPLETED",
+        "v3_forward_status": "COLLECTING_FORWARD_EVIDENCE",
+        "v3_forward_candidate_id": "FOREX_STRENGTH_V3R2_20261104",
+        "v3_forward_source_state_valid": True,
+        "v3_forward_sample_complete": False,
+        "v3_forward_accepted_cycle_count": 4,
+        "v3_forward_minimum_cycle_count": 20,
+        "v3_forward_accepted_market_day_count": 1,
+        "v3_forward_minimum_market_day_count": 3,
+        "v3_forward_invalid_cycle_count": 0,
+        "v3_forward_exclusions": {"SUPERSEDED_CANDIDATE": 12},
+        "v3_forward_invalid_issues": {},
         "v3_activation_status": "ALREADY_ACTIVE",
         "v3_activation_reason": "",
         "v3_plan_observation_status": "SHADOW_PLAN_OBSERVED",
@@ -154,6 +165,11 @@ class CloudForexStatusTests(unittest.TestCase):
         self.assertEqual(result["runtime_reason_codes"]["NO_ENTRY_SIGNAL"], 6)
         self.assertEqual(result["v3_decision_status"], "NO_ACTION")
         self.assertEqual(result["v3_activation_status"], "ALREADY_ACTIVE")
+        self.assertEqual(result["v3_forward_accepted_cycle_count"], 4)
+        self.assertEqual(
+            result["v3_forward_exclusions"],
+            {"SUPERSEDED_CANDIDATE": 12},
+        )
         self.assertEqual(result["v3_ready_pair_count"], 6)
         self.assertEqual(result["v3_reason_codes"]["NO_NEW_CROSSOVER"], 5)
 

@@ -227,7 +227,7 @@ class ForexObservationTests(unittest.TestCase):
         candidate_v3 = result["development_candidate_v3"]
         self.assertEqual(
             candidate_v3["candidate_id"],
-            "FOREX_STRENGTH_V3_20260929",
+            "FOREX_STRENGTH_V3R2_20261104",
         )
         self.assertEqual(
             candidate_v3["implementation_sha256"],

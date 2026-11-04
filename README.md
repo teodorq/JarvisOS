@@ -354,7 +354,7 @@ marks the already-known history as reused development data and always requires
 new post-freeze evidence, so repeatedly running the report cannot turn an
 overfit result into validation.
 Report schema 3 also contains the preregistered, research-only
-`FOREX_STRENGTH_V3_20260929` candidate. It keeps the 10/30 M15 crossover but
+`FOREX_STRENGTH_V3R2_20261104` candidate. It keeps the 10/30 M15 crossover but
 requires fixed ATR-normalized moving-average separation and price displacement
 before a new entry. Its thresholds are immutable, exits remain unchanged, and
 the reused historical result can only reject the hypothesis; it cannot validate,
@@ -388,7 +388,7 @@ contract.
 
 Every automatic PAPER cycle atomically refreshes two isolated ignored reports:
 `data/trading/research/forward_v2_latest.json` and
-`data/trading/research/forward_v3_latest.json`. V3 accepts only observation
+`data/trading/research/forward_v3r2_latest.json`. V3R2 accepts only observation
 schema 3 cycles captured after its own freeze and cannot reuse older V2 evidence.
 Each report records the exact journal
 cutoff/head hash, accepted observation hashes, exclusion reasons and its own

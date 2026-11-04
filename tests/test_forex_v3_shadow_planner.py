@@ -158,7 +158,7 @@ def test_initialized_planner_builds_signed_non_executable_v3_plan(tmp_path) -> N
     assert result["status"] == "SHADOW_PLAN_COMPUTED"
     assert result["decision_status"] == "ENTRIES_READY"
     assert result["mode"] == "FOREX_V3_SHADOW_PLAN_ONLY"
-    assert result["candidate_id"] == "FOREX_STRENGTH_V3_20260929"
+    assert result["candidate_id"] == "FOREX_STRENGTH_V3R2_20261104"
     assert result["instructions"][0]["action"] == "OPEN_LONG"
     assert result["instructions"][0]["pair"] == "EUR_USD"
     assert result["instructions"][0]["executable"] is False

@@ -89,9 +89,9 @@ def test_v3_shadow_contract_is_deterministic_isolated_and_not_base() -> None:
 
     assert first == second
     assert first["contract_id"] == V3_SHADOW_CONTRACT_ID
-    assert first["portfolio_scope"] == "ISOLATED_V3_SHADOW"
+    assert first["portfolio_scope"] == "ISOLATED_V3R2_SHADOW"
     assert first["specification"]["strategy_id"] == (
-        "FOREX_STRENGTH_V3_20260929"
+        "FOREX_STRENGTH_V3R2_20261104"
     )
     assert first["paper_only"] is True
     assert first["live_trading_enabled"] is False

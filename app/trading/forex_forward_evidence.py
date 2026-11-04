@@ -537,6 +537,7 @@ def _build_forex_candidate_forward_evidence_report(
     mode: str,
     accepted_schema_versions: frozenset[int],
     implementation_factory: Callable[[], str],
+    superseded_candidate_ids: frozenset[str] = frozenset(),
     generated_at: datetime | None = None,
 ) -> dict[str, Any]:
     """Build a deterministic signal report from one strict journal cutoff."""
@@ -675,6 +676,13 @@ def _build_forex_candidate_forward_evidence_report(
             continue
         raw_candidate = observation.get(candidate_field)
         candidate = dict(raw_candidate) if isinstance(raw_candidate, Mapping) else {}
+        if (
+            observed_at <= policy.frozen_after
+            and str(candidate.get("candidate_id", ""))
+            in superseded_candidate_ids
+        ):
+            exclude("SUPERSEDED_CANDIDATE")
+            continue
         calculated_forward = policy.forward_eligible(observed_at)
         declared_forward = candidate.get("forward_eligible")
         if declared_forward is not calculated_forward:
@@ -824,6 +832,9 @@ def build_forex_v3_forward_evidence_report(
         mode="FOREX_V3_FORWARD_SIGNAL_EVIDENCE_ONLY",
         accepted_schema_versions=frozenset({3}),
         implementation_factory=expected_v3_candidate_implementation_sha256,
+        superseded_candidate_ids=frozenset({
+            "FOREX_STRENGTH_V3_20260929",
+        }),
         generated_at=generated_at,
     )
 
@@ -1372,9 +1383,9 @@ class ForexV2ForwardEvidenceReport:
 class ForexV3ForwardEvidenceReport(ForexV2ForwardEvidenceReport):
     """Persist V3 evidence independently while reusing the strict V2 safeguards."""
 
-    REPORT_FILENAME = "forward_v3_latest.json"
-    LOCK_FILENAME = ".forward_v3_latest.lock"
-    TEMP_PREFIX = ".forward-v3-"
+    REPORT_FILENAME = "forward_v3r2_latest.json"
+    LOCK_FILENAME = ".forward_v3r2_latest.lock"
+    TEMP_PREFIX = ".forward-v3r2-"
 
     def _expected_implementation_sha256(self) -> str:
         return expected_v3_candidate_implementation_sha256()

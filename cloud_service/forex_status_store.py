@@ -262,6 +262,39 @@ def sanitize_forex_status(value: object) -> dict[str, Any]:
         ),
         "position_count": _count(value.get("position_count", 0)),
         "v3_status": _code(value.get("v3_status", "")),
+        "v3_forward_status": _code(
+            value.get("v3_forward_status", "")
+        ),
+        "v3_forward_candidate_id": _code(
+            value.get("v3_forward_candidate_id", "")
+        ),
+        "v3_forward_source_state_valid": (
+            value.get("v3_forward_source_state_valid") is True
+        ),
+        "v3_forward_sample_complete": (
+            value.get("v3_forward_sample_complete") is True
+        ),
+        "v3_forward_accepted_cycle_count": _count(
+            value.get("v3_forward_accepted_cycle_count", 0)
+        ),
+        "v3_forward_minimum_cycle_count": _count(
+            value.get("v3_forward_minimum_cycle_count", 0)
+        ),
+        "v3_forward_accepted_market_day_count": _count(
+            value.get("v3_forward_accepted_market_day_count", 0)
+        ),
+        "v3_forward_minimum_market_day_count": _count(
+            value.get("v3_forward_minimum_market_day_count", 0)
+        ),
+        "v3_forward_invalid_cycle_count": _count(
+            value.get("v3_forward_invalid_cycle_count", 0)
+        ),
+        "v3_forward_exclusions": _reason_counts(
+            value.get("v3_forward_exclusions", {})
+        ),
+        "v3_forward_invalid_issues": _reason_counts(
+            value.get("v3_forward_invalid_issues", {})
+        ),
         "v3_activation_status": _code(
             value.get("v3_activation_status", "")
         ),
@@ -357,6 +390,14 @@ def forex_status_view(
             "v3_open_positions": [],
             "v3_unrealized_pnl_pln": "0",
             "v3_activation_status": "STATUS_UNAVAILABLE",
+            "v3_forward_status": "STATUS_UNAVAILABLE",
+            "v3_forward_source_state_valid": False,
+            "v3_forward_sample_complete": False,
+            "v3_forward_accepted_cycle_count": 0,
+            "v3_forward_accepted_market_day_count": 0,
+            "v3_forward_invalid_cycle_count": 0,
+            "v3_forward_exclusions": {},
+            "v3_forward_invalid_issues": {},
             "v3_activation_reason": "",
             "v3_plan_reason": "",
             "v3_decision_status": "STATUS_UNAVAILABLE",

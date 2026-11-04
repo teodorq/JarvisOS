@@ -30,11 +30,11 @@ class ForexStrengthCandidatePolicy:
     """Immutable preregistration; values cannot be tuned by callers."""
 
     candidate_id: str = field(
-        default="FOREX_STRENGTH_V3_20260929",
+        default="FOREX_STRENGTH_V3R2_20261104",
         init=False,
     )
     frozen_after: datetime = field(
-        default=datetime(2026, 9, 29, 17, 9, 11, tzinfo=timezone.utc),
+        default=datetime(2026, 11, 4, 20, 15, 0, tzinfo=timezone.utc),
         init=False,
     )
     m15_fast_window: int = field(default=10, init=False)

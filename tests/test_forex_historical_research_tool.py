@@ -86,7 +86,7 @@ def test_v3_development_report_never_promotes_reused_results() -> None:
         },
     )
 
-    assert report["candidate_id"] == "FOREX_STRENGTH_V3_20260929"
+    assert report["candidate_id"] == "FOREX_STRENGTH_V3R2_20261104"
     assert report["historical_development_checks_passed"] is True
     assert report["strategy_performance_validated"] is False
     assert report["strategy_candidate_ready"] is False

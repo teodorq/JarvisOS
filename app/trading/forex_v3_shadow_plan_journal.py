@@ -31,7 +31,7 @@ class ForexV3ShadowPlanJournal:
     """Archive plans only; never persist positions, fills or permissions."""
 
     RELATIVE_PATH = Path(
-        "data/trading/research/forex_v3_shadow_plans.json"
+        "data/trading/research/forex_v3r2_shadow_plans.json"
     )
     MODE = "FOREX_V3_SHADOW_PLAN_JOURNAL_ONLY"
     MAX_PLANS = 500

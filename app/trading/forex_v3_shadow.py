@@ -11,6 +11,7 @@ from app.trading.forex_forward_evidence import (
     ForexV3ForwardEvidenceReport,
     verify_forex_v3_forward_evidence_report,
 )
+from app.trading.forex_candidate_v3 import ForexStrengthCandidatePolicy
 from app.trading.forex_v3_shadow_ledger import ForexV3ShadowLedger
 
 
@@ -147,7 +148,7 @@ class ForexV3ShadowReadiness:
             "status": "BLOCKED_INVALID_FORWARD_EVIDENCE",
             "mode": "FOREX_V3_SHADOW_READINESS_ONLY",
             "reason": str(reason)[:160],
-            "candidate_id": "FOREX_STRENGTH_V3_20260929",
+            "candidate_id": ForexStrengthCandidatePolicy().candidate_id,
             "accepted_cycle_count": 0,
             "minimum_accepted_cycle_count": 20,
             "remaining_accepted_cycles": 20,

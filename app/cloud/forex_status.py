@@ -260,6 +260,39 @@ def project_cloud_forex_status(
         v3_reasons = _runtime_reason_codes(
             value.get("v3_reason_codes", {})
         )
+        v3_forward_status = str(
+            value.get("v3_forward_status", "")
+        ).strip().upper()
+        v3_forward_candidate_id = str(
+            value.get("v3_forward_candidate_id", "")
+        ).strip().upper()
+        v3_forward_accepted_cycles = _count(
+            value.get("v3_forward_accepted_cycle_count", 0)
+        )
+        v3_forward_minimum_cycles = _count(
+            value.get("v3_forward_minimum_cycle_count", 0)
+        )
+        v3_forward_accepted_days = _count(
+            value.get("v3_forward_accepted_market_day_count", 0)
+        )
+        v3_forward_minimum_days = _count(
+            value.get("v3_forward_minimum_market_day_count", 0)
+        )
+        v3_forward_invalid_cycles = _count(
+            value.get("v3_forward_invalid_cycle_count", 0)
+        )
+        v3_forward_exclusions = _runtime_reason_codes(
+            value.get("v3_forward_exclusions", {})
+        )
+        v3_forward_invalid_issues = _runtime_reason_codes(
+            value.get("v3_forward_invalid_issues", {})
+        )
+        v3_forward_source_valid = (
+            value.get("v3_forward_source_state_valid") is True
+        )
+        v3_forward_complete = (
+            value.get("v3_forward_sample_complete") is True
+        )
         v3_decision = str(value.get("v3_decision_status", "")).strip().upper()
         v3_status = str(
             value.get("v3_plan_observation_status", "")
@@ -285,12 +318,24 @@ def project_cloud_forex_status(
                 v3_activation_reason,
                 v3_plan_reason,
                 v3_simulation_reason,
+                v3_forward_status,
+                v3_forward_candidate_id,
             )
         ):
             raise ValueError("invalid V3 diagnostic code")
         if (
             v3_ready_pair_count + v3_blocked_pair_count > 7
             or v3_execution_count > v3_instruction_count
+            or (
+                v3_forward_complete
+                and (
+                    not v3_forward_source_valid
+                    or v3_forward_invalid_cycles != 0
+                    or v3_forward_accepted_cycles
+                    < v3_forward_minimum_cycles
+                    or v3_forward_accepted_days < v3_forward_minimum_days
+                )
+            )
         ):
             raise ValueError("inconsistent V3 diagnostics")
     except (InvalidOperation, TypeError, ValueError, OverflowError):
@@ -349,6 +394,19 @@ def project_cloud_forex_status(
             "instruction_count": v3_instruction_count,
             "execution_count": v3_execution_count,
             "reason_codes": v3_reasons,
+            "forward_evidence": {
+                "status": v3_forward_status,
+                "candidate_id": v3_forward_candidate_id,
+                "source_state_valid": v3_forward_source_valid,
+                "sample_complete": v3_forward_complete,
+                "accepted_cycle_count": v3_forward_accepted_cycles,
+                "minimum_cycle_count": v3_forward_minimum_cycles,
+                "accepted_market_day_count": v3_forward_accepted_days,
+                "minimum_market_day_count": v3_forward_minimum_days,
+                "invalid_cycle_count": v3_forward_invalid_cycles,
+                "exclusions": v3_forward_exclusions,
+                "invalid_issues": v3_forward_invalid_issues,
+            },
             "paper_orders_sent": v3_execution_count > 0,
             "broker_orders_sent": False,
             "live_orders_sent": False,

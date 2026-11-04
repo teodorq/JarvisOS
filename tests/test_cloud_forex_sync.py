@@ -59,6 +59,19 @@ def test_fresh_cloud_status_projects_current_paper_position() -> None:
             "CANDIDATE_V3_SIGNAL_STRENGTH_TOO_LOW": 1,
             "SPREAD_TOO_WIDE": 1,
         },
+        "forward_evidence": {
+            "status": "COLLECTING_FORWARD_EVIDENCE",
+            "candidate_id": "FOREX_STRENGTH_V3R2_20261104",
+            "source_state_valid": True,
+            "sample_complete": False,
+            "accepted_cycle_count": 4,
+            "minimum_cycle_count": 20,
+            "accepted_market_day_count": 1,
+            "minimum_market_day_count": 3,
+            "invalid_cycle_count": 0,
+            "exclusions": {"SUPERSEDED_CANDIDATE": 12},
+            "invalid_issues": {},
+        },
         "paper_orders_sent": False,
         "broker_orders_sent": False,
         "live_orders_sent": False,
@@ -106,6 +119,16 @@ def test_inconsistent_v3_diagnostics_fail_closed() -> None:
     assert snapshot["status"] == "STALE_DATA_BLOCKED"
     assert snapshot["last_v3_cycle"]["available"] is False
     assert snapshot["positions"] == []
+
+
+def test_inconsistent_complete_v3r2_evidence_fails_closed() -> None:
+    payload = forex_status_view(sample_status(), now=NOW)
+    payload["v3_forward_sample_complete"] = True
+
+    snapshot = project_cloud_forex_status(payload, now=NOW)
+
+    assert snapshot["status"] == "STALE_DATA_BLOCKED"
+    assert snapshot["last_v3_cycle"]["available"] is False
 
 
 def test_source_refreshes_the_private_status_without_ui_thread_networking() -> None:

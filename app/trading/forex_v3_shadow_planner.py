@@ -11,7 +11,10 @@ from pathlib import Path
 import re
 from typing import Any, Iterable, Mapping
 
-from app.trading.forex_candidate_v3 import ForexStrengthFilteredScanner
+from app.trading.forex_candidate_v3 import (
+    ForexStrengthCandidatePolicy,
+    ForexStrengthFilteredScanner,
+)
 from app.trading.forex_coordinator import ForexPaperCoordinator
 from app.trading.forex_models import (
     ForexBar,
@@ -58,7 +61,8 @@ def verify_forex_v3_shadow_plan(value: object) -> bool:
         or plan.get("mode") != "FOREX_V3_SHADOW_PLAN_ONLY"
         or not _CYCLE_ID.fullmatch(str(plan.get("cycle_id", "")))
         or assessed_at.tzinfo is None
-        or plan.get("candidate_id") != "FOREX_STRENGTH_V3_20260929"
+        or plan.get("candidate_id")
+        != ForexStrengthCandidatePolicy().candidate_id
         or not verify_forex_v3_shadow_sample_contract(contract)
         or not _SHA256.fullmatch(
             str(plan.get("shadow_ledger_audit_head", ""))

@@ -15,6 +15,9 @@ from app.trading.forex_models import (
     ForexSafetyContext,
     MAJOR_FOREX_PAIRS,
 )
+from app.trading.forex_observation import (
+    forex_candidate_v3_implementation_sha256,
+)
 
 
 PAIR = MAJOR_FOREX_PAIRS[0]
@@ -106,3 +109,9 @@ def test_v3_preregistration_is_stable_forward_only_and_not_tunable() -> None:
     assert audit["research_only"] is True
     assert audit["paper_execution_enabled"] is False
     assert audit["live_execution_enabled"] is False
+
+
+def test_v3r2_implementation_change_requires_a_new_preregistration() -> None:
+    assert forex_candidate_v3_implementation_sha256() == (
+        "cb80309712b3418910e3c6767a4d01800326d9622f3865b19e0ebe4c93205cb5"
+    )

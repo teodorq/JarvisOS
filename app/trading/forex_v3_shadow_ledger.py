@@ -19,10 +19,10 @@ class ForexV3ShadowLedger(ForexPaperLedger):
     """Keep V3 PAPER state separate; this class does not execute trades."""
 
     RELATIVE_PATH = Path(
-        "data/trading/research/forex_v3_shadow_ledger.json"
+        "data/trading/research/forex_v3r2_shadow_ledger.json"
     )
     MODE = "FOREX_V3_SHADOW_PAPER_ONLY"
-    PORTFOLIO_ID = "FOREX_V3_SHADOW_PAPER"
+    PORTFOLIO_ID = "FOREX_V3R2_SHADOW_PAPER"
 
     def __init__(
         self,

@@ -17,7 +17,7 @@ from app.trading.forex_v3_shadow_ledger import ForexV3ShadowLedger
 
 
 UTC = timezone.utc
-NOW = datetime(2026, 9, 30, 10, 0, tzinfo=UTC)
+NOW = datetime(2026, 11, 5, 10, 0, tzinfo=UTC)
 
 
 class StaticEvidence:
@@ -50,8 +50,8 @@ def _complete_report() -> dict:
     for index in range(20):
         observed_at = datetime(
             2026,
-            9,
-            30,
+            11,
+            5,
             8,
             0,
             tzinfo=UTC,
@@ -70,7 +70,7 @@ def _complete_report() -> dict:
         })
     report.update({
         "status": "FORWARD_OBSERVATION_SAMPLE_COMPLETE",
-        "generated_at": datetime(2026, 10, 3, 12, 0, tzinfo=UTC).isoformat(),
+        "generated_at": datetime(2026, 11, 8, 12, 0, tzinfo=UTC).isoformat(),
         "source_cutoff_sequence": 20,
         "source_head_hash": accepted[-1]["observation_hash"],
         "accepted_cycle_count": 20,

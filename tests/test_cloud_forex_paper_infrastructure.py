@@ -21,6 +21,11 @@ class CloudForexPaperInfrastructureTests(unittest.TestCase):
         self.assertIn("JARVIS_OS_FOREX_BASE_NEW_ENTRIES_ENABLED", bicep)
         self.assertIn("JARVIS_OS_FOREX_V3_SHADOW_SIMULATION_ENABLED", bicep)
         self.assertIn("JARVIS_OS_FOREX_V3_SHADOW_REVIEW_FINGERPRINT", bicep)
+        self.assertIn("param v3ShadowReviewFingerprint string = ''", bicep)
+        self.assertNotIn(
+            "58bdd20567b2093b5883a181a3bcab7c0c2e6c0eb6a65d08ae68c255dc9affd2",
+            bicep,
+        )
         self.assertNotIn("OANDA_PRACTICE_TOKEN", bicep)
 
     def test_state_is_private_and_uses_managed_identity(self) -> None:

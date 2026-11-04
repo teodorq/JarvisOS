@@ -108,8 +108,8 @@ def test_comparison_freezes_one_shot_histories_and_is_auditable() -> None:
     assert len(result["manifest"]["comparison_contract_sha256"]) == 64
     assert result["manifest"]["v2_candidate_id"] == "FOREX_REGIME_V2_20260820"
     assert result["manifest"]["v2_frozen_after"].startswith("2026-08-20T")
-    assert result["manifest"]["v3_candidate_id"] == "FOREX_STRENGTH_V3_20260929"
-    assert result["manifest"]["v3_frozen_after"].startswith("2026-09-29T")
+    assert result["manifest"]["v3_candidate_id"] == "FOREX_STRENGTH_V3R2_20261104"
+    assert result["manifest"]["v3_frozen_after"].startswith("2026-11-04T")
     assert result["baseline_v1"] is not result["candidate_v2"]
     assert result["baseline_v1"] is not result["candidate_v3"]
     assert (

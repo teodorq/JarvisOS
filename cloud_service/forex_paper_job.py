@@ -283,6 +283,66 @@ def _v3_cycle_diagnostics(
     }
 
 
+def _v3_forward_diagnostics(value: object) -> dict[str, Any]:
+    """Expose only bounded codes and counters from the V3 evidence report."""
+
+    report = dict(value) if isinstance(value, dict) else {}
+
+    def safe_code(raw: object) -> str:
+        selected = str(raw or "")
+        return selected if _DIAGNOSTIC_CODE.fullmatch(selected) else ""
+
+    def safe_count(raw: object, *, maximum: int = 1_000_000) -> int:
+        if isinstance(raw, bool):
+            return 0
+        try:
+            selected = int(raw)
+        except (TypeError, ValueError, OverflowError):
+            return 0
+        return selected if 0 <= selected <= maximum else 0
+
+    def safe_counts(raw: object) -> dict[str, int]:
+        if not isinstance(raw, dict) or len(raw) > 32:
+            return {}
+        selected: dict[str, int] = {}
+        for key, count in list(raw.items())[:32]:
+            code = safe_code(key)
+            value = safe_count(count)
+            if code and value > 0:
+                selected[code] = value
+        return selected
+
+    return {
+        "v3_forward_status": safe_code(report.get("status")),
+        "v3_forward_candidate_id": safe_code(report.get("candidate_id")),
+        "v3_forward_source_state_valid": (
+            report.get("source_state_valid") is True
+        ),
+        "v3_forward_sample_complete": (
+            report.get("observation_sample_complete") is True
+        ),
+        "v3_forward_accepted_cycle_count": safe_count(
+            report.get("accepted_cycle_count")
+        ),
+        "v3_forward_minimum_cycle_count": safe_count(
+            report.get("minimum_accepted_cycle_count")
+        ),
+        "v3_forward_accepted_market_day_count": safe_count(
+            report.get("accepted_market_day_count")
+        ),
+        "v3_forward_minimum_market_day_count": safe_count(
+            report.get("minimum_market_day_count")
+        ),
+        "v3_forward_invalid_cycle_count": safe_count(
+            report.get("invalid_cycle_count")
+        ),
+        "v3_forward_exclusions": safe_counts(report.get("exclusions")),
+        "v3_forward_invalid_issues": safe_counts(
+            report.get("invalid_issues")
+        ),
+    }
+
+
 def _public_result(result: dict[str, Any]) -> dict[str, Any]:
     paper = result.get("paper")
     paper = paper if isinstance(paper, dict) else {}
@@ -304,6 +364,9 @@ def _public_result(result: dict[str, Any]) -> dict[str, Any]:
         v3_plan_observation,
         v3,
         v3_activation,
+    )
+    v3_forward_diagnostics = _v3_forward_diagnostics(
+        result.get("v3_forward_evidence")
     )
     observation = result.get("observation")
     observation = observation if isinstance(observation, dict) else {}
@@ -406,6 +469,7 @@ def _public_result(result: dict[str, Any]) -> dict[str, Any]:
         "position_count": int(account.get("position_count", 0) or 0),
         "v3_status": str(v3.get("status", "")),
         **v3_diagnostics,
+        **v3_forward_diagnostics,
         "v3_position_count": int(v3_account.get("position_count", 0) or 0),
         "v3_closed_trade_count": int(
             v3_account.get("closed_trade_count", 0) or 0

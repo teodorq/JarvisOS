@@ -82,6 +82,20 @@ class CloudForexPaperJobTests(unittest.TestCase):
             "v3_shadow_activation": {
                 "status": "ALREADY_ACTIVE",
             },
+            "v3_forward_evidence": {
+                "status": "COLLECTING_FORWARD_EVIDENCE",
+                "candidate_id": "FOREX_STRENGTH_V3R2_20261104",
+                "source_state_valid": True,
+                "observation_sample_complete": False,
+                "accepted_cycle_count": 4,
+                "minimum_accepted_cycle_count": 20,
+                "accepted_market_day_count": 1,
+                "minimum_market_day_count": 3,
+                "invalid_cycle_count": 0,
+                "exclusions": {"SUPERSEDED_CANDIDATE": 12},
+                "invalid_issues": {},
+                "accepted_observations": [{"secret": "must-not-leak"}],
+            },
             "v3_shadow_plan_observation": {
                 "status": "SHADOW_PLAN_OBSERVED",
                 "plan": {
@@ -138,6 +152,20 @@ class CloudForexPaperJobTests(unittest.TestCase):
             result["v3_plan_observation_status"], "SHADOW_PLAN_OBSERVED"
         )
         self.assertEqual(result["v3_activation_status"], "ALREADY_ACTIVE")
+        self.assertEqual(
+            result["v3_forward_status"],
+            "COLLECTING_FORWARD_EVIDENCE",
+        )
+        self.assertEqual(
+            result["v3_forward_candidate_id"],
+            "FOREX_STRENGTH_V3R2_20261104",
+        )
+        self.assertEqual(result["v3_forward_accepted_cycle_count"], 4)
+        self.assertEqual(
+            result["v3_forward_exclusions"],
+            {"SUPERSEDED_CANDIDATE": 12},
+        )
+        self.assertNotIn("accepted_observations", result)
         self.assertEqual(result["v3_activation_reason"], "")
         self.assertEqual(result["v3_plan_reason"], "")
         self.assertEqual(result["v3_decision_status"], "ENTRIES_READY")

@@ -229,8 +229,8 @@ def _descendant_forward_report(first_report: dict) -> dict:
 def _complete_v3_forward_report() -> dict:
     report = _complete_forward_report()
     policy = ForexStrengthCandidatePolicy()
-    days = ("30",) * 7 + ("01",) * 7 + ("02",) * 6
-    months = ("09",) * 7 + ("10",) * 13
+    days = ("05",) * 7 + ("06",) * 7 + ("07",) * 6
+    months = ("11",) * 20
     for index, item in enumerate(report["accepted_observations"]):
         item["observed_at"] = (
             f"2026-{months[index]}-{days[index]}T10:"
@@ -238,7 +238,7 @@ def _complete_v3_forward_report() -> dict:
         )
     report.update({
         "mode": "FOREX_V3_FORWARD_SIGNAL_EVIDENCE_ONLY",
-        "generated_at": "2026-10-02T12:00:00+00:00",
+        "generated_at": "2026-11-07T12:00:00+00:00",
         "candidate_id": policy.candidate_id,
         "frozen_after": policy.frozen_after.isoformat(),
         "policy_fingerprint_sha256": policy.fingerprint_sha256,
@@ -246,9 +246,9 @@ def _complete_v3_forward_report() -> dict:
             expected_v3_candidate_implementation_sha256()
         ),
         "accepted_by_market_day": {
-            "2026-09-30": 7,
-            "2026-10-01": 7,
-            "2026-10-02": 6,
+            "2026-11-05": 7,
+            "2026-11-06": 7,
+            "2026-11-07": 6,
         },
         "signal_comparison": {
             "base_entry_signal_count": 4,

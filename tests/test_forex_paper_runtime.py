@@ -470,7 +470,7 @@ class ForexPaperRuntimeTests(unittest.TestCase):
         )
 
     def test_post_v3_freeze_cycle_persists_an_isolated_v3_report(self) -> None:
-        observed = datetime(2026, 9, 29, 18, 0, tzinfo=UTC)
+        observed = datetime(2026, 11, 5, 10, 0, tzinfo=UTC)
         result = ForexDemoPaperRuntime(
             self.root,
             settings=self.settings(),
@@ -492,14 +492,14 @@ class ForexPaperRuntimeTests(unittest.TestCase):
             report["mode"],
             "FOREX_V3_FORWARD_SIGNAL_EVIDENCE_ONLY",
         )
-        self.assertEqual(report["candidate_id"], "FOREX_STRENGTH_V3_20260929")
+        self.assertEqual(report["candidate_id"], "FOREX_STRENGTH_V3R2_20261104")
         self.assertEqual(report["accepted_cycle_count"], 1)
         self.assertEqual(report["invalid_cycle_count"], 0)
         self.assertFalse(report["automatic_paper_promotion"])
         self.assertFalse(report["paper_orders_sent"])
         self.assertFalse(report["live_orders_sent"])
         self.assertTrue(
-            (self.root / "data/trading/research/forward_v3_latest.json").is_file()
+            (self.root / "data/trading/research/forward_v3r2_latest.json").is_file()
         )
         shadow = result["v3_shadow_plan_observation"]
         self.assertEqual(shadow["status"], "SHADOW_PLAN_OBSERVATION_WAITING")
@@ -507,7 +507,7 @@ class ForexPaperRuntimeTests(unittest.TestCase):
         self.assertFalse(shadow["paper_orders_sent"])
         self.assertFalse(shadow["live_orders_sent"])
         self.assertFalse(
-            (self.root / "data/trading/research/forex_v3_shadow_plans.json").exists()
+            (self.root / "data/trading/research/forex_v3r2_shadow_plans.json").exists()
         )
 
     def test_v3_shadow_observer_failure_does_not_block_base_paper(self) -> None:

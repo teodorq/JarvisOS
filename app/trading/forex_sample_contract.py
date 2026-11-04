@@ -17,7 +17,7 @@ from app.trading.forex_scanner import ForexScannerPolicy
 
 
 CONTRACT_ID = "FOREX_PAPER_V5_20260902"
-V3_SHADOW_CONTRACT_ID = "FOREX_V3_SHADOW_PAPER_V1_20260930"
+V3_SHADOW_CONTRACT_ID = "FOREX_V3R2_SHADOW_PAPER_V2_20261104"
 SUPERSEDED_CONTRACT_FINGERPRINTS = {
     "FOREX_PAPER_V1_20260831": (
         "a77112c8f1264aab11403dabf4b51b835deb96773799c8fdea1f0ace0707276a"
@@ -159,7 +159,7 @@ def build_forex_v3_shadow_sample_contract(
         "schema_version": 1,
         "contract_id": V3_SHADOW_CONTRACT_ID,
         "mode": "FOREX_V3_SHADOW_SAMPLE_CONTRACT",
-        "portfolio_scope": "ISOLATED_V3_SHADOW",
+        "portfolio_scope": "ISOLATED_V3R2_SHADOW",
         "candidate_policy": candidate.as_dict(),
         "candidate_policy_fingerprint_sha256": (
             candidate.fingerprint_sha256
@@ -216,7 +216,7 @@ def verify_forex_v3_shadow_sample_contract(value: object) -> bool:
         return False
     if contract.get("mode") != "FOREX_V3_SHADOW_SAMPLE_CONTRACT":
         return False
-    if contract.get("portfolio_scope") != "ISOLATED_V3_SHADOW":
+    if contract.get("portfolio_scope") != "ISOLATED_V3R2_SHADOW":
         return False
     candidate = ForexStrengthCandidatePolicy()
     if contract.get("candidate_policy") != candidate.as_dict():

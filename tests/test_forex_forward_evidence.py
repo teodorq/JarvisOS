@@ -28,7 +28,7 @@ from app.trading.forex_v2_research_dashboard import ForexV2ResearchDashboard
 
 UTC = timezone.utc
 AFTER_FREEZE = datetime(2026, 8, 21, 10, 0, tzinfo=UTC)
-AFTER_V3_FREEZE = datetime(2026, 9, 29, 18, 0, tzinfo=UTC)
+AFTER_V3_FREEZE = datetime(2026, 11, 5, 10, 0, tzinfo=UTC)
 
 
 def _fingerprint(seed: str) -> str:
@@ -1245,7 +1245,7 @@ def test_v3_report_accepts_only_strict_schema_three_forward_cycles(
 
     assert report["status"] == "COLLECTING_FORWARD_EVIDENCE"
     assert report["mode"] == "FOREX_V3_FORWARD_SIGNAL_EVIDENCE_ONLY"
-    assert report["candidate_id"] == "FOREX_STRENGTH_V3_20260929"
+    assert report["candidate_id"] == "FOREX_STRENGTH_V3R2_20261104"
     assert report["implementation_sha256"] == (
         expected_v3_candidate_implementation_sha256()
     )
@@ -1267,6 +1267,61 @@ def test_v3_report_accepts_only_strict_schema_three_forward_cycles(
         report,
         require_complete=True,
     ) is False
+
+
+def test_v3r2_excludes_only_the_preregistered_superseded_candidate(
+    tmp_path: Path,
+) -> None:
+    policy = ForexStrengthCandidatePolicy()
+    superseded = _v3_record(
+        policy.frozen_after - timedelta(hours=1),
+        seed="v3-superseded",
+        observation_id="forward-v3-observation-superseded",
+    )
+    superseded["development_candidate_v3"]["candidate_id"] = (
+        "FOREX_STRENGTH_V3_20260929"
+    )
+    current = _v3_record(
+        policy.frozen_after + timedelta(minutes=15),
+        seed="v3r2-current",
+        observation_id="forward-v3r2-observation-current",
+    )
+
+    report = build_forex_v3_forward_evidence_report(
+        _state(tmp_path, superseded, current),
+        generated_at=policy.frozen_after + timedelta(hours=1),
+    )
+
+    assert report["status"] == "COLLECTING_FORWARD_EVIDENCE"
+    assert report["accepted_cycle_count"] == 1
+    assert report["excluded_cycle_count"] == 1
+    assert report["invalid_cycle_count"] == 0
+    assert report["exclusions"] == {"SUPERSEDED_CANDIDATE": 1}
+    assert verify_forex_v3_forward_evidence_report(report) is True
+
+
+def test_superseded_candidate_after_v3r2_freeze_fails_closed(
+    tmp_path: Path,
+) -> None:
+    policy = ForexStrengthCandidatePolicy()
+    forged = _v3_record(
+        policy.frozen_after + timedelta(minutes=15),
+        seed="v3-superseded-after-freeze",
+        observation_id="forward-v3-superseded-after-freeze",
+    )
+    forged["development_candidate_v3"]["candidate_id"] = (
+        "FOREX_STRENGTH_V3_20260929"
+    )
+
+    report = build_forex_v3_forward_evidence_report(
+        _state(tmp_path, forged),
+        generated_at=policy.frozen_after + timedelta(hours=1),
+    )
+
+    assert report["status"] == "BLOCKED_INVALID_FORWARD_EVIDENCE"
+    assert report["accepted_cycle_count"] == 0
+    assert report["invalid_cycle_count"] == 1
+    assert report["invalid_issues"] == {"CANDIDATE_ID_MISMATCH": 1}
 
 
 def test_v3_report_excludes_schema_two_even_with_a_forged_v3_payload(
@@ -1302,7 +1357,7 @@ def test_v3_report_persists_separately_and_rejects_order_flags(
         generated_at=AFTER_V3_FREEZE + timedelta(hours=1),
     )
 
-    assert reporter.path.name == "forward_v3_latest.json"
+    assert reporter.path.name == "forward_v3r2_latest.json"
     assert reporter.path.is_file()
     assert not reporter.path.with_name("forward_v2_latest.json").exists()
     assert verify_forex_v3_forward_evidence_report(saved) is True

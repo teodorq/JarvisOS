@@ -21,11 +21,11 @@ def test_shadow_ledger_is_separate_and_snapshot_does_not_create_it(
 
     assert shadow.path != base.path
     assert shadow.path == (
-        tmp_path / "data/trading/research/forex_v3_shadow_ledger.json"
+        tmp_path / "data/trading/research/forex_v3r2_shadow_ledger.json"
     )
     assert state["mode"] == "FOREX_V3_SHADOW_PAPER_ONLY"
-    assert state["portfolio_id"] == "FOREX_V3_SHADOW_PAPER"
-    assert state["candidate_id"] == "FOREX_STRENGTH_V3_20260929"
+    assert state["portfolio_id"] == "FOREX_V3R2_SHADOW_PAPER"
+    assert state["candidate_id"] == "FOREX_STRENGTH_V3R2_20261104"
     assert state["sample_contract_id"] == V3_SHADOW_CONTRACT_ID
     assert state["positions"] == {}
     assert state["fills"] == []
@@ -51,7 +51,7 @@ def test_shadow_ledger_persists_identity_and_detects_tampering(
     shadow = ForexV3ShadowLedger(tmp_path)
     shadow.transaction(lambda state: state.update({"session_date": "2026-09-30"}))
     stored = json.loads(shadow.path.read_text(encoding="utf-8"))
-    assert stored["portfolio_id"] == "FOREX_V3_SHADOW_PAPER"
+    assert stored["portfolio_id"] == "FOREX_V3R2_SHADOW_PAPER"
     assert stored["sample_contract_id"] == V3_SHADOW_CONTRACT_ID
 
     stored["candidate_id"] = "FOREX_BASE_PAPER"
