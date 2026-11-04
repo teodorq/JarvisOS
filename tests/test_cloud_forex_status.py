@@ -42,6 +42,17 @@ def sample_status() -> dict:
         "runtime_high_impact_event_window": False,
         "position_count": 1,
         "v3_status": "SHADOW_SIMULATION_CYCLE_COMPLETED",
+        "v3_plan_observation_status": "SHADOW_PLAN_OBSERVED",
+        "v3_decision_status": "NO_ACTION",
+        "v3_ready_pair_count": 6,
+        "v3_blocked_pair_count": 1,
+        "v3_instruction_count": 0,
+        "v3_execution_count": 0,
+        "v3_reason_codes": {
+            "NO_NEW_CROSSOVER": 5,
+            "CANDIDATE_V3_SIGNAL_STRENGTH_TOO_LOW": 1,
+            "SPREAD_TOO_WIDE": 1,
+        },
         "v3_balance_pln": "10005.00",
         "v3_equity_pln": "10007.50",
         "v3_unrealized_pnl_pln": "2.50",
@@ -137,6 +148,9 @@ class CloudForexStatusTests(unittest.TestCase):
         self.assertEqual(result["v3_open_positions"][0]["pair"], "EUR_USD")
         self.assertEqual(result["runtime_ready_pair_count"], 6)
         self.assertEqual(result["runtime_reason_codes"]["NO_ENTRY_SIGNAL"], 6)
+        self.assertEqual(result["v3_decision_status"], "NO_ACTION")
+        self.assertEqual(result["v3_ready_pair_count"], 6)
+        self.assertEqual(result["v3_reason_codes"]["NO_NEW_CROSSOVER"], 5)
 
         value["real_money_access"] = True
         with self.assertRaisesRegex(ForexStatusStoreError, "unsafe_mode"):
@@ -151,6 +165,11 @@ class CloudForexStatusTests(unittest.TestCase):
         value = sample_status()
         value["v3_balance_pln"] = "NaN"
         with self.assertRaisesRegex(ForexStatusStoreError, "invalid_decimal"):
+            sanitize_forex_status(value)
+
+        value = sample_status()
+        value["v3_ready_pair_count"] = 8
+        with self.assertRaisesRegex(ForexStatusStoreError, "invalid_count"):
             sanitize_forex_status(value)
 
     def test_memory_store_isolated_and_view_reports_freshness(self) -> None:
@@ -174,6 +193,8 @@ class CloudForexStatusTests(unittest.TestCase):
         self.assertEqual(stale["reason"], "STATUS_SNAPSHOT_STALE")
         self.assertEqual(stale["v3_position_count"], 0)
         self.assertEqual(stale["v3_open_positions"], [])
+        self.assertEqual(stale["v3_decision_status"], "STATUS_UNAVAILABLE")
+        self.assertEqual(stale["v3_reason_codes"], {})
 
         future = forex_status_view(
             store.read(),

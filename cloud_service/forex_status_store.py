@@ -262,6 +262,27 @@ def sanitize_forex_status(value: object) -> dict[str, Any]:
         ),
         "position_count": _count(value.get("position_count", 0)),
         "v3_status": _code(value.get("v3_status", "")),
+        "v3_plan_observation_status": _code(
+            value.get("v3_plan_observation_status", "")
+        ),
+        "v3_decision_status": _code(
+            value.get("v3_decision_status", "")
+        ),
+        "v3_ready_pair_count": _count(
+            value.get("v3_ready_pair_count", 0), maximum=7
+        ),
+        "v3_blocked_pair_count": _count(
+            value.get("v3_blocked_pair_count", 0), maximum=7
+        ),
+        "v3_instruction_count": _count(
+            value.get("v3_instruction_count", 0), maximum=5
+        ),
+        "v3_execution_count": _count(
+            value.get("v3_execution_count", 0), maximum=5
+        ),
+        "v3_reason_codes": _reason_counts(
+            value.get("v3_reason_codes", {})
+        ),
         "v3_balance_pln": _decimal_text(value.get("v3_balance_pln", "0")),
         "v3_equity_pln": _decimal_text(value.get("v3_equity_pln", "0")),
         "v3_unrealized_pnl_pln": _decimal_text(
@@ -325,6 +346,12 @@ def forex_status_view(
             "v3_position_count": 0,
             "v3_open_positions": [],
             "v3_unrealized_pnl_pln": "0",
+            "v3_decision_status": "STATUS_UNAVAILABLE",
+            "v3_ready_pair_count": 0,
+            "v3_blocked_pair_count": 0,
+            "v3_instruction_count": 0,
+            "v3_execution_count": 0,
+            "v3_reason_codes": {},
         })
     return result
 

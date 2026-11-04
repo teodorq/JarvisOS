@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from io import BytesIO
@@ -207,6 +208,73 @@ def _persist_result(root: Path, result: dict[str, Any]) -> None:
     journal.record(result)
 
 
+def _v3_cycle_diagnostics(
+    observation: object,
+    simulation: object,
+) -> dict[str, Any]:
+    """Project a small allowlisted explanation of the latest V3 decision."""
+
+    observed = dict(observation) if isinstance(observation, dict) else {}
+    plan_value = observed.get("plan")
+    plan = dict(plan_value) if isinstance(plan_value, dict) else {}
+    simulation_value = (
+        dict(simulation) if isinstance(simulation, dict) else {}
+    )
+    execution_value = simulation_value.get("execution")
+    execution = (
+        dict(execution_value) if isinstance(execution_value, dict) else {}
+    )
+    raw_assessments = plan.get("assessments", [])
+    assessments = (
+        [dict(item) for item in raw_assessments if isinstance(item, dict)]
+        if isinstance(raw_assessments, list) and len(raw_assessments) <= 7
+        else []
+    )
+    reasons: Counter[str] = Counter()
+    for assessment in assessments:
+        raw_reasons = assessment.get("reason_codes", [])
+        if not isinstance(raw_reasons, list) or len(raw_reasons) > 12:
+            continue
+        for raw_code in raw_reasons:
+            code = str(raw_code)
+            if _DIAGNOSTIC_CODE.fullmatch(code):
+                reasons.update((code,))
+    raw_instructions = plan.get("instructions", [])
+    instruction_count = (
+        len(raw_instructions)
+        if isinstance(raw_instructions, list)
+        and len(raw_instructions) <= 5
+        and all(isinstance(item, dict) for item in raw_instructions)
+        else 0
+    )
+    raw_executions = execution.get("executions", [])
+    execution_count = (
+        len(raw_executions)
+        if isinstance(raw_executions, list)
+        and len(raw_executions) <= 5
+        and all(isinstance(item, dict) for item in raw_executions)
+        else 0
+    )
+
+    def safe_code(value: object) -> str:
+        selected = str(value or "")
+        return selected if _DIAGNOSTIC_CODE.fullmatch(selected) else ""
+
+    return {
+        "v3_plan_observation_status": safe_code(observed.get("status")),
+        "v3_decision_status": safe_code(plan.get("decision_status")),
+        "v3_ready_pair_count": sum(
+            item.get("status") == "READY" for item in assessments
+        ),
+        "v3_blocked_pair_count": sum(
+            item.get("status") == "BLOCKED" for item in assessments
+        ),
+        "v3_instruction_count": instruction_count,
+        "v3_execution_count": execution_count,
+        "v3_reason_codes": dict(reasons.most_common(32)),
+    }
+
+
 def _public_result(result: dict[str, Any]) -> dict[str, Any]:
     paper = result.get("paper")
     paper = paper if isinstance(paper, dict) else {}
@@ -222,6 +290,8 @@ def _public_result(result: dict[str, Any]) -> dict[str, Any]:
     v3_performance = (
         v3_performance if isinstance(v3_performance, dict) else {}
     )
+    v3_plan_observation = result.get("v3_shadow_plan_observation")
+    v3_diagnostics = _v3_cycle_diagnostics(v3_plan_observation, v3)
     observation = result.get("observation")
     observation = observation if isinstance(observation, dict) else {}
     observation_data = observation.get("data")
@@ -322,6 +392,7 @@ def _public_result(result: dict[str, Any]) -> dict[str, Any]:
         ),
         "position_count": int(account.get("position_count", 0) or 0),
         "v3_status": str(v3.get("status", "")),
+        **v3_diagnostics,
         "v3_position_count": int(v3_account.get("position_count", 0) or 0),
         "v3_closed_trade_count": int(
             v3_account.get("closed_trade_count", 0) or 0

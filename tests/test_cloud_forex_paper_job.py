@@ -79,8 +79,31 @@ class CloudForexPaperJobTests(unittest.TestCase):
                 ],
                 "execution": {"executions": []},
             },
+            "v3_shadow_plan_observation": {
+                "status": "SHADOW_PLAN_OBSERVED",
+                "plan": {
+                    "decision_status": "ENTRIES_READY",
+                    "assessments": [
+                        {
+                            "status": "READY",
+                            "reason_codes": [
+                                "BULLISH_CROSSOVER",
+                                "CANDIDATE_V3_SIGNAL_STRENGTH_CONFIRMED",
+                            ],
+                        },
+                        {
+                            "status": "BLOCKED",
+                            "reason_codes": ["SPREAD_TOO_WIDE"],
+                        },
+                    ],
+                    "instructions": [{"action": "OPEN_LONG"}],
+                },
+            },
             "v3_shadow_simulation": {
                 "status": "SHADOW_SIMULATION_CYCLE_COMPLETED",
+                "execution": {
+                    "executions": [{"action": "OPEN_LONG"}],
+                },
                 "account": {
                     "position_count": 1,
                     "closed_trade_count": 3,
@@ -108,6 +131,22 @@ class CloudForexPaperJobTests(unittest.TestCase):
         self.assertEqual(result["v3_balance_pln"], "10012.34")
         self.assertEqual(result["v3_equity_pln"], "10014.00")
         self.assertEqual(result["v3_winning_trade_count"], 2)
+        self.assertEqual(
+            result["v3_plan_observation_status"], "SHADOW_PLAN_OBSERVED"
+        )
+        self.assertEqual(result["v3_decision_status"], "ENTRIES_READY")
+        self.assertEqual(result["v3_ready_pair_count"], 1)
+        self.assertEqual(result["v3_blocked_pair_count"], 1)
+        self.assertEqual(result["v3_instruction_count"], 1)
+        self.assertEqual(result["v3_execution_count"], 1)
+        self.assertEqual(
+            result["v3_reason_codes"],
+            {
+                "BULLISH_CROSSOVER": 1,
+                "CANDIDATE_V3_SIGNAL_STRENGTH_CONFIRMED": 1,
+                "SPREAD_TOO_WIDE": 1,
+            },
+        )
         self.assertEqual(
             result["v3_performance"]["status"], "COLLECTING_SAMPLE"
         )

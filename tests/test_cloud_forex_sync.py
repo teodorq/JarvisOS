@@ -42,6 +42,24 @@ def test_fresh_cloud_status_projects_current_paper_position() -> None:
         "NO_ENTRY_SIGNAL": 6,
         "SPREAD_TOO_WIDE": 1,
     }
+    assert snapshot["last_v3_cycle"] == {
+        "available": True,
+        "status": "SHADOW_PLAN_OBSERVED",
+        "decision": "NO_ACTION",
+        "ready_pair_count": 6,
+        "blocked_pair_count": 1,
+        "instruction_count": 0,
+        "execution_count": 0,
+        "reason_codes": {
+            "NO_NEW_CROSSOVER": 5,
+            "CANDIDATE_V3_SIGNAL_STRENGTH_TOO_LOW": 1,
+            "SPREAD_TOO_WIDE": 1,
+        },
+        "paper_orders_sent": False,
+        "broker_orders_sent": False,
+        "live_orders_sent": False,
+        "real_money_access": False,
+    }
     assert snapshot["broker_orders_sent"] is False
     assert snapshot["live_orders_sent"] is False
     assert snapshot["real_money_access"] is False
@@ -72,6 +90,18 @@ def test_unsafe_cloud_flags_block_the_entire_current_state() -> None:
     assert snapshot["status"] == "STALE_DATA_BLOCKED"
     assert snapshot["positions"] == []
     assert "PAPER ONLY" in snapshot["message"]
+
+
+def test_inconsistent_v3_diagnostics_fail_closed() -> None:
+    payload = forex_status_view(sample_status(), now=NOW)
+    payload["v3_instruction_count"] = 0
+    payload["v3_execution_count"] = 1
+
+    snapshot = project_cloud_forex_status(payload, now=NOW)
+
+    assert snapshot["status"] == "STALE_DATA_BLOCKED"
+    assert snapshot["last_v3_cycle"]["available"] is False
+    assert snapshot["positions"] == []
 
 
 def test_source_refreshes_the_private_status_without_ui_thread_networking() -> None:

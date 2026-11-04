@@ -68,6 +68,7 @@ def _blocked(
         },
         "v2_research": {"status": "BLOCKED_STALE_PAPER_STATUS"},
         "last_runtime_cycle": {"available": False},
+        "last_v3_cycle": {"available": False},
         "position_protection": {
             "available": False,
             "status": "CLOUD_STATUS_UNAVAILABLE",
@@ -244,6 +245,34 @@ def project_cloud_forex_status(
         runtime_reasons = _runtime_reason_codes(
             value.get("runtime_reason_codes", {})
         )
+        v3_ready_pair_count = _count(
+            value.get("v3_ready_pair_count", 0), 7
+        )
+        v3_blocked_pair_count = _count(
+            value.get("v3_blocked_pair_count", 0), 7
+        )
+        v3_instruction_count = _count(
+            value.get("v3_instruction_count", 0), 5
+        )
+        v3_execution_count = _count(
+            value.get("v3_execution_count", 0), 5
+        )
+        v3_reasons = _runtime_reason_codes(
+            value.get("v3_reason_codes", {})
+        )
+        v3_decision = str(value.get("v3_decision_status", "")).strip().upper()
+        v3_status = str(
+            value.get("v3_plan_observation_status", "")
+        ).strip().upper()
+        if v3_decision and not _CODE.fullmatch(v3_decision):
+            raise ValueError("invalid V3 decision")
+        if v3_status and not _CODE.fullmatch(v3_status):
+            raise ValueError("invalid V3 status")
+        if (
+            v3_ready_pair_count + v3_blocked_pair_count > 7
+            or v3_execution_count > v3_instruction_count
+        ):
+            raise ValueError("inconsistent V3 diagnostics")
     except (InvalidOperation, TypeError, ValueError, OverflowError):
         return _blocked("Raport Azure PAPER nie przeszedł kontroli spójności.")
     closed = performance["valid_closed_trade_count"]
@@ -284,6 +313,20 @@ def project_cloud_forex_status(
             "high_impact_event_window": (
                 value.get("runtime_high_impact_event_window") is True
             ),
+            "live_orders_sent": False,
+            "real_money_access": False,
+        },
+        "last_v3_cycle": {
+            "available": True,
+            "status": v3_status,
+            "decision": v3_decision,
+            "ready_pair_count": v3_ready_pair_count,
+            "blocked_pair_count": v3_blocked_pair_count,
+            "instruction_count": v3_instruction_count,
+            "execution_count": v3_execution_count,
+            "reason_codes": v3_reasons,
+            "paper_orders_sent": v3_execution_count > 0,
+            "broker_orders_sent": False,
             "live_orders_sent": False,
             "real_money_access": False,
         },
