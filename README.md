@@ -396,6 +396,11 @@ cryptographically verified post-freeze V3R2 forward sample. An incomplete or
 invalid sample blocks both activation and plan execution before the separate
 manual review fingerprint is evaluated. An already-active isolated PAPER
 ledger may continue its existing simulation, but this gate cannot enable LIVE.
+The durable PAPER activity journal records sparse V3R2 progress milestones at
+5, 10 and 15 accepted cycles, plus one deduplicated integrity alert per distinct
+failure class. It remains silent between milestones and archives the events in
+cloud state even when the desktop is off. These notices are informational only:
+they cannot activate SHADOW, change PAPER or enable LIVE.
 
 Every automatic PAPER cycle atomically refreshes two isolated ignored reports:
 `data/trading/research/forward_v2_latest.json` and

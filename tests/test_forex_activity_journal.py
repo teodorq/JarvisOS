@@ -264,6 +264,51 @@ def _complete_v3_forward_report() -> dict:
     return report
 
 
+def _partial_v3_forward_report(
+    accepted_count: int,
+    *,
+    invalid_count: int = 0,
+) -> dict:
+    report = _complete_v3_forward_report()
+    accepted = list(report["accepted_observations"])[:accepted_count]
+    by_day: dict[str, int] = {}
+    for item in accepted:
+        day = str(item["observed_at"])[:10]
+        by_day[day] = by_day.get(day, 0) + 1
+    report.update({
+        "status": (
+            "BLOCKED_INVALID_FORWARD_EVIDENCE"
+            if invalid_count
+            else "COLLECTING_FORWARD_EVIDENCE"
+        ),
+        "source_cutoff_sequence": accepted_count + invalid_count,
+        "source_head_hash": hashlib.sha256(
+            f"v3-partial-head-{accepted_count}-{invalid_count}".encode("ascii")
+        ).hexdigest(),
+        "accepted_cycle_count": accepted_count,
+        "accepted_market_day_count": len(by_day),
+        "remaining_accepted_cycles": max(0, 20 - accepted_count),
+        "remaining_market_days": max(0, 3 - len(by_day)),
+        "observation_sample_complete": False,
+        "invalid_cycle_count": invalid_count,
+        "accepted_observations": accepted,
+        "accepted_by_market_day": by_day,
+        "invalid_issues": (
+            {"CAPTURE_ATTESTATION_INVALID": invalid_count}
+            if invalid_count
+            else {}
+        ),
+        "evidence_valid": bool(accepted_count and not invalid_count),
+    })
+    _rehash_forward_report(report)
+    assert verify_forex_v3_forward_evidence_report(report)
+    assert not verify_forex_v3_forward_evidence_report(
+        report,
+        require_complete=True,
+    )
+    return report
+
+
 def _v3_shadow_plan_observation(*, complete: bool = False) -> dict:
     first_fingerprint = hashlib.sha256(b"v3-first-shadow-plan").hexdigest()
     sample_fingerprint = (
@@ -555,6 +600,65 @@ def test_v3_shadow_readiness_notification_is_durable_and_once_only() -> None:
         assert "V3 zachował 3, odfiltrował 1" in events[0]["message"]
         assert "nie potwierdza zysku" in events[0]["message"]
         assert len(state["v3_shadow_readiness_fingerprint"]) == 64
+
+
+def test_v3_forward_progress_notifies_only_at_sparse_milestones() -> None:
+    with TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        journal = ForexPaperActivityJournal(root)
+
+        below = _payload(81)
+        below["v3_forward_evidence"] = _partial_v3_forward_report(4)
+        first = _payload(82)
+        first["v3_forward_evidence"] = _partial_v3_forward_report(5)
+        repeated = _payload(83)
+        repeated["v3_forward_evidence"] = _partial_v3_forward_report(9)
+        second = _payload(84)
+        second["v3_forward_evidence"] = _partial_v3_forward_report(10)
+
+        assert journal.record(below)["events_recorded"] == 0
+        assert journal.record(first)["events_recorded"] == 1
+        assert journal.record(repeated)["events_recorded"] == 0
+        assert journal.record(second)["events_recorded"] == 1
+        events = journal.events(limit=10)
+        state = journal.store.load()
+
+        assert [event["kind"] for event in events] == [
+            "FOREX_V3_FORWARD_PROGRESS",
+            "FOREX_V3_FORWARD_PROGRESS",
+        ]
+        assert "5/20 cykli" in events[0]["message"]
+        assert "10/20 cykli" in events[1]["message"]
+        assert len(state["v3_forward_progress_fingerprint"]) == 64
+        assert state["v3_forward_integrity_fingerprint"] == ""
+
+
+def test_v3_forward_integrity_alert_is_durable_and_deduplicated() -> None:
+    with TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        journal = ForexPaperActivityJournal(root)
+        first = _payload(85)
+        first["v3_forward_evidence"] = _partial_v3_forward_report(
+            5,
+            invalid_count=1,
+        )
+        repeated = _payload(86)
+        repeated["v3_forward_evidence"] = _partial_v3_forward_report(
+            6,
+            invalid_count=2,
+        )
+
+        assert journal.record(first)["events_recorded"] == 1
+        assert journal.record(repeated)["events_recorded"] == 0
+        events = journal.events(limit=10)
+        state = journal.store.load()
+
+        assert [event["kind"] for event in events] == [
+            "FOREX_V3_FORWARD_EVIDENCE_BLOCKED"
+        ]
+        assert "wstrzymałem zaliczanie próbki" in events[0]["message"]
+        assert "LIVE pozostają zablokowane" in events[0]["message"]
+        assert len(state["v3_forward_integrity_fingerprint"]) == 64
 
 
 def test_invalid_v3_evidence_never_creates_shadow_readiness_alert() -> None:

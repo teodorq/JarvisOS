@@ -12,6 +12,126 @@ from app.trading.forex_forward_evidence import (
     verify_forex_v3_forward_evidence_report,
 )
 
+_V3_PROGRESS_MARKERS = (5, 10, 15)
+
+
+def v3_forward_progress_milestones(
+    payload: object,
+    *,
+    completed_progress_fingerprint: object = "",
+    completed_integrity_fingerprint: object = "",
+) -> tuple[dict[str, str], list[dict[str, str]]]:
+    """Return sparse, deduplicated progress and integrity events for V3R2."""
+
+    if not isinstance(payload, Mapping) or any(
+        payload.get(field) is not False
+        for field in (
+            "broker_orders_sent",
+            "live_orders_sent",
+            "real_money_access",
+        )
+    ):
+        return {}, []
+    report = payload.get("v3_forward_evidence")
+    if not verify_forex_v3_forward_evidence_report(
+        report,
+        require_complete=False,
+    ):
+        return {}, []
+    selected = dict(report)  # type: ignore[arg-type]
+    candidate_id = str(selected["candidate_id"])
+    policy_fingerprint = str(selected["policy_fingerprint_sha256"])
+    implementation = str(selected["implementation_sha256"])
+    occurred_at = " ".join(str(payload.get("observed_at", "")).split())[:64]
+    status = str(selected["status"])
+    invalid_count = int(selected["invalid_cycle_count"])
+    source_valid = selected["source_state_valid"] is True
+
+    if invalid_count or not source_valid:
+        invalid_issues = selected.get("invalid_issues")
+        issue_names = sorted(
+            str(name)
+            for name in (
+                invalid_issues.keys()
+                if isinstance(invalid_issues, Mapping)
+                else ()
+            )
+        )
+        identity = "|".join((
+            candidate_id,
+            policy_fingerprint,
+            implementation,
+            "INTEGRITY_BLOCKED",
+            status,
+            ",".join(issue_names),
+        ))
+        fingerprint = hashlib.sha256(identity.encode("utf-8")).hexdigest()
+        if fingerprint == str(completed_integrity_fingerprint):
+            return {
+                "v3_forward_integrity_fingerprint": fingerprint,
+            }, []
+        message = (
+            "Forex V3: wstrzymałem zaliczanie próbki, ponieważ źródło "
+            "dowodów nie przeszło kontroli integralności."
+            if not source_valid
+            else (
+                "Forex V3: wstrzymałem zaliczanie próbki po wykryciu "
+                f"{invalid_count} niespójnych cykli."
+            )
+        )
+        return {
+            "v3_forward_integrity_fingerprint": fingerprint,
+        }, [{
+            "kind": "FOREX_V3_FORWARD_EVIDENCE_BLOCKED",
+            "state": "important",
+            "message": (
+                message
+                + " Strategia SHADOW i LIVE pozostają zablokowane; "
+                "zdarzenie wymaga sprawdzenia w panelu właściciela."
+            ),
+            "occurred_at": occurred_at,
+            "token": f"forex-v3-forward-integrity:{fingerprint}",
+        }]
+
+    if selected["observation_sample_complete"] is True:
+        return {}, []
+    cycles = int(selected["accepted_cycle_count"])
+    reached = max(
+        (marker for marker in _V3_PROGRESS_MARKERS if cycles >= marker),
+        default=0,
+    )
+    if not reached:
+        return {}, []
+    identity = "|".join((
+        candidate_id,
+        policy_fingerprint,
+        implementation,
+        "PROGRESS",
+        str(reached),
+    ))
+    fingerprint = hashlib.sha256(identity.encode("utf-8")).hexdigest()
+    if fingerprint == str(completed_progress_fingerprint):
+        return {
+            "v3_forward_progress_fingerprint": fingerprint,
+        }, []
+    minimum_cycles = int(selected["minimum_accepted_cycle_count"])
+    days = int(selected["accepted_market_day_count"])
+    minimum_days = int(selected["minimum_market_day_count"])
+    return {
+        "v3_forward_progress_fingerprint": fingerprint,
+    }, [{
+        "kind": "FOREX_V3_FORWARD_PROGRESS",
+        "state": "brief",
+        "message": (
+            f"Forex V3: zweryfikowana próbka osiągnęła {cycles}/"
+            f"{minimum_cycles} cykli i {days}/{minimum_days} dni rynkowych. "
+            "To tylko informacja o postępie — nie potwierdza zysku, nie "
+            "uruchamia strategii SHADOW i nie włącza LIVE."
+        ),
+        "occurred_at": occurred_at,
+        "token": f"forex-v3-forward-progress:{fingerprint}",
+    }]
+
 
 def forward_review_milestone(
     payload: object,
@@ -137,4 +257,8 @@ def v3_shadow_readiness_milestone(
     }
 
 
-__all__ = ["forward_review_milestone", "v3_shadow_readiness_milestone"]
+__all__ = [
+    "forward_review_milestone",
+    "v3_forward_progress_milestones",
+    "v3_shadow_readiness_milestone",
+]
