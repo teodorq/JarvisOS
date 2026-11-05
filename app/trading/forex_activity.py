@@ -6,10 +6,12 @@ import json
 from pathlib import Path
 from typing import Any
 
+from app.cloud.forex_status import CloudForexStatusSource
 from app.core.json_store import JsonStore
 from app.core.project_paths import resolve_project_root
 from app.market_data.forex_environment import ForexDataSettings
 from app.trading.forex_activity_journal import ForexPaperActivityJournal
+from app.trading.forex_cloud_activity import CloudForexActivityInbox
 
 
 class ForexPaperActivityFeed:
@@ -22,6 +24,7 @@ class ForexPaperActivityFeed:
         project_root: str | Path | None = None,
         *,
         settings: ForexDataSettings | None = None,
+        cloud_status_source: CloudForexStatusSource | None = None,
     ) -> None:
         root = resolve_project_root(project_root)
         self.result_path = root / "data" / "trading" / "forex_paper_last.json"
@@ -31,6 +34,10 @@ class ForexPaperActivityFeed:
             self._default_state,
         )
         self.settings = settings or ForexDataSettings.from_environment()
+        self.cloud_status_source = cloud_status_source or (
+            CloudForexStatusSource() if settings is None else None
+        )
+        self.cloud_activity = CloudForexActivityInbox(root)
 
     @staticmethod
     def _default_state() -> dict[str, Any]:
@@ -52,7 +59,12 @@ class ForexPaperActivityFeed:
             limit=1,
         )
         if not pending:
-            return None
+            cloud_event = self.cloud_activity.poll()
+            return (
+                self._display_event(cloud_event)
+                if cloud_event is not None
+                else None
+            )
         event = pending[0]
         current["last_seen_sequence"] = int(event["sequence"])
         current["notification_count"] = min(
@@ -78,7 +90,16 @@ class ForexPaperActivityFeed:
                 "HISTORIA" if backfill else "POKAZANE" if delivered else "OCZEKUJE"
             )
             result.append(item)
-        return result
+        combined = {item.get("event_id"): item for item in result}
+        for item in self.cloud_activity.history(limit=limit):
+            combined.setdefault(item.get("event_id"), item)
+        return sorted(
+            combined.values(),
+            key=lambda item: (
+                str(item.get("occurred_at", "")),
+                str(item.get("event_id", "")),
+            ),
+        )[-max(1, min(int(limit), 50)):]
 
     def status(self) -> dict[str, Any]:
         if self._active():
@@ -93,12 +114,15 @@ class ForexPaperActivityFeed:
             for item in history
         )
         journal = self.journal.status()
+        cloud = self.cloud_activity.status()
         return {
             "status": "FOREX_PAPER_ACTIVITY_READY",
             "enabled": self._active(),
-            "notification_count": current["notification_count"],
-            "history_event_count": journal["event_count"],
-            "pending_count": pending_count,
+            "notification_count": (
+                current["notification_count"] + cloud["notification_count"]
+            ),
+            "history_event_count": journal["event_count"] + cloud["event_count"],
+            "pending_count": pending_count + cloud["pending_count"],
             "last_seen_sequence": current["last_seen_sequence"],
             "last_health": journal["last_health"],
             "dropped_event_count": journal["dropped_event_count"],
@@ -147,11 +171,17 @@ class ForexPaperActivityFeed:
         return current
 
     def _sync_latest_result(self) -> None:
-        payload = self._load_result()
-        if payload is None:
-            self.journal.initialize()
-            return
-        self.journal.record(payload)
+        if self._local_active():
+            payload = self._load_result()
+            if payload is None:
+                self.journal.initialize()
+            else:
+                self.journal.record(payload)
+        source = self.cloud_status_source
+        if source is not None and source.is_configured:
+            snapshot = source.snapshot()
+            if isinstance(snapshot, dict) and snapshot.get("status") == "READY":
+                self.cloud_activity.sync(snapshot.get("activity_events", []))
 
     def _load_result(self) -> dict[str, Any] | None:
         try:
@@ -164,6 +194,12 @@ class ForexPaperActivityFeed:
         return dict(value) if isinstance(value, dict) else None
 
     def _active(self) -> bool:
+        return bool(self._local_active() or (
+            self.cloud_status_source is not None
+            and self.cloud_status_source.is_configured
+        ))
+
+    def _local_active(self) -> bool:
         return bool(
             self.settings.enabled
             and self.settings.paper_autopilot_enabled

@@ -401,6 +401,12 @@ The durable PAPER activity journal records sparse V3R2 progress milestones at
 failure class. It remains silent between milestones and archives the events in
 cloud state even when the desktop is off. These notices are informational only:
 they cannot activate SHADOW, change PAPER or enable LIVE.
+The private Azure PAPER status also carries a strictly allowlisted window of at
+most 32 recent activity events. When the desktop returns, JARVIS validates the
+window again, stores unseen events in a bounded local inbox and delivers each
+event at most once through the existing history panel. Unknown kinds, malformed
+timestamps, oversized messages or an unsafe status fail closed; credentials,
+raw market data and executable instructions never enter this bridge.
 
 Every automatic PAPER cycle atomically refreshes two isolated ignored reports:
 `data/trading/research/forward_v2_latest.json` and

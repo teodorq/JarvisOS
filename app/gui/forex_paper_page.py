@@ -301,6 +301,11 @@ class ForexPaperPage(QWidget):
             "POSITION_PROTECTION_RECOVERED": "OCHRONA SL/TP — DZIAŁA",
             "FOREX_V2_FORWARD_REVIEW_READY": "PRZEGLĄD FILTRA V2",
             "FOREX_PAPER_SAMPLE_REVIEW_READY": "PRZEGLĄD PRÓBKI PAPER",
+            "FOREX_V3_FORWARD_PROGRESS": "POSTĘP PRÓBKI V3",
+            "FOREX_V3_FORWARD_EVIDENCE_BLOCKED": "PRÓBKA V3 — UWAGA",
+            "FOREX_V3_SHADOW_INITIALIZATION_READY": "V3 SHADOW — GOTOWY",
+            "FOREX_V3_SHADOW_FIRST_PLAN_RECORDED": "PIERWSZY PLAN V3",
+            "FOREX_V3_SHADOW_PLAN_SAMPLE_READY": "PRÓBKA PLANÓW V3",
         }
         for row, event in enumerate(reversed(events)):
             values = (

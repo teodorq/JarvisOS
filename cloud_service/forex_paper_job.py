@@ -20,6 +20,10 @@ from app.core.json_store import JsonStore
 from app.market_data.forex_environment import ForexDataSettings
 from app.market_data.forex_paper_runtime import ForexDemoPaperRuntime
 from app.trading.forex_activity_journal import ForexPaperActivityJournal
+from app.trading.forex_cloud_activity import (
+    MAX_CLOUD_ACTIVITY_EVENTS,
+    sanitize_forex_cloud_activity_events,
+)
 from app.trading.forex_runtime_summary import ForexRuntimeCycleSummary
 from cloud_service.forex_status_store import (
     FOREX_STATUS_SCHEMA_VERSION,
@@ -204,7 +208,7 @@ def _validate_settings() -> ForexDataSettings:
     return settings
 
 
-def _persist_result(root: Path, result: dict[str, Any]) -> None:
+def _persist_result(root: Path, result: dict[str, Any]) -> list[dict[str, Any]]:
     JsonStore(
         root / "data" / "trading" / "forex_paper_last.json",
         dict,
@@ -212,6 +216,7 @@ def _persist_result(root: Path, result: dict[str, Any]) -> None:
     journal = ForexPaperActivityJournal(root)
     journal.initialize()
     journal.record(result)
+    return journal.events(limit=MAX_CLOUD_ACTIVITY_EVENTS, newest=True)
 
 
 def _v3_cycle_diagnostics(
@@ -349,7 +354,11 @@ def _v3_forward_diagnostics(value: object) -> dict[str, Any]:
     }
 
 
-def _public_result(result: dict[str, Any]) -> dict[str, Any]:
+def _public_result(
+    result: dict[str, Any],
+    *,
+    activity_events: object = None,
+) -> dict[str, Any]:
     paper = result.get("paper")
     paper = paper if isinstance(paper, dict) else {}
     account = paper.get("account")
@@ -497,6 +506,9 @@ def _public_result(result: dict[str, Any]) -> dict[str, Any]:
             dict(item) for item in v3_positions[:20] if isinstance(item, dict)
         ],
         "v3_performance": dict(v3_performance),
+        "activity_events": sanitize_forex_cloud_activity_events(
+            activity_events or []
+        ),
         "broker_orders_sent": False,
         "live_orders_sent": False,
         "real_money_access": False,
@@ -543,7 +555,7 @@ def run() -> dict[str, Any]:
                 capture_origin="AZURE_SCHEDULED",
             )
             result.setdefault("observed_at", now.isoformat())
-            _persist_result(root, result)
+            activity_events = _persist_result(root, result)
             renewer.check()
             archive = state.build(root)
             try:
@@ -557,7 +569,10 @@ def run() -> dict[str, Any]:
                     "cloud_paper_state: upload_failed"
                 ) from error
             renewer.check()
-            public_result = _public_result(result)
+            public_result = _public_result(
+                result,
+                activity_events=activity_events,
+            )
             try:
                 status_store = forex_status_store_from_environment()
                 if status_store is not None:

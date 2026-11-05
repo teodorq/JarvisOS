@@ -67,9 +67,11 @@ class TradingControlCenter:
             policy=self.forex_policy,
         )
         self.forex_data = ForexDataSettings.from_environment()
+        cloud_forex_status = CloudForexStatusSource()
         self.forex_activity = ForexPaperActivityFeed(
             self.project_root,
             settings=self.forex_data,
+            cloud_status_source=cloud_forex_status,
         )
         self.forex_performance_review = ForexPaperPerformanceReviewPacket(
             self.project_root
@@ -114,7 +116,7 @@ class TradingControlCenter:
             performance_review=self.forex_performance_review,
             v2_research=self.forex_v2_dashboard,
             runtime_summary=self.forex_runtime_summary,
-            cloud_status_source=CloudForexStatusSource(),
+            cloud_status_source=cloud_forex_status,
         )
 
     def status(self) -> dict[str, Any]:

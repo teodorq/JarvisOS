@@ -11,6 +11,10 @@ import time
 from typing import Any, Callable
 
 from app.cloud.client import CloudPlannerClient
+from app.trading.forex_cloud_activity import (
+    ForexCloudActivityError,
+    sanitize_forex_cloud_activity_events,
+)
 
 
 FOREX_CLOUD_STATUS_MAX_AGE_SECONDS = 7_200
@@ -77,6 +81,7 @@ def _blocked(
         },
         "loss_streak_safety": {"active": False, "threshold": 3},
         "weekly_loss_safety": {"active": False},
+        "activity_events": [],
         "broker_orders_sent": False,
         "live_orders_sent": False,
         "real_money_access": False,
@@ -224,6 +229,9 @@ def project_cloud_forex_status(
     ) or "PAPER" not in str(value.get("mode", "")).upper():
         return _blocked("Raport Azure nie potwierdza trybu PAPER ONLY.")
     try:
+        activity_events = sanitize_forex_cloud_activity_events(
+            value.get("activity_events", [])
+        )
         raw_positions = value.get("v3_open_positions", [])
         if not isinstance(raw_positions, list) or len(raw_positions) > 20:
             raise ValueError("invalid positions")
@@ -338,7 +346,13 @@ def project_cloud_forex_status(
             )
         ):
             raise ValueError("inconsistent V3 diagnostics")
-    except (InvalidOperation, TypeError, ValueError, OverflowError):
+    except (
+        ForexCloudActivityError,
+        InvalidOperation,
+        TypeError,
+        ValueError,
+        OverflowError,
+    ):
         return _blocked("Raport Azure PAPER nie przeszedł kontroli spójności.")
     closed = performance["valid_closed_trade_count"]
     required = performance["minimum_closed_trades_for_review"]
@@ -420,6 +434,7 @@ def project_cloud_forex_status(
         },
         "loss_streak_safety": {"active": False, "threshold": 3},
         "weekly_loss_safety": {"active": False},
+        "activity_events": activity_events,
         "broker_orders_sent": False,
         "live_orders_sent": False,
         "real_money_access": False,

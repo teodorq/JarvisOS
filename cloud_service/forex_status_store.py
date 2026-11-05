@@ -9,6 +9,11 @@ from pathlib import PurePosixPath
 import re
 from typing import Any, Protocol
 
+from app.trading.forex_cloud_activity import (
+    ForexCloudActivityError,
+    sanitize_forex_cloud_activity_events,
+)
+
 
 FOREX_STATUS_SCHEMA_VERSION = 1
 FOREX_STATUS_MAX_BYTES = 65_536
@@ -224,6 +229,14 @@ def sanitize_forex_status(value: object) -> dict[str, Any]:
     raw_positions = value.get("v3_open_positions", [])
     if not isinstance(raw_positions, list) or len(raw_positions) > 20:
         raise ForexStatusStoreError("forex_status: invalid_positions")
+    try:
+        activity_events = sanitize_forex_cloud_activity_events(
+            value.get("activity_events", [])
+        )
+    except ForexCloudActivityError as error:
+        raise ForexStatusStoreError(
+            "forex_status: invalid_activity_events"
+        ) from error
     return {
         "schema_version": FOREX_STATUS_SCHEMA_VERSION,
         "status": _code(value.get("status"), required=True),
@@ -352,6 +365,7 @@ def sanitize_forex_status(value: object) -> dict[str, Any]:
         ),
         "v3_open_positions": [_position(item) for item in raw_positions],
         "v3_performance": _performance(value.get("v3_performance", {})),
+        "activity_events": activity_events,
         "broker_orders_sent": False,
         "live_orders_sent": False,
         "real_money_access": False,
