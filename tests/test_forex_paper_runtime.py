@@ -166,6 +166,14 @@ class FailingForwardEvidence:
         raise OSError("simulated report write failure")
 
 
+class FixedV3ForwardEvidence:
+    def __init__(self, report: dict) -> None:
+        self.report = report
+
+    def refresh(self, *, generated_at: datetime) -> dict:
+        return dict(self.report)
+
+
 class FailingV3ShadowObserver:
     def observe(self, **_kwargs: object) -> dict:
         raise RuntimeError("simulated V3 observer failure")
@@ -293,18 +301,27 @@ class ForexPaperRuntimeTests(unittest.TestCase):
         self,
     ) -> None:
         executor = FakeV3Executor()
-        result = ForexDemoPaperRuntime(
-            self.root,
-            settings=self.settings(
-                base_entries=False,
-                v3_simulation=True,
-            ),
-            gateway=FakeGateway(),  # type: ignore[arg-type]
-            journal=_ready_journal(self.root),
-            v3_shadow_activator=FakeV3Activator(),  # type: ignore[arg-type]
-            v3_shadow_observer=FakeV3Observer(),  # type: ignore[arg-type]
-            v3_shadow_executor=executor,  # type: ignore[arg-type]
-        ).run_once(cycle_id="runtime-v3-route", now=NOW)
+        with patch(
+            "app.market_data.forex_paper_runtime."
+            "verify_forex_v3_forward_evidence_report",
+            return_value=True,
+        ):
+            result = ForexDemoPaperRuntime(
+                self.root,
+                settings=self.settings(
+                    base_entries=False,
+                    v3_simulation=True,
+                ),
+                gateway=FakeGateway(),  # type: ignore[arg-type]
+                journal=_ready_journal(self.root),
+                v3_forward_evidence=FixedV3ForwardEvidence({
+                    "status": "FORWARD_OBSERVATION_SAMPLE_COMPLETE",
+                    "observation_sample_complete": True,
+                }),  # type: ignore[arg-type]
+                v3_shadow_activator=FakeV3Activator(),  # type: ignore[arg-type]
+                v3_shadow_observer=FakeV3Observer(),  # type: ignore[arg-type]
+                v3_shadow_executor=executor,  # type: ignore[arg-type]
+            ).run_once(cycle_id="runtime-v3-route", now=NOW)
 
         self.assertEqual(result["status"], "PAPER_CYCLE_COMPLETED")
         self.assertEqual(
@@ -322,6 +339,80 @@ class ForexPaperRuntimeTests(unittest.TestCase):
         self.assertEqual(executor.calls, 1)
         self.assertFalse(result["base_new_entries_enabled"])
         self.assertFalse(result["live_orders_sent"])
+
+    def test_v3_simulation_waits_for_complete_forward_evidence(self) -> None:
+        executor = FakeV3Executor()
+        observed = datetime(2026, 11, 5, 10, 0, tzinfo=UTC)
+        result = ForexDemoPaperRuntime(
+            self.root,
+            settings=self.settings(
+                base_entries=False,
+                v3_simulation=True,
+            ),
+            gateway=FakeGateway(),  # type: ignore[arg-type]
+            journal=_ready_journal(self.root),
+            v3_shadow_activator=FakeV3Activator(),  # type: ignore[arg-type]
+            v3_shadow_observer=FakeV3Observer(),  # type: ignore[arg-type]
+            v3_shadow_executor=executor,  # type: ignore[arg-type]
+        ).run_once(
+            cycle_id="v3-incomplete-forward-evidence",
+            now=observed,
+            capture_origin="SCHEDULED_FORWARD",
+            capture_attestation=_scheduled_attestation(
+                "v3-incomplete-forward-evidence"
+            ),
+        )
+
+        activation = result["v3_shadow_activation"]
+        self.assertEqual(
+            activation["status"],
+            "SHADOW_SIMULATION_ACTIVATION_BLOCKED",
+        )
+        self.assertEqual(
+            activation["reason"],
+            "V3_FORWARD_EVIDENCE_INCOMPLETE",
+        )
+        self.assertEqual(
+            result["v3_shadow_simulation"]["status"],
+            "SHADOW_SIMULATION_WAITING",
+        )
+        self.assertEqual(executor.calls, 0)
+        self.assertFalse(result["broker_orders_sent"])
+        self.assertFalse(result["live_orders_sent"])
+        self.assertFalse(result["real_money_access"])
+
+    def test_v3_simulation_rejects_invalid_forward_evidence(self) -> None:
+        executor = FakeV3Executor()
+        result = ForexDemoPaperRuntime(
+            self.root,
+            settings=self.settings(
+                base_entries=False,
+                v3_simulation=True,
+            ),
+            gateway=FakeGateway(),  # type: ignore[arg-type]
+            journal=_ready_journal(self.root),
+            v3_forward_evidence=FixedV3ForwardEvidence({
+                "status": "FORGED_COMPLETE_REPORT",
+                "observation_sample_complete": True,
+            }),  # type: ignore[arg-type]
+            v3_shadow_activator=FakeV3Activator(),  # type: ignore[arg-type]
+            v3_shadow_observer=FakeV3Observer(),  # type: ignore[arg-type]
+            v3_shadow_executor=executor,  # type: ignore[arg-type]
+        ).run_once(cycle_id="v3-invalid-forward-evidence", now=NOW)
+
+        activation = result["v3_shadow_activation"]
+        self.assertEqual(
+            activation["status"],
+            "SHADOW_SIMULATION_ACTIVATION_BLOCKED",
+        )
+        self.assertEqual(
+            activation["reason"],
+            "V3_FORWARD_EVIDENCE_INVALID",
+        )
+        self.assertEqual(executor.calls, 0)
+        self.assertFalse(result["broker_orders_sent"])
+        self.assertFalse(result["live_orders_sent"])
+        self.assertFalse(result["real_money_access"])
 
     def test_disabled_runtime_does_not_read_market_or_modify_ledger(self) -> None:
         gateway = FakeGateway()

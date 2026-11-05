@@ -391,6 +391,11 @@ names plus the exact immutable 40-character build SHA. The resulting nonce is
 recomputed during evidence review; forged metadata fails closed, while older
 unverified Azure declarations remain preserved but excluded. This cloud
 provenance is used only for PAPER evidence and cannot enable LIVE trading.
+V3 shadow simulation initialization additionally requires the complete,
+cryptographically verified post-freeze V3R2 forward sample. An incomplete or
+invalid sample blocks both activation and plan execution before the separate
+manual review fingerprint is evaluated. An already-active isolated PAPER
+ledger may continue its existing simulation, but this gate cannot enable LIVE.
 
 Every automatic PAPER cycle atomically refreshes two isolated ignored reports:
 `data/trading/research/forward_v2_latest.json` and

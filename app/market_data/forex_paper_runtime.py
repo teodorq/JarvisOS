@@ -13,6 +13,7 @@ from app.trading.forex_autopilot import ForexPaperAutopilot
 from app.trading.forex_forward_evidence import (
     ForexV2ForwardEvidenceReport,
     ForexV3ForwardEvidenceReport,
+    verify_forex_v3_forward_evidence_report,
 )
 from app.trading.forex_forward_review import ForexV2OwnerReviewPacket
 from app.trading.forex_observation import (
@@ -148,7 +149,9 @@ class ForexDemoPaperRuntime:
                     v3_forward_evidence=v3_forward_evidence,
                     forward_review=forward_review,
                 )
-            v3_shadow_activation = self._activate_v3_shadow_simulation()
+            v3_shadow_activation = self._activate_v3_shadow_simulation(
+                v3_forward_evidence
+            )
             v3_shadow_plan = self._observe_v3_shadow_plan(
                 bundle=bundle,
                 cycle_id=selected_id,
@@ -157,6 +160,7 @@ class ForexDemoPaperRuntime:
             v3_shadow_simulation = self._execute_v3_shadow_plan(
                 bundle=bundle,
                 observation=v3_shadow_plan,
+                activation=v3_shadow_activation,
                 now=selected_now,
             )
             paper = self.autopilot.run_cycle(
@@ -207,7 +211,10 @@ class ForexDemoPaperRuntime:
             "real_money_access": False,
         }
 
-    def _activate_v3_shadow_simulation(self) -> dict[str, Any]:
+    def _activate_v3_shadow_simulation(
+        self,
+        forward_evidence: Mapping[str, Any],
+    ) -> dict[str, Any]:
         if not self.settings.v3_shadow_simulation_enabled:
             return self._v3_simulation_result(
                 "SHADOW_SIMULATION_DISABLED",
@@ -217,6 +224,22 @@ class ForexDemoPaperRuntime:
             existing = self.v3_shadow_activator.activate(confirmation="")
             if existing.get("status") == "ALREADY_ACTIVE":
                 return existing
+            if not verify_forex_v3_forward_evidence_report(
+                forward_evidence,
+                require_complete=False,
+            ):
+                return self._v3_simulation_result(
+                    "SHADOW_SIMULATION_ACTIVATION_BLOCKED",
+                    "V3_FORWARD_EVIDENCE_INVALID",
+                )
+            if not verify_forex_v3_forward_evidence_report(
+                forward_evidence,
+                require_complete=True,
+            ):
+                return self._v3_simulation_result(
+                    "SHADOW_SIMULATION_ACTIVATION_BLOCKED",
+                    "V3_FORWARD_EVIDENCE_INCOMPLETE",
+                )
             gate = self.v3_shadow_activator.readiness.status()
             fingerprint = str(gate.get("review_fingerprint_sha256", ""))
             if (
@@ -254,12 +277,28 @@ class ForexDemoPaperRuntime:
         *,
         bundle: ForexDataBundle,
         observation: Mapping[str, Any],
+        activation: Mapping[str, Any],
         now: datetime,
     ) -> dict[str, Any]:
         if not self.settings.v3_shadow_simulation_enabled:
             return self._v3_simulation_result(
                 "SHADOW_SIMULATION_DISABLED",
                 "CONFIGURATION_DISABLED",
+            )
+        if (
+            activation.get("status") not in {
+                "SIMULATION_ACTIVATED",
+                "ALREADY_ACTIVE",
+            }
+            or activation.get("shadow_execution_enabled") is not True
+        ):
+            return self._v3_simulation_result(
+                "SHADOW_SIMULATION_WAITING",
+                str(
+                    activation.get("reason")
+                    or activation.get("status")
+                    or "ACTIVATION_NOT_READY"
+                ),
             )
         plan = observation.get("plan")
         if not isinstance(plan, Mapping) or observation.get("status") not in {
