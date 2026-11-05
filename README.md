@@ -412,7 +412,12 @@ Its Azure console output is a bounded summary with counts and the latest event
 kind, so hourly runs do not duplicate event messages, positions or detailed
 strategy state into operational logs. The hourly schedule keeps the seven
 independent FMP quote checks below the current free-plan daily request ceiling;
-JARVIS fails closed rather than use the provider's paid batch endpoint.
+JARVIS fails closed rather than use the provider's paid batch endpoint. Outside
+the verified Forex market window the Azure job exits successfully before it
+opens cloud state or calls any market-data provider. The previous market-open
+status is left untouched and naturally becomes stale instead of being replaced
+by a misleading fresh weekend snapshot. Azure's single safety retry remains
+enabled for genuine platform interruptions.
 
 Every automatic PAPER cycle atomically refreshes two isolated ignored reports:
 `data/trading/research/forward_v2_latest.json` and

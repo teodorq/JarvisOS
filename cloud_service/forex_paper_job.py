@@ -18,6 +18,7 @@ from zipfile import BadZipFile, ZIP_DEFLATED, ZipFile, ZipInfo
 
 from app.core.json_store import JsonStore
 from app.market_data.forex_environment import ForexDataSettings
+from app.market_data.forex_gateway import ForexReadOnlyDataGateway
 from app.market_data.forex_paper_runtime import ForexDemoPaperRuntime
 from app.trading.forex_activity_journal import ForexPaperActivityJournal
 from app.trading.forex_cloud_activity import (
@@ -48,6 +49,33 @@ def _diagnostic_code(value: object) -> str:
     raw = str(value or "").upper()
     cleaned = re.sub(r"[^A-Z0-9_:.-]+", "_", raw).strip("_")
     return cleaned[:160] if _DIAGNOSTIC_CODE.fullmatch(cleaned[:160]) else ""
+
+
+def _cloud_cycle_id(now: datetime) -> str:
+    selected = now.astimezone(timezone.utc)
+    return "azure-" + selected.strftime("%Y%m%dT%H%M%SZ-") + uuid4().hex[:12]
+
+
+def _market_closed_result(now: datetime, cycle_id: str) -> dict[str, Any]:
+    """Return a no-provider, no-state-write result outside Forex hours."""
+
+    return {
+        "status": "PAPER_CYCLE_SKIPPED",
+        "mode": "AUTONOMOUS_AZURE_FOREX_PAPER",
+        "cycle_id": cycle_id,
+        "observed_at": now.astimezone(timezone.utc).isoformat(),
+        "reason": "MARKET_CLOSED",
+        "runtime_decision": "MARKET_CLOSED",
+        "runtime_ready_pair_count": 0,
+        "runtime_blocked_pair_count": 0,
+        "runtime_execution_count": 0,
+        "position_count": 0,
+        "activity_events": [],
+        "status_snapshot_persisted": False,
+        "broker_orders_sent": False,
+        "live_orders_sent": False,
+        "real_money_access": False,
+    }
 
 
 @dataclass(frozen=True, slots=True)
@@ -546,7 +574,11 @@ def _log_summary(result: object) -> dict[str, Any]:
         "schema_version": 1,
         "status": exact(
             value.get("status"),
-            frozenset({"PAPER_CYCLE_BLOCKED", "PAPER_CYCLE_COMPLETED"}),
+            frozenset({
+                "PAPER_CYCLE_BLOCKED",
+                "PAPER_CYCLE_COMPLETED",
+                "PAPER_CYCLE_SKIPPED",
+            }),
         ),
         "mode": exact(
             value.get("mode"),
@@ -557,10 +589,15 @@ def _log_summary(result: object) -> dict[str, Any]:
             value.get("runtime_decision"),
             frozenset({
                 "DATA_BLOCKED",
+                "MARKET_CLOSED",
                 "NO_ENTRY_SIGNAL",
                 "PAIR_DATA_BLOCKED",
                 "PAPER_EXECUTED",
             }),
+        ),
+        "reason": exact(
+            value.get("reason"),
+            frozenset({"MARKET_CLOSED"}),
         ),
         "runtime_ready_pair_count": count(
             value.get("runtime_ready_pair_count")
@@ -608,8 +645,12 @@ def _log_summary(result: object) -> dict[str, Any]:
     }
 
 
-def run() -> dict[str, Any]:
+def run(*, now: datetime | None = None) -> dict[str, Any]:
     settings = _validate_settings()
+    selected_now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    cycle_id = _cloud_cycle_id(selected_now)
+    if not ForexReadOnlyDataGateway.market_open(selected_now):
+        return _market_closed_result(selected_now, cycle_id)
     blob, lease_type = _configured_blob()
     state = PaperStateArchive()
     try:
@@ -636,18 +677,12 @@ def run() -> dict[str, Any]:
                     "cloud_paper_state: download_failed"
                 ) from error
             state.extract(payload, root)
-            now = datetime.now(timezone.utc)
-            cycle_id = (
-                "azure-"
-                + now.strftime("%Y%m%dT%H%M%SZ-")
-                + uuid4().hex[:12]
-            )
             result = ForexDemoPaperRuntime(root, settings=settings).run_once(
                 cycle_id=cycle_id,
-                now=now,
+                now=selected_now,
                 capture_origin="AZURE_SCHEDULED",
             )
-            result.setdefault("observed_at", now.isoformat())
+            result.setdefault("observed_at", selected_now.isoformat())
             activity_events = _persist_result(root, result)
             renewer.check()
             archive = state.build(root)

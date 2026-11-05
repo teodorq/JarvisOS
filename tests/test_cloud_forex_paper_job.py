@@ -2,20 +2,63 @@ from __future__ import annotations
 
 from io import BytesIO
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from cloud_service.forex_paper_job import (
     CloudPaperJobError,
     PaperStateArchive,
     _log_summary,
+    _market_closed_result,
     _public_result,
+    run,
 )
 
 
 class CloudForexPaperJobTests(unittest.TestCase):
+    def test_closed_market_result_is_safe_and_skips_fresh_status(self) -> None:
+        now = datetime(2026, 11, 7, 12, tzinfo=timezone.utc)
+        result = _market_closed_result(
+            now,
+            "azure-20261107T120000Z-000000000001",
+        )
+        summary = _log_summary(result)
+
+        self.assertEqual(result["status"], "PAPER_CYCLE_SKIPPED")
+        self.assertEqual(result["reason"], "MARKET_CLOSED")
+        self.assertFalse(result["status_snapshot_persisted"])
+        self.assertEqual(summary["status"], "PAPER_CYCLE_SKIPPED")
+        self.assertEqual(summary["runtime_decision"], "MARKET_CLOSED")
+        self.assertEqual(summary["reason"], "MARKET_CLOSED")
+        self.assertFalse(summary["broker_orders_sent"])
+        self.assertFalse(summary["live_orders_sent"])
+        self.assertFalse(summary["real_money_access"])
+
+    def test_closed_market_run_uses_no_blob_or_provider_runtime(self) -> None:
+        saturday = datetime(2026, 11, 7, 12, tzinfo=timezone.utc)
+        with (
+            patch(
+                "cloud_service.forex_paper_job._validate_settings",
+                return_value=object(),
+            ),
+            patch(
+                "cloud_service.forex_paper_job._configured_blob"
+            ) as configured_blob,
+            patch(
+                "cloud_service.forex_paper_job.ForexDemoPaperRuntime"
+            ) as runtime,
+        ):
+            result = run(now=saturday)
+
+        configured_blob.assert_not_called()
+        runtime.assert_not_called()
+        self.assertEqual(result["reason"], "MARKET_CLOSED")
+        self.assertFalse(result["status_snapshot_persisted"])
+
     def test_log_summary_is_small_and_drops_cloud_history_details(self) -> None:
         result = _public_result({
             "status": "PAPER_CYCLE_COMPLETED",

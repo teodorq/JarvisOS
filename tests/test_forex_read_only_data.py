@@ -824,6 +824,20 @@ class ForexDataGatewayTests(unittest.TestCase):
         self.assertFalse(ForexReadOnlyDataGateway.market_open(saturday))
         self.assertTrue(ForexReadOnlyDataGateway.market_open(NOW))
 
+    def test_market_hours_cover_weekly_open_and_close_boundaries(self) -> None:
+        self.assertTrue(ForexReadOnlyDataGateway.market_open(
+            datetime(2026, 8, 14, 20, 59, tzinfo=UTC)
+        ))
+        self.assertFalse(ForexReadOnlyDataGateway.market_open(
+            datetime(2026, 8, 14, 21, 0, tzinfo=UTC)
+        ))
+        self.assertFalse(ForexReadOnlyDataGateway.market_open(
+            datetime(2026, 8, 16, 21, 59, tzinfo=UTC)
+        ))
+        self.assertTrue(ForexReadOnlyDataGateway.market_open(
+            datetime(2026, 8, 16, 22, 0, tzinfo=UTC)
+        ))
+
     def test_sources_contain_no_live_oanda_or_order_route(self) -> None:
         source = (
             Path(__file__).resolve().parents[1]
