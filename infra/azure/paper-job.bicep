@@ -79,8 +79,8 @@ resource paperJob 'Microsoft.App/jobs@2024-03-01' = {
       replicaTimeout: 600
       replicaRetryLimit: 1
       scheduleTriggerConfig: {
-        // One validated FMP batch check per M15 close keeps the daily call count bounded.
-        cronExpression: '2,17,32,47 * * 1-5'
+        // Seven FMP quote checks per run keep the free 250-call daily quota bounded.
+        cronExpression: '2 * * * *'
         parallelism: 1
         replicaCompletionCount: 1
       }

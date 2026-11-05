@@ -304,7 +304,6 @@ class FmpForexReadOnlySource:
     """Use FMP only as an independent midpoint cross-check."""
 
     HOST = "financialmodelingprep.com"
-    MAX_BATCH_ROWS = 10_000
 
     def __init__(self, api_key: str, transport: JsonTransport | None = None) -> None:
         if not api_key or len(api_key) > 4096 or any(
@@ -328,27 +327,22 @@ class FmpForexReadOnlySource:
         expected = {pair.symbol.replace("_", ""): pair for pair in selected}
         if not expected or len(expected) != len(selected):
             raise TradingValidationError("fmp_forex: invalid_universe")
-        request = PreparedJsonRequest.build(
-            host=self.HOST,
-            path="/stable/batch-forex-quotes",
-            query=(("short", "true"), ("apikey", self._api_key)),
-            headers={"Accept": "application/json"},
-        )
-        payload = self._transport(request)
-        if (
-            not isinstance(payload, list)
-            or not 1 <= len(payload) <= self.MAX_BATCH_ROWS
-        ):
-            raise TradingValidationError("fmp_forex: invalid_response")
         rates: dict[str, IndependentRate] = {}
-        for raw in payload:
+        for compact, pair in expected.items():
+            request = PreparedJsonRequest.build(
+                host=self.HOST,
+                path="/stable/quote-short",
+                query=(("symbol", compact), ("apikey", self._api_key)),
+                headers={"Accept": "application/json"},
+            )
+            payload = self._transport(request)
+            if not isinstance(payload, list) or len(payload) != 1:
+                raise TradingValidationError("fmp_forex: invalid_response")
+            raw = payload[0]
             row = _mapping(raw, "fmp_forex: invalid_quote")
             returned = str(row.get("symbol", "")).upper()
-            pair = expected.get(returned)
-            if pair is None:
-                continue
-            if pair.symbol in rates:
-                raise TradingValidationError("fmp_forex: duplicate_pair")
+            if returned != compact:
+                raise TradingValidationError("fmp_forex: pair_mismatch")
             timestamp = selected_time
             if row.get("timestamp") not in (None, ""):
                 try:
@@ -366,8 +360,6 @@ class FmpForexReadOnlySource:
                 timestamp=timestamp,
                 source="FMP",
             )
-        if set(rates) != {pair.symbol for pair in selected}:
-            raise TradingValidationError("fmp_forex: incomplete_universe")
         return rates
 
 
