@@ -101,6 +101,12 @@ class RemoteForexStatusTests(unittest.TestCase):
 
         self.assertIn("WYLACZNIE PAPER", body)
         self.assertIn("EUR_USD", body)
+        self.assertIn("BIEZACY CYKL", body)
+        self.assertIn("Brak bezpiecznego sygnalu wejscia", body)
+        self.assertIn("POSTEP PROBKI V3", body)
+        self.assertIn("4 / 20", body)
+        self.assertIn("1 / 3", body)
+        self.assertIn("nigdy automatycznie nie wlacza LIVE", body)
         self.assertNotIn("<script", body.lower())
         self.assertIn("script-src 'none'", policy)
 

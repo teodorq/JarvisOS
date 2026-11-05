@@ -154,6 +154,18 @@ def forex_status_page(
             return "N/D"
         return safe(selected.get(key, "0")) + " PLN"
 
+    def count(key: str, maximum: int = 1_000_000) -> int:
+        if selected.get("fresh") is not True:
+            return 0
+        raw = selected.get(key, 0)
+        if isinstance(raw, bool):
+            return 0
+        try:
+            value = int(raw)
+        except (TypeError, ValueError, OverflowError):
+            return 0
+        return value if 0 <= value <= maximum else 0
+
     if unavailable:
         state_class = "warn"
         state_label = "RAPORT JESZCZE NIEDOSTEPNY"
@@ -189,4 +201,42 @@ def forex_status_page(
     ) or '<tr><td colspan="4">Za malo danych do podzialu na pary.</td></tr>'
     age_minutes = int(int(selected.get("age_seconds", 0) or 0) / 60)
 
-    return f'''<!doctype html><html lang="pl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#03121f"><title>JARVIS OS &mdash; Trading PAPER</title><style>:root{{color-scheme:dark;font-family:Inter,Segoe UI,sans-serif}}*{{box-sizing:border-box}}body{{margin:0;background:#020b13;color:#dff7ff}}main{{width:min(980px,100%);margin:auto;padding:20px}}header,.card{{border:1px solid #176d88;border-radius:18px;background:#03131f;padding:18px;margin:12px 0}}h1{{margin:0 0 8px;letter-spacing:.12em}}h2{{font-size:16px;letter-spacing:.08em}}.paper{{display:inline-block;padding:7px 12px;border:1px solid #67f7c7;border-radius:999px;color:#67f7c7;font-weight:800}}.state{{font-weight:800}}.ok{{color:#67f7c7}}.warn{{color:#ffd77a}}.grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}}.metric{{border:1px solid #174b60;border-radius:12px;padding:12px}}.metric span{{display:block;color:#83d5ed;font-size:12px;margin-bottom:6px}}table{{width:100%;border-collapse:collapse;font-size:14px}}th,td{{padding:10px 8px;border-bottom:1px solid #174b60;text-align:left}}.scroll{{overflow-x:auto}}p{{color:#a5c8d3;line-height:1.5}}a{{display:block;text-align:center;border:1px solid #31cce9;border-radius:12px;padding:13px;color:#fff;background:#0b4866;text-decoration:none;font-weight:700}}</style></head><body><main><header><span class="paper">WYLACZNIE PAPER &mdash; ZERO PRAWDZIWYCH ZLECEN</span><h1>TRADING JARVIS OS</h1><p class="state {state_class}">{state_label}</p><p>{state_message}</p><p>Cykl: {safe(selected.get("cycle_id"))}<br>Odczyt: {safe(selected.get("observed_at"))} &middot; wiek: {age_minutes} min</p></header><section class="card"><h2>WYNIK V3</h2><div class="grid"><div class="metric"><span>Saldo</span>{money("v3_balance_pln")}</div><div class="metric"><span>Kapital z pozycjami</span>{money("v3_equity_pln")}</div><div class="metric"><span>Wynik zamkniety</span>{money("v3_realized_pnl_pln")}</div><div class="metric"><span>Wynik otwarty</span>{money("v3_unrealized_pnl_pln")}</div><div class="metric"><span>Zamkniete transakcje</span>{safe(selected.get("v3_closed_trade_count", 0))}</div><div class="metric"><span>Skutecznosc</span>{safe(selected.get("v3_win_rate_pct", 0))}%</div><div class="metric"><span>Profit factor</span>{safe(performance.get("profit_factor"), "brak")}</div><div class="metric"><span>Maks. obsuniecie</span>{safe(performance.get("maximum_closed_trade_drawdown_pln", 0))} PLN</div></div></section><section class="card"><h2>OTWARTE POZYCJE PAPER</h2><div class="scroll"><table><thead><tr><th>Para</th><th>Kierunek</th><th>Wejscie</th><th>Teraz</th><th>SL</th><th>TP</th></tr></thead><tbody>{position_rows}</tbody></table></div></section><section class="card"><h2>WYNIKI WEDLUG PAR</h2><div class="scroll"><table><thead><tr><th>Para</th><th>Transakcje</th><th>Skutecznosc</th><th>Wynik</th></tr></thead><tbody>{pair_rows}</tbody></table></div></section><a href="/phone">WROC DO PANELU TELEFONU</a></main></body></html>'''
+    runtime_code = str(selected.get("runtime_decision", "")).strip().upper()
+    runtime_label = {
+        "NO_ENTRY_SIGNAL": "Brak bezpiecznego sygnalu wejscia",
+        "PAPER_EXECUTED": "Wykonano symulacje PAPER",
+        "PAIR_DATA_BLOCKED": "Czesc par zablokowana przez dane",
+        "DATA_BLOCKED": "Cykl zablokowany przez dane",
+    }.get(runtime_code, runtime_code or "Brak wyniku")
+    ready_pairs = count("runtime_ready_pair_count", 7)
+    blocked_pairs = count("runtime_blocked_pair_count", 7)
+    execution_count = count("runtime_execution_count", 20)
+
+    accepted_cycles = count("v3_forward_accepted_cycle_count")
+    required_cycles = count("v3_forward_minimum_cycle_count")
+    accepted_days = count("v3_forward_accepted_market_day_count")
+    required_days = count("v3_forward_minimum_market_day_count")
+    cycle_progress_max = max(required_cycles, 1)
+    day_progress_max = max(required_days, 1)
+    evidence_code = str(
+        selected.get("v3_forward_status", "")
+    ).strip().upper()
+    evidence_complete = selected.get("v3_forward_sample_complete") is True
+    evidence_valid = (
+        selected.get("v3_forward_source_state_valid") is True
+        and count("v3_forward_invalid_cycle_count") == 0
+    )
+    if selected.get("fresh") is not True:
+        evidence_class = "warn"
+        evidence_label = "Postep niedostepny do czasu swiezego raportu"
+    elif evidence_complete and evidence_valid:
+        evidence_class = "ok"
+        evidence_label = "Probka gotowa do recznego przegladu"
+    elif evidence_valid and evidence_code == "COLLECTING_FORWARD_EVIDENCE":
+        evidence_class = "warn"
+        evidence_label = "JARVIS nadal zbiera niezalezne obserwacje"
+    else:
+        evidence_class = "bad"
+        evidence_label = "Dowody sa zablokowane lub niespojne"
+
+    return f'''<!doctype html><html lang="pl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#03121f"><title>JARVIS OS &mdash; Trading PAPER</title><style>:root{{color-scheme:dark;font-family:Inter,Segoe UI,sans-serif}}*{{box-sizing:border-box}}body{{margin:0;background:#020b13;color:#dff7ff}}main{{width:min(980px,100%);margin:auto;padding:20px}}header,.card{{border:1px solid #176d88;border-radius:18px;background:#03131f;padding:18px;margin:12px 0}}h1{{margin:0 0 8px;letter-spacing:.12em}}h2{{font-size:16px;letter-spacing:.08em}}.paper{{display:inline-block;padding:7px 12px;border:1px solid #67f7c7;border-radius:999px;color:#67f7c7;font-weight:800}}.state{{font-weight:800}}.ok{{color:#67f7c7}}.warn{{color:#ffd77a}}.bad{{color:#ff8c9d}}.grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}}.metric{{border:1px solid #174b60;border-radius:12px;padding:12px}}.metric span{{display:block;color:#83d5ed;font-size:12px;margin-bottom:6px}}progress{{width:100%;height:12px;accent-color:#31cce9;margin-top:8px}}table{{width:100%;border-collapse:collapse;font-size:14px}}th,td{{padding:10px 8px;border-bottom:1px solid #174b60;text-align:left}}.scroll{{overflow-x:auto}}p{{color:#a5c8d3;line-height:1.5}}.note{{font-size:13px}}a{{display:block;text-align:center;border:1px solid #31cce9;border-radius:12px;padding:13px;color:#fff;background:#0b4866;text-decoration:none;font-weight:700}}</style></head><body><main><header><span class="paper">WYLACZNIE PAPER &mdash; ZERO PRAWDZIWYCH ZLECEN</span><h1>TRADING JARVIS OS</h1><p class="state {state_class}">{state_label}</p><p>{state_message}</p><p>Cykl: {safe(selected.get("cycle_id"))}<br>Odczyt: {safe(selected.get("observed_at"))} &middot; wiek: {age_minutes} min</p></header><section class="card"><h2>BIEZACY CYKL</h2><div class="grid"><div class="metric"><span>Decyzja</span>{safe(runtime_label)}</div><div class="metric"><span>Pary gotowe</span>{ready_pairs} / 7</div><div class="metric"><span>Pary zablokowane</span>{blocked_pairs}</div><div class="metric"><span>Wykonania PAPER</span>{execution_count}</div></div></section><section class="card"><h2>POSTEP PROBKI V3</h2><p class="state {evidence_class}">{evidence_label}</p><div class="grid"><div class="metric"><span>Unikalne cykle</span>{accepted_cycles} / {required_cycles}<progress value="{min(accepted_cycles, cycle_progress_max)}" max="{cycle_progress_max}"></progress></div><div class="metric"><span>Dni rynkowe</span>{accepted_days} / {required_days}<progress value="{min(accepted_days, day_progress_max)}" max="{day_progress_max}"></progress></div></div><p class="note">Ten prog sprawdza ciaglosc i liczbe obserwacji. Nie potwierdza zysku, nie zmienia strategii i nigdy automatycznie nie wlacza LIVE.</p></section><section class="card"><h2>WYNIK V3</h2><div class="grid"><div class="metric"><span>Saldo</span>{money("v3_balance_pln")}</div><div class="metric"><span>Kapital z pozycjami</span>{money("v3_equity_pln")}</div><div class="metric"><span>Wynik zamkniety</span>{money("v3_realized_pnl_pln")}</div><div class="metric"><span>Wynik otwarty</span>{money("v3_unrealized_pnl_pln")}</div><div class="metric"><span>Zamkniete transakcje</span>{safe(selected.get("v3_closed_trade_count", 0))}</div><div class="metric"><span>Skutecznosc</span>{safe(selected.get("v3_win_rate_pct", 0))}%</div><div class="metric"><span>Profit factor</span>{safe(performance.get("profit_factor"), "brak")}</div><div class="metric"><span>Maks. obsuniecie</span>{safe(performance.get("maximum_closed_trade_drawdown_pln", 0))} PLN</div></div></section><section class="card"><h2>OTWARTE POZYCJE PAPER</h2><div class="scroll"><table><thead><tr><th>Para</th><th>Kierunek</th><th>Wejscie</th><th>Teraz</th><th>SL</th><th>TP</th></tr></thead><tbody>{position_rows}</tbody></table></div></section><section class="card"><h2>WYNIKI WEDLUG PAR</h2><div class="scroll"><table><thead><tr><th>Para</th><th>Transakcje</th><th>Skutecznosc</th><th>Wynik</th></tr></thead><tbody>{pair_rows}</tbody></table></div></section><a href="/phone">WROC DO PANELU TELEFONU</a></main></body></html>'''
