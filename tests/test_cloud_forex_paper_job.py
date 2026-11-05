@@ -10,11 +10,67 @@ from zipfile import ZIP_DEFLATED, ZipFile
 from cloud_service.forex_paper_job import (
     CloudPaperJobError,
     PaperStateArchive,
+    _log_summary,
     _public_result,
 )
 
 
 class CloudForexPaperJobTests(unittest.TestCase):
+    def test_log_summary_is_small_and_drops_cloud_history_details(self) -> None:
+        result = _public_result({
+            "status": "PAPER_CYCLE_COMPLETED",
+            "mode": "AUTONOMOUS_AZURE_FOREX_PAPER",
+            "cycle_id": "azure-20261105T171059Z-03787a1e21a4",
+            "paper": {"account": {"position_count": 1}},
+            "broker_orders_sent": False,
+            "live_orders_sent": False,
+            "real_money_access": False,
+        }, activity_events=[{
+            "sequence": 1,
+            "event_id": "000000000000000000000001",
+            "occurred_at": "2026-11-05T17:10:59+00:00",
+            "kind": "DATA_RECOVERED",
+            "state": "brief",
+            "message": "sensitive owner-facing detail",
+        }])
+        result["status_snapshot_persisted"] = True
+        summary = _log_summary(result)
+
+        self.assertEqual(summary["status"], "PAPER_CYCLE_COMPLETED")
+        self.assertEqual(summary["activity_event_count"], 1)
+        self.assertEqual(summary["latest_activity_sequence"], 1)
+        self.assertEqual(summary["latest_activity_kind"], "DATA_RECOVERED")
+        self.assertTrue(summary["status_snapshot_persisted"])
+        self.assertFalse(summary["broker_orders_sent"])
+        self.assertFalse(summary["live_orders_sent"])
+        self.assertFalse(summary["real_money_access"])
+        encoded = json.dumps(summary, ensure_ascii=False)
+        self.assertLess(len(encoded.encode("utf-8")), 1_024)
+        self.assertNotIn("activity_events", summary)
+        self.assertNotIn("sensitive owner-facing detail", encoded)
+        self.assertNotIn("v3_open_positions", summary)
+
+    def test_log_summary_fails_closed_on_untrusted_values(self) -> None:
+        summary = _log_summary({
+            "status": "unsafe status with spaces",
+            "runtime_ready_pair_count": True,
+            "position_count": 999,
+            "activity_events": "not-a-list",
+            "broker_orders_sent": True,
+            "live_orders_sent": True,
+            "real_money_access": True,
+        })
+
+        self.assertEqual(summary["status"], "")
+        self.assertEqual(summary["mode"], "")
+        self.assertEqual(summary["cycle_id"], "")
+        self.assertEqual(summary["runtime_ready_pair_count"], 0)
+        self.assertEqual(summary["position_count"], 0)
+        self.assertEqual(summary["activity_event_count"], 0)
+        self.assertFalse(summary["broker_orders_sent"])
+        self.assertFalse(summary["live_orders_sent"])
+        self.assertFalse(summary["real_money_access"])
+
     def test_public_result_sanitizes_provider_failure_reason(self) -> None:
         result = _public_result({
             "status": "PAPER_CYCLE_BLOCKED",

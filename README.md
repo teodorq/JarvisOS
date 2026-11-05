@@ -407,6 +407,10 @@ window again, stores unseen events in a bounded local inbox and delivers each
 event at most once through the existing history panel. Unknown kinds, malformed
 timestamps, oversized messages or an unsafe status fail closed; credentials,
 raw market data and executable instructions never enter this bridge.
+The scheduled job keeps that full owner-facing window in protected status only.
+Its Azure console output is a bounded summary with counts and the latest event
+kind, so hourly runs do not duplicate event messages, positions or detailed
+strategy state into operational logs.
 
 Every automatic PAPER cycle atomically refreshes two isolated ignored reports:
 `data/trading/research/forward_v2_latest.json` and

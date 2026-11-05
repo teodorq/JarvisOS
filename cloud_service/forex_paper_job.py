@@ -36,6 +36,7 @@ _STORAGE_ACCOUNT = re.compile(r"^[a-z0-9]{3,24}$")
 _CONTAINER = re.compile(r"^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])$")
 _BLOB = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$")
 _DIAGNOSTIC_CODE = re.compile(r"^[A-Z0-9_:.-]{1,160}$")
+_CLOUD_CYCLE_ID = re.compile(r"^AZURE-[0-9]{8}T[0-9]{6}Z-[0-9A-F]{12}$")
 _STATE_ROOT = PurePosixPath("data/trading")
 
 
@@ -515,6 +516,98 @@ def _public_result(
     }
 
 
+def _log_summary(result: object) -> dict[str, Any]:
+    """Return a small, non-sensitive completion record for Azure logs."""
+
+    value = result if isinstance(result, dict) else {}
+
+    def count(raw: object, *, maximum: int = 1_000_000) -> int:
+        if isinstance(raw, bool):
+            return 0
+        try:
+            selected = int(raw)
+        except (TypeError, ValueError, OverflowError):
+            return 0
+        return selected if 0 <= selected <= maximum else 0
+
+    def exact(raw: object, allowed: frozenset[str]) -> str:
+        selected = str(raw or "")
+        return selected if selected in allowed else ""
+
+    raw_events = value.get("activity_events", [])
+    try:
+        events = sanitize_forex_cloud_activity_events(raw_events)
+    except ValueError:
+        events = []
+    latest = events[-1] if events and isinstance(events[-1], dict) else {}
+    raw_cycle_id = str(value.get("cycle_id", "")).upper()
+    cycle_id = raw_cycle_id if _CLOUD_CYCLE_ID.fullmatch(raw_cycle_id) else ""
+    return {
+        "schema_version": 1,
+        "status": exact(
+            value.get("status"),
+            frozenset({"PAPER_CYCLE_BLOCKED", "PAPER_CYCLE_COMPLETED"}),
+        ),
+        "mode": exact(
+            value.get("mode"),
+            frozenset({"AUTONOMOUS_AZURE_FOREX_PAPER"}),
+        ),
+        "cycle_id": cycle_id,
+        "runtime_decision": exact(
+            value.get("runtime_decision"),
+            frozenset({
+                "DATA_BLOCKED",
+                "NO_ENTRY_SIGNAL",
+                "PAIR_DATA_BLOCKED",
+                "PAPER_EXECUTED",
+            }),
+        ),
+        "runtime_ready_pair_count": count(
+            value.get("runtime_ready_pair_count")
+        ),
+        "runtime_blocked_pair_count": count(
+            value.get("runtime_blocked_pair_count")
+        ),
+        "runtime_execution_count": count(
+            value.get("runtime_execution_count")
+        ),
+        "position_count": count(value.get("position_count"), maximum=20),
+        "v3_forward_status": exact(
+            value.get("v3_forward_status"),
+            frozenset({
+                "BLOCKED_INVALID_FORWARD_EVIDENCE",
+                "BLOCKED_SOURCE_INVALID",
+                "COLLECTING_FORWARD_EVIDENCE",
+                "FORWARD_OBSERVATION_SAMPLE_COMPLETE",
+            }),
+        ),
+        "v3_forward_accepted_cycle_count": count(
+            value.get("v3_forward_accepted_cycle_count")
+        ),
+        "v3_forward_minimum_cycle_count": count(
+            value.get("v3_forward_minimum_cycle_count")
+        ),
+        "v3_forward_accepted_market_day_count": count(
+            value.get("v3_forward_accepted_market_day_count")
+        ),
+        "v3_forward_minimum_market_day_count": count(
+            value.get("v3_forward_minimum_market_day_count")
+        ),
+        "activity_event_count": min(
+            len(events),
+            MAX_CLOUD_ACTIVITY_EVENTS,
+        ),
+        "latest_activity_sequence": count(latest.get("sequence")),
+        "latest_activity_kind": str(latest.get("kind", "")),
+        "status_snapshot_persisted": (
+            value.get("status_snapshot_persisted") is True
+        ),
+        "broker_orders_sent": False,
+        "live_orders_sent": False,
+        "real_money_access": False,
+    }
+
+
 def run() -> dict[str, Any]:
     settings = _validate_settings()
     blob, lease_type = _configured_blob()
@@ -602,7 +695,7 @@ def main() -> int:
             "real_money_access": False,
         }, ensure_ascii=False))
         return 1
-    print(json.dumps(result, ensure_ascii=False))
+    print(json.dumps(_log_summary(result), ensure_ascii=False))
     return 0
 
 
