@@ -409,8 +409,12 @@ timestamps, oversized messages or an unsafe status fail closed; credentials,
 raw market data and executable instructions never enter this bridge.
 The scheduled job keeps that full owner-facing window in protected status only.
 Its Azure console output is a bounded summary with counts and the latest event
-kind, so hourly runs do not duplicate event messages, positions or detailed
-strategy state into operational logs.
+kind, so scheduled runs do not duplicate event messages, positions or detailed
+strategy state into operational logs. Azure evaluates every closed M15 slot on
+weekdays. Its independent FMP verification uses the provider's batch Forex
+endpoint and strictly requires exactly one usable quote for every configured
+major pair, reducing seven requests to one without weakening the fail-closed
+cross-check.
 
 Every automatic PAPER cycle atomically refreshes two isolated ignored reports:
 `data/trading/research/forward_v2_latest.json` and
