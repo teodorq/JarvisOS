@@ -41,7 +41,8 @@ _OBSERVATION_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,79}$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _GIT_SHA = re.compile(r"^[0-9a-f]{40}$")
 _AZURE_JOB_NAME = "jarvis-os-forex-paper"
-_AZURE_EXECUTION_SUFFIX = re.compile(r"^[a-z0-9]{7}$")
+_AZURE_EXECUTION_SUFFIX_V1 = re.compile(r"^[a-z0-9]{7}$")
+_AZURE_EXECUTION_SUFFIX_V2 = re.compile(r"^[a-z0-9]{5,32}$")
 _AZURE_REPLICA_SUFFIX = re.compile(r"^[a-z0-9]{5}$")
 _OBSERVATION_SCHEMA_VERSION = 3
 _CAPTURE_ORIGINS = frozenset({
@@ -92,7 +93,7 @@ def azure_capture_nonce_sha256(
     if (
         selected_job != _AZURE_JOB_NAME
         or not selected_execution.startswith(execution_prefix)
-        or not _AZURE_EXECUTION_SUFFIX.fullmatch(
+        or not _AZURE_EXECUTION_SUFFIX_V1.fullmatch(
             selected_execution.removeprefix(execution_prefix)
         )
         or not selected_replica.startswith(replica_prefix)
@@ -109,6 +110,38 @@ def azure_capture_nonce_sha256(
         selected_job,
         selected_execution,
         selected_replica,
+        selected_build,
+    )).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
+
+
+def azure_job_capture_nonce_sha256(
+    *,
+    job_name: object,
+    execution_name: object,
+    build_sha: object,
+) -> str:
+    """Bind a capture to metadata documented for Container Apps jobs."""
+
+    selected_job = str(job_name or "")
+    selected_execution = str(execution_name or "")
+    selected_build = str(build_sha or "")
+    execution_prefix = selected_job + "-"
+    if (
+        selected_job != _AZURE_JOB_NAME
+        or not selected_execution.startswith(execution_prefix)
+        or not _AZURE_EXECUTION_SUFFIX_V2.fullmatch(
+            selected_execution.removeprefix(execution_prefix)
+        )
+        or not _GIT_SHA.fullmatch(selected_build)
+    ):
+        raise TradingValidationError(
+            "forex_observation: azure_attestation_invalid"
+        )
+    canonical = "\0".join((
+        "AZURE_CONTAINER_APPS_JOB_EXECUTION_V2",
+        selected_job,
+        selected_execution,
         selected_build,
     )).encode("utf-8")
     return hashlib.sha256(canonical).hexdigest()
@@ -143,23 +176,20 @@ def _capture_attestation(value: object, *, origin: str) -> dict[str, Any]:
         execution_name = os.getenv(
             "CONTAINER_APP_JOB_EXECUTION_NAME", ""
         ).strip()
-        replica_name = os.getenv("CONTAINER_APP_REPLICA_NAME", "").strip()
         build_sha = os.getenv("JARVIS_OS_BUILD_SHA", "").strip().lower()
-        nonce = azure_capture_nonce_sha256(
+        nonce = azure_job_capture_nonce_sha256(
             job_name=job_name,
             execution_name=execution_name,
-            replica_name=replica_name,
             build_sha=build_sha,
         )
         return {
-            "kind": "AZURE_CONTAINER_APPS_JOB_EXECUTION_V1",
+            "kind": "AZURE_CONTAINER_APPS_JOB_EXECUTION_V2",
             "verified": True,
             "trust_level": "AZURE_MANAGED_IDENTITY_BLOB_ARCHIVE",
             "verified_scope": "IMMUTABLE_BUILD_AND_JOB_EXECUTION_METADATA",
             "nonce_sha256": nonce,
             "job_name": job_name,
             "execution_name": execution_name,
-            "replica_name": replica_name,
             "build_sha": build_sha,
         }
     if origin == "MANUAL":

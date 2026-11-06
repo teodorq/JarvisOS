@@ -386,11 +386,15 @@ snapshots/nonces are explicitly excluded. Legacy observations remain available
 in the tamper-evident journal but are never retroactively upgraded to the stricter
 contract.
 Azure `AZURE_SCHEDULED` cycles can also enter the sample only when their
-attestation is bound to the injected Container Apps job, execution and replica
-names plus the exact immutable 40-character build SHA. The resulting nonce is
-recomputed during evidence review; forged metadata fails closed, while older
-unverified Azure declarations remain preserved but excluded. This cloud
-provenance is used only for PAPER evidence and cannot enable LIVE trading.
+attestation is bound to the documented Container Apps job and execution names
+plus the exact immutable 40-character build SHA. The V2 nonce deliberately does
+not depend on the app-only replica variable, which Azure does not document for
+jobs, and accepts bounded lower-case alphanumeric execution suffixes observed
+from both scheduled and manual job runs. The resulting nonce is recomputed
+during evidence review; forged metadata fails closed, while valid historical V1
+attestations remain reviewable and older unverified Azure declarations remain
+preserved but excluded. This cloud provenance is used only for PAPER evidence
+and cannot enable LIVE trading.
 V3 shadow simulation initialization additionally requires the complete,
 cryptographically verified post-freeze V3R2 forward sample. An incomplete or
 invalid sample blocks both activation and plan execution before the separate

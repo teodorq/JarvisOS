@@ -401,10 +401,13 @@ def _observation_contract_issues(
         and int(attestation["watchdog_process_id"]) > 0
     )
     azure_attestation_valid = False
+    azure_kind = str(attestation.get("kind", ""))
     if (
         origin == "AZURE_SCHEDULED"
-        and attestation.get("kind")
-        == "AZURE_CONTAINER_APPS_JOB_EXECUTION_V1"
+        and azure_kind in {
+            "AZURE_CONTAINER_APPS_JOB_EXECUTION_V1",
+            "AZURE_CONTAINER_APPS_JOB_EXECUTION_V2",
+        }
         and attestation.get("verified") is True
         and attestation.get("trust_level")
         == "AZURE_MANAGED_IDENTITY_BLOB_ARCHIVE"
@@ -413,12 +416,21 @@ def _observation_contract_issues(
         and _SHA256.fullmatch(nonce_sha256)
     ):
         try:
-            expected_nonce = observation_module.azure_capture_nonce_sha256(
-                job_name=attestation.get("job_name"),
-                execution_name=attestation.get("execution_name"),
-                replica_name=attestation.get("replica_name"),
-                build_sha=attestation.get("build_sha"),
-            )
+            if azure_kind == "AZURE_CONTAINER_APPS_JOB_EXECUTION_V1":
+                expected_nonce = observation_module.azure_capture_nonce_sha256(
+                    job_name=attestation.get("job_name"),
+                    execution_name=attestation.get("execution_name"),
+                    replica_name=attestation.get("replica_name"),
+                    build_sha=attestation.get("build_sha"),
+                )
+            else:
+                expected_nonce = (
+                    observation_module.azure_job_capture_nonce_sha256(
+                        job_name=attestation.get("job_name"),
+                        execution_name=attestation.get("execution_name"),
+                        build_sha=attestation.get("build_sha"),
+                    )
+                )
         except TradingValidationError:
             pass
         else:
@@ -688,8 +700,10 @@ def _build_forex_candidate_forward_evidence_report(
         if (
             origin == "AZURE_SCHEDULED"
             and (
-                attestation.get("kind")
-                != "AZURE_CONTAINER_APPS_JOB_EXECUTION_V1"
+                attestation.get("kind") not in {
+                    "AZURE_CONTAINER_APPS_JOB_EXECUTION_V1",
+                    "AZURE_CONTAINER_APPS_JOB_EXECUTION_V2",
+                }
                 or attestation.get("verified") is not True
             )
         ):
