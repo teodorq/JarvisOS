@@ -620,6 +620,11 @@ short-lived request identifier. Azure returns the original command instead of
 placing a duplicate in the desktop queue; command text is not persisted in
 browser storage.
 
+The owner-only `/trading` report explains the latest PAPER decision separately
+for every allowlisted major currency pair. It exposes only bounded diagnostic
+codes translated into plain language; raw prices, API secrets and executable
+trade instructions never enter this diagnostic view.
+
 The phone page has a separate owner-only computer power card. Shutdown cannot
 be requested through the free-text command box: the owner must open the red
 control, type `WYLACZ` and press the second confirmation button. The dedicated

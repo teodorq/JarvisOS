@@ -71,6 +71,10 @@ def sample_status() -> dict:
             "CANDIDATE_V3_SIGNAL_STRENGTH_TOO_LOW": 1,
             "SPREAD_TOO_WIDE": 1,
         },
+        "v3_reason_codes_by_pair": {
+            "EUR_USD": ["NO_NEW_CROSSOVER"],
+            "GBP_USD": ["CANDIDATE_V3_SIGNAL_STRENGTH_TOO_LOW"],
+        },
         "v3_balance_pln": "10005.00",
         "v3_equity_pln": "10007.50",
         "v3_unrealized_pnl_pln": "2.50",
@@ -179,6 +183,10 @@ class CloudForexStatusTests(unittest.TestCase):
         )
         self.assertEqual(result["v3_ready_pair_count"], 6)
         self.assertEqual(result["v3_reason_codes"]["NO_NEW_CROSSOVER"], 5)
+        self.assertEqual(
+            result["v3_reason_codes_by_pair"]["GBP_USD"],
+            ["CANDIDATE_V3_SIGNAL_STRENGTH_TOO_LOW"],
+        )
 
         value["real_money_access"] = True
         with self.assertRaisesRegex(ForexStatusStoreError, "unsafe_mode"):
@@ -209,6 +217,15 @@ class CloudForexStatusTests(unittest.TestCase):
         ):
             sanitize_forex_status(value)
 
+        value = sample_status()
+        value["v3_reason_codes_by_pair"] = {
+            "BAD_PAIR": ["NO_NEW_CROSSOVER"],
+        }
+        with self.assertRaisesRegex(
+            ForexStatusStoreError, "invalid_v3_pair_reasons"
+        ):
+            sanitize_forex_status(value)
+
     def test_memory_store_isolated_and_view_reports_freshness(self) -> None:
         store = MemoryForexStatusStore(sample_status())
         first = store.read()
@@ -234,6 +251,7 @@ class CloudForexStatusTests(unittest.TestCase):
         self.assertEqual(stale["v3_activation_status"], "STATUS_UNAVAILABLE")
         self.assertEqual(stale["v3_plan_reason"], "")
         self.assertEqual(stale["v3_reason_codes"], {})
+        self.assertEqual(stale["v3_reason_codes_by_pair"], {})
 
         future = forex_status_view(
             store.read(),

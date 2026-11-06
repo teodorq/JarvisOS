@@ -231,6 +231,31 @@ def _opening_blocks_by_pair(value: object) -> dict[str, list[str]]:
     return result
 
 
+def _v3_reason_codes_by_pair(value: object) -> dict[str, list[str]]:
+    if value in (None, {}):
+        return {}
+    if not isinstance(value, dict) or len(value) > len(_MAJOR_PAIRS):
+        raise ForexStatusStoreError("forex_status: invalid_v3_pair_reasons")
+    result: dict[str, list[str]] = {}
+    for raw_pair, raw_codes in sorted(value.items()):
+        pair = str(raw_pair).strip().upper()
+        if pair not in _MAJOR_PAIRS or not isinstance(raw_codes, list):
+            raise ForexStatusStoreError(
+                "forex_status: invalid_v3_pair_reasons"
+            )
+        if not raw_codes or len(raw_codes) > 12:
+            raise ForexStatusStoreError(
+                "forex_status: invalid_v3_pair_reasons"
+            )
+        codes = [_code(item, required=True) for item in raw_codes]
+        if len(codes) != len(set(codes)):
+            raise ForexStatusStoreError(
+                "forex_status: invalid_v3_pair_reasons"
+            )
+        result[pair] = codes
+    return result
+
+
 def sanitize_forex_status(value: object) -> dict[str, Any]:
     """Return the strict public PAPER status allowlist or fail closed."""
 
@@ -370,6 +395,9 @@ def sanitize_forex_status(value: object) -> dict[str, Any]:
         "v3_reason_codes": _reason_counts(
             value.get("v3_reason_codes", {})
         ),
+        "v3_reason_codes_by_pair": _v3_reason_codes_by_pair(
+            value.get("v3_reason_codes_by_pair", {})
+        ),
         "v3_balance_pln": _decimal_text(value.get("v3_balance_pln", "0")),
         "v3_equity_pln": _decimal_text(value.get("v3_equity_pln", "0")),
         "v3_unrealized_pnl_pln": _decimal_text(
@@ -452,6 +480,7 @@ def forex_status_view(
             "v3_instruction_count": 0,
             "v3_execution_count": 0,
             "v3_reason_codes": {},
+            "v3_reason_codes_by_pair": {},
             "observation_opening_blocks_by_pair": {},
         })
     return result

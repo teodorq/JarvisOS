@@ -278,14 +278,21 @@ def _v3_cycle_diagnostics(
         else []
     )
     reasons: Counter[str] = Counter()
+    reasons_by_pair: dict[str, list[str]] = {}
     for assessment in assessments:
         raw_reasons = assessment.get("reason_codes", [])
         if not isinstance(raw_reasons, list) or len(raw_reasons) > 12:
             continue
+        safe_reasons: list[str] = []
         for raw_code in raw_reasons:
             code = str(raw_code)
             if _DIAGNOSTIC_CODE.fullmatch(code):
                 reasons.update((code,))
+                if code not in safe_reasons:
+                    safe_reasons.append(code)
+        pair = str(assessment.get("pair", "")).strip().upper()
+        if _PAIR_SYMBOL.fullmatch(pair) and safe_reasons:
+            reasons_by_pair[pair] = safe_reasons
     raw_instructions = plan.get("instructions", [])
     instruction_count = (
         len(raw_instructions)
@@ -323,6 +330,7 @@ def _v3_cycle_diagnostics(
         "v3_instruction_count": instruction_count,
         "v3_execution_count": execution_count,
         "v3_reason_codes": dict(reasons.most_common(32)),
+        "v3_reason_codes_by_pair": reasons_by_pair,
     }
 
 

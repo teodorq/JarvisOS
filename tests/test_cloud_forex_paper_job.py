@@ -227,6 +227,7 @@ class CloudForexPaperJobTests(unittest.TestCase):
                     "decision_status": "ENTRIES_READY",
                     "assessments": [
                         {
+                            "pair": "EUR_USD",
                             "status": "READY",
                             "reason_codes": [
                                 "BULLISH_CROSSOVER",
@@ -234,6 +235,7 @@ class CloudForexPaperJobTests(unittest.TestCase):
                             ],
                         },
                         {
+                            "pair": "GBP_USD",
                             "status": "BLOCKED",
                             "reason_codes": ["SPREAD_TOO_WIDE"],
                         },
@@ -305,6 +307,16 @@ class CloudForexPaperJobTests(unittest.TestCase):
                 "BULLISH_CROSSOVER": 1,
                 "CANDIDATE_V3_SIGNAL_STRENGTH_CONFIRMED": 1,
                 "SPREAD_TOO_WIDE": 1,
+            },
+        )
+        self.assertEqual(
+            result["v3_reason_codes_by_pair"],
+            {
+                "EUR_USD": [
+                    "BULLISH_CROSSOVER",
+                    "CANDIDATE_V3_SIGNAL_STRENGTH_CONFIRMED",
+                ],
+                "GBP_USD": ["SPREAD_TOO_WIDE"],
             },
         )
         self.assertEqual(
