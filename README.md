@@ -624,6 +624,10 @@ The owner-only `/trading` report explains the latest PAPER decision separately
 for every allowlisted major currency pair. It exposes only bounded diagnostic
 codes translated into plain language; raw prices, API secrets and executable
 trade instructions never enter this diagnostic view.
+The same report shows the exact number of forward-evidence cycles and market
+days still required before V3 can leave its PAPER observation gate. Internal
+waiting codes are translated into owner-friendly text and never weaken the
+sample threshold or enable LIVE trading.
 
 The phone page has a separate owner-only computer power card. Shutdown cannot
 be requested through the free-text command box: the owner must open the red

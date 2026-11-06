@@ -93,6 +93,18 @@ class RemoteForexStatusTests(unittest.TestCase):
                 self.assertEqual(caught.exception.code, 401)
 
     def test_owner_page_is_script_free_and_explicitly_paper(self) -> None:
+        status = sample_status()
+        status["observed_at"] = datetime.now(timezone.utc).isoformat()
+        status["v3_activation_status"] = (
+            "SHADOW_SIMULATION_ACTIVATION_BLOCKED"
+        )
+        status["v3_activation_reason"] = "V3_FORWARD_EVIDENCE_INCOMPLETE"
+        status["v3_plan_observation_status"] = (
+            "SHADOW_PLAN_OBSERVATION_WAITING"
+        )
+        status["v3_plan_reason"] = "WAITING_FOR_FORWARD_SAMPLE"
+        status["v3_decision_status"] = ""
+        self.store.write(status)
         with urllib.request.urlopen(
             self.owner_request("/trading"), timeout=2
         ) as response:
@@ -111,6 +123,10 @@ class RemoteForexStatusTests(unittest.TestCase):
         self.assertIn("POSTEP PROBKI V3", body)
         self.assertIn("4 / 20", body)
         self.assertIn("1 / 3", body)
+        self.assertIn("Trwa zbieranie niezaleznej probki V3", body)
+        self.assertIn("Pozostalo cykli</span>16", body)
+        self.assertIn("Pozostalo dni rynkowych</span>2", body)
+        self.assertNotIn("V3_FORWARD_EVIDENCE_INCOMPLETE", body)
         self.assertIn("nigdy automatycznie nie wlacza LIVE", body)
         self.assertNotIn("<script", body.lower())
         self.assertIn("script-src 'none'", policy)
