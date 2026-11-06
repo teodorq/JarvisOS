@@ -347,4 +347,156 @@ def forex_status_page(
             "Raport wymaga kontroli przed kolejnym etapem V3.",
         )
 
-    return f'''<!doctype html><html lang="pl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#03121f"><title>JARVIS OS &mdash; Trading PAPER</title><style>:root{{color-scheme:dark;font-family:Inter,Segoe UI,sans-serif}}*{{box-sizing:border-box}}body{{margin:0;background:#020b13;color:#dff7ff}}main{{width:min(980px,100%);margin:auto;padding:20px}}header,.card{{border:1px solid #176d88;border-radius:18px;background:#03131f;padding:18px;margin:12px 0}}h1{{margin:0 0 8px;letter-spacing:.12em}}h2{{font-size:16px;letter-spacing:.08em}}.paper{{display:inline-block;padding:7px 12px;border:1px solid #67f7c7;border-radius:999px;color:#67f7c7;font-weight:800}}.state{{font-weight:800}}.ok{{color:#67f7c7}}.warn{{color:#ffd77a}}.bad{{color:#ff8c9d}}.grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}}.metric{{border:1px solid #174b60;border-radius:12px;padding:12px}}.metric span{{display:block;color:#83d5ed;font-size:12px;margin-bottom:6px}}progress{{width:100%;height:12px;accent-color:#31cce9;margin-top:8px}}table{{width:100%;border-collapse:collapse;font-size:14px}}th,td{{padding:10px 8px;border-bottom:1px solid #174b60;text-align:left}}.scroll{{overflow-x:auto}}p{{color:#a5c8d3;line-height:1.5}}.note{{font-size:13px}}a{{display:block;text-align:center;border:1px solid #31cce9;border-radius:12px;padding:13px;color:#fff;background:#0b4866;text-decoration:none;font-weight:700}}</style></head><body><main><header><span class="paper">WYLACZNIE PAPER &mdash; ZERO PRAWDZIWYCH ZLECEN</span><h1>TRADING JARVIS OS</h1><p class="state {state_class}">{state_label}</p><p>{state_message}</p><p>Cykl: {safe(selected.get("cycle_id"))}<br>Odczyt: {safe(selected.get("observed_at"))} &middot; wiek: {age_minutes} min</p></header><section class="card"><h2>BIEZACY CYKL</h2><div class="grid"><div class="metric"><span>Decyzja</span>{safe(runtime_label)}</div><div class="metric"><span>Pary gotowe</span>{ready_pairs} / 7</div><div class="metric"><span>Pary zablokowane</span>{blocked_pairs}</div><div class="metric"><span>Wykonania PAPER</span>{execution_count}</div></div></section><section class="card"><h2>DLACZEGO PARA BYLA ZABLOKOWANA</h2><div class="scroll"><table><thead><tr><th>Para</th><th>Powod</th></tr></thead><tbody>{block_rows}</tbody></table></div><p class="note">To bezpieczne kody kontroli danych. Panel nie pokazuje kluczy API, surowych cen ani instrukcji wykonawczych.</p></section><section class="card"><h2>DLACZEGO V3 PODJAL TAKA DECYZJE</h2><div class="scroll"><table><thead><tr><th>Para</th><th>Powod</th></tr></thead><tbody>{v3_reason_rows}</tbody></table></div><p class="note">Powody opisuja ostatnia ocene strategii PAPER. Nie sa rekomendacja inwestycyjna ani instrukcja otwarcia zlecenia.</p></section><section class="card"><h2>POSTEP PROBKI V3</h2><p class="state {evidence_class}">{evidence_label}</p><p>{safe(evidence_detail)}</p><div class="grid"><div class="metric"><span>Unikalne cykle</span>{accepted_cycles} / {required_cycles}<progress value="{min(accepted_cycles, cycle_progress_max)}" max="{cycle_progress_max}"></progress></div><div class="metric"><span>Dni rynkowe</span>{accepted_days} / {required_days}<progress value="{min(accepted_days, day_progress_max)}" max="{day_progress_max}"></progress></div><div class="metric"><span>Pozostalo cykli</span>{remaining_cycles}</div><div class="metric"><span>Pozostalo dni rynkowych</span>{remaining_days}</div></div><p class="note">Ten prog sprawdza ciaglosc i liczbe obserwacji. Nie potwierdza zysku, nie zmienia strategii i nigdy automatycznie nie wlacza LIVE.</p></section><section class="card"><h2>OSTATNIE ZDARZENIA PAPER</h2><div class="scroll"><table><thead><tr><th>Czas UTC</th><th>Typ</th><th>Wiadomosc</th></tr></thead><tbody>{event_rows}</tbody></table></div><p class="note">Historia jest przechowywana w Azure i pozostaje dostepna na telefonie takze wtedy, gdy komputer jest wylaczony.</p></section><section class="card"><h2>WYNIK V3</h2><div class="grid"><div class="metric"><span>Saldo</span>{money("v3_balance_pln")}</div><div class="metric"><span>Kapital z pozycjami</span>{money("v3_equity_pln")}</div><div class="metric"><span>Wynik zamkniety</span>{money("v3_realized_pnl_pln")}</div><div class="metric"><span>Wynik otwarty</span>{money("v3_unrealized_pnl_pln")}</div><div class="metric"><span>Zamkniete transakcje</span>{safe(selected.get("v3_closed_trade_count", 0))}</div><div class="metric"><span>Skutecznosc</span>{safe(selected.get("v3_win_rate_pct", 0))}%</div><div class="metric"><span>Profit factor</span>{safe(performance.get("profit_factor"), "brak")}</div><div class="metric"><span>Maks. obsuniecie</span>{safe(performance.get("maximum_closed_trade_drawdown_pln", 0))} PLN</div></div></section><section class="card"><h2>OTWARTE POZYCJE PAPER</h2><div class="scroll"><table><thead><tr><th>Para</th><th>Kierunek</th><th>Wejscie</th><th>Teraz</th><th>SL</th><th>TP</th></tr></thead><tbody>{position_rows}</tbody></table></div></section><section class="card"><h2>WYNIKI WEDLUG PAR</h2><div class="scroll"><table><thead><tr><th>Para</th><th>Transakcje</th><th>Skutecznosc</th><th>Wynik</th></tr></thead><tbody>{pair_rows}</tbody></table></div></section><a href="/phone">WROC DO PANELU TELEFONU</a></main></body></html>'''
+    activation_code = str(
+        selected.get("v3_activation_status", "")
+    ).strip().upper()
+    plan_observation_code = str(
+        selected.get("v3_plan_observation_status", "")
+    ).strip().upper()
+    simulation_code = str(selected.get("v3_status", "")).strip().upper()
+    shadow_active = activation_code in {
+        "ALREADY_ACTIVE",
+        "SIMULATION_ACTIVATED",
+    }
+    shadow_initialized = shadow_active or plan_observation_code in {
+        "SHADOW_PLAN_OBSERVED",
+        "SHADOW_PLAN_ALREADY_OBSERVED",
+    }
+
+    if selected.get("fresh") is not True:
+        gate_values = [
+            ("DOWODY FORWARD", "NIEDOSTEPNE", "warn", "Czeka na swiezy raport Azure."),
+            ("PORTFEL SHADOW", "NIEDOSTEPNY", "warn", "Stan jest ukryty do czasu swiezego raportu."),
+            ("PLANY SHADOW", "NIEDOSTEPNE", "warn", "Stan jest ukryty do czasu swiezego raportu."),
+            ("SYMULACJA V3", "NIEDOSTEPNA", "warn", "Stan jest ukryty do czasu swiezego raportu."),
+        ]
+    else:
+        if evidence_complete and evidence_valid:
+            forward_gate = (
+                "GOTOWE",
+                "ok",
+                "Probka spelnila wymagania liczby cykli, dni i spojnosci.",
+            )
+        elif evidence_valid and evidence_code == "COLLECTING_FORWARD_EVIDENCE":
+            forward_gate = (
+                "W TOKU",
+                "warn",
+                f"Pozostalo {remaining_cycles} cykli i {remaining_days} dni rynkowych.",
+            )
+        else:
+            forward_gate = (
+                "ZABLOKOWANE",
+                "bad",
+                "Dowody wymagaja poprawnego cyklu lub kontroli spojnosci.",
+            )
+
+        if shadow_active:
+            shadow_gate = (
+                "AKTYWNY PAPER",
+                "ok",
+                "Izolowany portfel istnieje i nie ma dostepu do brokera.",
+            )
+        elif shadow_initialized:
+            shadow_gate = (
+                "ZAINICJALIZOWANY",
+                "ok",
+                "Izolowany portfel istnieje, ale nie wykonuje prawdziwych zlecen.",
+            )
+        elif evidence_complete and evidence_valid:
+            shadow_gate = (
+                "GOTOWY DO KONTROLOWANEGO STARTU",
+                "warn",
+                "Wymaga oddzielnej bezpiecznej inicjalizacji SHADOW.",
+            )
+        else:
+            shadow_gate = (
+                "CZEKA NA PROBKE",
+                "warn" if evidence_valid else "bad",
+                "Nie powstanie przed poprawna, kompletna probka forward.",
+            )
+
+        if shadow_active:
+            plan_gate = (
+                "PROBKA PLANOW ZAKONCZONA",
+                "ok",
+                "Wczesniejszy przeglad planow dopuscil izolowana symulacje.",
+            )
+        elif plan_observation_code in {
+            "SHADOW_PLAN_OBSERVED",
+            "SHADOW_PLAN_ALREADY_OBSERVED",
+        }:
+            plan_gate = (
+                "ZBIERANIE PLANOW",
+                "warn",
+                "JARVIS zapisuje nieuruchamialne plany do osobnego dziennika.",
+            )
+        elif "BLOCKED" in plan_observation_code:
+            plan_gate = (
+                "ZABLOKOWANE",
+                "bad",
+                "Dziennik planow lub biezaca obserwacja wymaga kontroli.",
+            )
+        elif evidence_complete and evidence_valid:
+            plan_gate = (
+                "CZEKA NA PORTFEL SHADOW",
+                "warn",
+                "Plany rusza dopiero po bezpiecznej inicjalizacji portfela.",
+            )
+        else:
+            plan_gate = (
+                "CZEKA NA PROBKE",
+                "warn",
+                "Najpierw musi zakonczyc sie bramka dowodow forward.",
+            )
+
+        if shadow_active or simulation_code == "SHADOW_SIMULATION_CYCLE_COMPLETED":
+            simulation_gate = (
+                "AKTYWNA - TYLKO PAPER",
+                "ok",
+                "Wyniki powstaja wyłącznie w izolowanym portfelu symulacyjnym.",
+            )
+        elif "BLOCKED" in simulation_code:
+            simulation_gate = (
+                "ZABLOKOWANA",
+                "bad",
+                "Symulacja zatrzymala sie bez wysylania zlecen do brokera.",
+            )
+        else:
+            simulation_gate = (
+                "CZEKA NA DOWODY I PLANY",
+                "warn",
+                "Nie uruchomi sie przed przejsciem osobnych bramek PAPER.",
+            )
+
+        gate_values = [
+            ("DOWODY FORWARD", *forward_gate),
+            ("PORTFEL SHADOW", *shadow_gate),
+            ("PLANY SHADOW", *plan_gate),
+            ("SYMULACJA V3", *simulation_gate),
+        ]
+
+    gate_values.append((
+        "LIVE",
+        "ZAWSZE ZABLOKOWANE",
+        "bad",
+        "Zadna bramka PAPER nie wlacza prawdziwych zlecen automatycznie.",
+    ))
+    gate_rows = "".join(
+        '<div class="gate"><span class="gate-number">'
+        + str(index)
+        + '</span><div><strong>'
+        + safe(title)
+        + '</strong><span class="state '
+        + safe(css_class)
+        + '">'
+        + safe(label)
+        + '</span><p>'
+        + safe(detail)
+        + '</p></div></div>'
+        for index, (title, label, css_class, detail) in enumerate(
+            gate_values,
+            start=1,
+        )
+    )
+
+    return f'''<!doctype html><html lang="pl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#03121f"><title>JARVIS OS &mdash; Trading PAPER</title><style>:root{{color-scheme:dark;font-family:Inter,Segoe UI,sans-serif}}*{{box-sizing:border-box}}body{{margin:0;background:#020b13;color:#dff7ff}}main{{width:min(980px,100%);margin:auto;padding:20px}}header,.card{{border:1px solid #176d88;border-radius:18px;background:#03131f;padding:18px;margin:12px 0}}h1{{margin:0 0 8px;letter-spacing:.12em}}h2{{font-size:16px;letter-spacing:.08em}}.paper{{display:inline-block;padding:7px 12px;border:1px solid #67f7c7;border-radius:999px;color:#67f7c7;font-weight:800}}.state{{display:block;font-weight:800;margin-top:4px}}.ok{{color:#67f7c7}}.warn{{color:#ffd77a}}.bad{{color:#ff8c9d}}.grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}}.metric{{border:1px solid #174b60;border-radius:12px;padding:12px}}.metric span{{display:block;color:#83d5ed;font-size:12px;margin-bottom:6px}}.gates{{display:grid;gap:10px}}.gate{{display:grid;grid-template-columns:34px 1fr;gap:12px;border:1px solid #174b60;border-radius:12px;padding:12px}}.gate-number{{display:grid;place-items:center;width:30px;height:30px;border:1px solid #31cce9;border-radius:50%;color:#83d5ed;font-weight:800}}.gate p{{margin:6px 0 0}}progress{{width:100%;height:12px;accent-color:#31cce9;margin-top:8px}}table{{width:100%;border-collapse:collapse;font-size:14px}}th,td{{padding:10px 8px;border-bottom:1px solid #174b60;text-align:left}}.scroll{{overflow-x:auto}}p{{color:#a5c8d3;line-height:1.5}}.note{{font-size:13px}}a{{display:block;text-align:center;border:1px solid #31cce9;border-radius:12px;padding:13px;color:#fff;background:#0b4866;text-decoration:none;font-weight:700}}</style></head><body><main><header><span class="paper">WYLACZNIE PAPER &mdash; ZERO PRAWDZIWYCH ZLECEN</span><h1>TRADING JARVIS OS</h1><p class="state {state_class}">{state_label}</p><p>{state_message}</p><p>Cykl: {safe(selected.get("cycle_id"))}<br>Odczyt: {safe(selected.get("observed_at"))} &middot; wiek: {age_minutes} min</p></header><section class="card"><h2>BIEZACY CYKL</h2><div class="grid"><div class="metric"><span>Decyzja</span>{safe(runtime_label)}</div><div class="metric"><span>Pary gotowe</span>{ready_pairs} / 7</div><div class="metric"><span>Pary zablokowane</span>{blocked_pairs}</div><div class="metric"><span>Wykonania PAPER</span>{execution_count}</div></div></section><section class="card"><h2>BRAMKI V3 &mdash; CO DALEJ</h2><div class="gates">{gate_rows}</div><p class="note">Bramki sa niezalezne: istniejaca izolowana symulacja moze dzialac, gdy JARVIS zbiera nowa probke. Zadna z nich nie daje dostepu do prawdziwych pieniedzy.</p></section><section class="card"><h2>DLACZEGO PARA BYLA ZABLOKOWANA</h2><div class="scroll"><table><thead><tr><th>Para</th><th>Powod</th></tr></thead><tbody>{block_rows}</tbody></table></div><p class="note">To bezpieczne kody kontroli danych. Panel nie pokazuje kluczy API, surowych cen ani instrukcji wykonawczych.</p></section><section class="card"><h2>DLACZEGO V3 PODJAL TAKA DECYZJE</h2><div class="scroll"><table><thead><tr><th>Para</th><th>Powod</th></tr></thead><tbody>{v3_reason_rows}</tbody></table></div><p class="note">Powody opisuja ostatnia ocene strategii PAPER. Nie sa rekomendacja inwestycyjna ani instrukcja otwarcia zlecenia.</p></section><section class="card"><h2>POSTEP PROBKI V3</h2><p class="state {evidence_class}">{evidence_label}</p><p>{safe(evidence_detail)}</p><div class="grid"><div class="metric"><span>Unikalne cykle</span>{accepted_cycles} / {required_cycles}<progress value="{min(accepted_cycles, cycle_progress_max)}" max="{cycle_progress_max}"></progress></div><div class="metric"><span>Dni rynkowe</span>{accepted_days} / {required_days}<progress value="{min(accepted_days, day_progress_max)}" max="{day_progress_max}"></progress></div><div class="metric"><span>Pozostalo cykli</span>{remaining_cycles}</div><div class="metric"><span>Pozostalo dni rynkowych</span>{remaining_days}</div></div><p class="note">Ten prog sprawdza ciaglosc i liczbe obserwacji. Nie potwierdza zysku, nie zmienia strategii i nigdy automatycznie nie wlacza LIVE.</p></section><section class="card"><h2>OSTATNIE ZDARZENIA PAPER</h2><div class="scroll"><table><thead><tr><th>Czas UTC</th><th>Typ</th><th>Wiadomosc</th></tr></thead><tbody>{event_rows}</tbody></table></div><p class="note">Historia jest przechowywana w Azure i pozostaje dostepna na telefonie takze wtedy, gdy komputer jest wylaczony.</p></section><section class="card"><h2>WYNIK V3</h2><div class="grid"><div class="metric"><span>Saldo</span>{money("v3_balance_pln")}</div><div class="metric"><span>Kapital z pozycjami</span>{money("v3_equity_pln")}</div><div class="metric"><span>Wynik zamkniety</span>{money("v3_realized_pnl_pln")}</div><div class="metric"><span>Wynik otwarty</span>{money("v3_unrealized_pnl_pln")}</div><div class="metric"><span>Zamkniete transakcje</span>{safe(selected.get("v3_closed_trade_count", 0))}</div><div class="metric"><span>Skutecznosc</span>{safe(selected.get("v3_win_rate_pct", 0))}%</div><div class="metric"><span>Profit factor</span>{safe(performance.get("profit_factor"), "brak")}</div><div class="metric"><span>Maks. obsuniecie</span>{safe(performance.get("maximum_closed_trade_drawdown_pln", 0))} PLN</div></div></section><section class="card"><h2>OTWARTE POZYCJE PAPER</h2><div class="scroll"><table><thead><tr><th>Para</th><th>Kierunek</th><th>Wejscie</th><th>Teraz</th><th>SL</th><th>TP</th></tr></thead><tbody>{position_rows}</tbody></table></div></section><section class="card"><h2>WYNIKI WEDLUG PAR</h2><div class="scroll"><table><thead><tr><th>Para</th><th>Transakcje</th><th>Skutecznosc</th><th>Wynik</th></tr></thead><tbody>{pair_rows}</tbody></table></div></section><a href="/phone">WROC DO PANELU TELEFONU</a></main></body></html>'''

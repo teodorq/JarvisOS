@@ -139,6 +139,12 @@ class RemoteForexStatusTests(unittest.TestCase):
         self.assertIn("Pozostalo cykli</span>16", body)
         self.assertIn("Pozostalo dni rynkowych</span>2", body)
         self.assertNotIn("V3_FORWARD_EVIDENCE_INCOMPLETE", body)
+        self.assertIn("BRAMKI V3 &mdash; CO DALEJ", body)
+        self.assertIn("DOWODY FORWARD", body)
+        self.assertIn("W TOKU", body)
+        self.assertIn("CZEKA NA PROBKE", body)
+        self.assertIn("ZAWSZE ZABLOKOWANE", body)
+        self.assertNotIn("SHADOW_SIMULATION_ACTIVATION_BLOCKED", body)
         self.assertIn("OSTATNIE ZDARZENIA PAPER", body)
         self.assertIn("POSTEP V3", body)
         self.assertIn("zweryfikowana probka osiagnela 10/20 cykli", body)
@@ -147,6 +153,42 @@ class RemoteForexStatusTests(unittest.TestCase):
         self.assertIn("nigdy automatycznie nie wlacza LIVE", body)
         self.assertNotIn("<script", body.lower())
         self.assertIn("script-src 'none'", policy)
+
+    def test_owner_stage_map_keeps_existing_shadow_separate_from_live(
+        self,
+    ) -> None:
+        status = sample_status()
+        status["observed_at"] = datetime.now(timezone.utc).isoformat()
+        self.store.write(status)
+
+        with urllib.request.urlopen(
+            self.owner_request("/trading"), timeout=2
+        ) as response:
+            body = response.read().decode("utf-8")
+
+        self.assertIn("AKTYWNY PAPER", body)
+        self.assertIn("PROBKA PLANOW ZAKONCZONA", body)
+        self.assertIn("AKTYWNA - TYLKO PAPER", body)
+        self.assertIn("ZAWSZE ZABLOKOWANE", body)
+        self.assertIn("Bramki sa niezalezne", body)
+        self.assertNotIn("ALREADY_ACTIVE", body)
+        self.assertNotIn("SHADOW_SIMULATION_CYCLE_COMPLETED", body)
+
+    def test_stale_report_hides_active_shadow_gate_state(self) -> None:
+        status = sample_status()
+        status["observed_at"] = "2020-01-01T00:00:00+00:00"
+        self.store.write(status)
+
+        with urllib.request.urlopen(
+            self.owner_request("/trading"), timeout=2
+        ) as response:
+            body = response.read().decode("utf-8")
+
+        self.assertIn("DANE NIEAKTUALNE", body)
+        self.assertIn("NIEDOSTEPNE", body)
+        self.assertIn("ZAWSZE ZABLOKOWANE", body)
+        self.assertNotIn("AKTYWNY PAPER", body)
+        self.assertNotIn("AKTYWNA - TYLKO PAPER", body)
 
     def test_report_not_ready_returns_controlled_503(self) -> None:
         self.server.forex_status_store = MemoryForexStatusStore()

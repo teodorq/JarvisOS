@@ -630,6 +630,11 @@ The same report shows the exact number of forward-evidence cycles and market
 days still required before V3 can leave its PAPER observation gate. Internal
 waiting codes are translated into owner-friendly text and never weaken the
 sample threshold or enable LIVE trading.
+An owner-friendly V3 gate map separates forward evidence, SHADOW portfolio
+initialization, non-executable plan observation and isolated PAPER simulation.
+It treats those gates independently because an existing SHADOW ledger may keep
+running while a new evidence sample is collected, and it always renders LIVE as
+blocked rather than implying automatic promotion.
 The report also renders the latest durable Azure PAPER activity events. Sparse
 V3 progress, completion and integrity milestones remain visible on the phone
 even when the desktop is off; only allowlisted, bounded messages are exposed.
