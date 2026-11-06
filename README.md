@@ -601,7 +601,9 @@ local Windows voice. Cloud audio is cached only under the ignored local
 Say or type `Pokaż status integracji` (or use `INTEGRACJE` in the daily tools)
 to see the local configuration state of Azure, voice, RevenueCat, Meta Ads and
 Claude. This status check makes no external request and never displays API keys
-or private endpoint addresses.
+or private endpoint addresses. It also detects when the active Azure planner or
+queue address differs from the ignored `config/cloud.env` file, and asks for a
+JARVIS restart instead of silently using an endpoint left by an old deployment.
 
 Say or type `Co potrafisz?` (or use `CO POTRAFIĘ` in the daily tools) for a
 short, client-safe guide with verified example commands. The guide performs no

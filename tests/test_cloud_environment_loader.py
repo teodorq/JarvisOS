@@ -6,7 +6,10 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from app.cloud.environment import load_cloud_environment
+from app.cloud.environment import (
+    cloud_endpoint_environment_drift,
+    load_cloud_environment,
+)
 
 
 class CloudEnvironmentLoaderTests(unittest.TestCase):
@@ -94,3 +97,40 @@ class CloudEnvironmentLoaderTests(unittest.TestCase):
                     ),
                 )
                 self.assertNotIn("JARVIS_OS_UNKNOWN_CONNECTOR_TOKEN", os.environ)
+
+    def test_detects_endpoint_drift_without_comparing_secrets(self) -> None:
+        with tempfile.TemporaryDirectory() as root:
+            self._write(
+                root,
+                "JARVIS_OS_CLOUD_URL=https://current.example\n"
+                "JARVIS_OS_CLOUD_API_TOKEN=file-secret\n",
+            )
+            environment = {
+                "JARVIS_OS_CLOUD_URL": "https://removed.example",
+                "JARVIS_OS_CLOUD_API_TOKEN": "different-secret",
+            }
+
+            self.assertTrue(
+                cloud_endpoint_environment_drift(root, environment)
+            )
+            environment["JARVIS_OS_CLOUD_URL"] = "https://current.example"
+            self.assertFalse(
+                cloud_endpoint_environment_drift(root, environment)
+            )
+
+    def test_first_valid_duplicate_value_still_wins(self) -> None:
+        with tempfile.TemporaryDirectory() as root:
+            self._write(
+                root,
+                "JARVIS_OS_CLOUD_URL=https://first.example\n"
+                "JARVIS_OS_CLOUD_URL=https://second.example\n",
+            )
+            with patch.dict(os.environ, {}, clear=True):
+                self.assertEqual(
+                    load_cloud_environment(root),
+                    ("JARVIS_OS_CLOUD_URL",),
+                )
+                self.assertEqual(
+                    os.environ["JARVIS_OS_CLOUD_URL"],
+                    "https://first.example",
+                )

@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import os
 import re
+from pathlib import Path
 from typing import Any, Mapping
 from urllib.parse import urlsplit
 
+from app.cloud.environment import cloud_endpoint_environment_drift
 from app.integrations.external_services import ExternalIntegrationRegistry
 
 
@@ -63,8 +65,14 @@ def _safe_https_endpoint(value: object) -> bool:
 class IntegrationStatusService:
     """Describe configuration readiness without network calls or secret output."""
 
-    def __init__(self, environment: Mapping[str, str] | None = None) -> None:
+    def __init__(
+        self,
+        environment: Mapping[str, str] | None = None,
+        *,
+        project_root: str | Path | None = None,
+    ) -> None:
         self.environment = environment if environment is not None else os.environ
+        self.project_root = Path(project_root) if project_root is not None else None
 
     def status(self) -> dict[str, Any]:
         requested = str(
@@ -116,6 +124,13 @@ class IntegrationStatusService:
                 "phone_queue_configured": _safe_https_endpoint(
                     self.environment.get("JARVIS_OS_REMOTE_QUEUE_URL", "")
                 ),
+                "endpoint_drift": bool(
+                    self.project_root is not None
+                    and cloud_endpoint_environment_drift(
+                        self.project_root,
+                        self.environment,
+                    )
+                ),
             },
             "external": external,
             "network_checked": False,
@@ -154,6 +169,11 @@ class IntegrationStatusService:
             f"• Głos: {voice_text}.",
             f"• Azure: planner {planner}; kolejka telefonu {phone}.",
         ]
+        if azure["endpoint_drift"]:
+            lines.append(
+                "• Azure wymaga ponownego uruchomienia JARVIS: aktywny adres "
+                "różni się od prywatnego pliku ustawień."
+            )
         labels = {
             "revenuecat": ("RevenueCat", "tylko do odczytu"),
             "meta_ads": ("Meta Ads", "tylko do odczytu"),

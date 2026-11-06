@@ -56,7 +56,9 @@ class PersonalAssistantController:
         self.online = deferred.online
         self.natural_actions = deferred.natural_actions
         self.greetings = ContextualGreetingService(self.natural_actions)
-        self.integrations = IntegrationStatusService()
+        self.integrations = IntegrationStatusService(
+            project_root=self.project_root
+        )
         self.trading = LazyTradingRuntime(self.project_root)
     @staticmethod
     def matches(command: object) -> bool:

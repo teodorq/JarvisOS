@@ -79,6 +79,33 @@ class IntegrationStatusServiceTests(unittest.TestCase):
         self.assertIn("Cartesia — skonfigurowany", rendered)
         self.assertIn("Claude: skonfigurowany", rendered)
 
+    def test_status_warns_about_stale_active_cloud_endpoint(self) -> None:
+        with TemporaryDirectory() as directory:
+            config = Path(directory) / "config"
+            config.mkdir()
+            (config / "cloud.env").write_text(
+                "JARVIS_OS_CLOUD_URL=https://current.example\n"
+                "JARVIS_OS_CLOUD_API_TOKEN=file-secret\n",
+                encoding="utf-8",
+            )
+            service = IntegrationStatusService(
+                {
+                    "JARVIS_OS_CLOUD_URL": "https://removed.example",
+                    "JARVIS_OS_CLOUD_API_TOKEN": "active-secret",
+                },
+                project_root=directory,
+            )
+
+            status = service.status()
+            rendered = service.format_status()
+
+        self.assertTrue(status["azure"]["endpoint_drift"])
+        self.assertIn("wymaga ponownego uruchomienia JARVIS", rendered)
+        self.assertNotIn("current.example", rendered)
+        self.assertNotIn("removed.example", rendered)
+        self.assertNotIn("file-secret", repr(status))
+        self.assertNotIn("active-secret", repr(status))
+
 
 class IntegrationStatusCommandTests(unittest.TestCase):
     def test_natural_variants_route_to_read_only_personal_assistant(self) -> None:
