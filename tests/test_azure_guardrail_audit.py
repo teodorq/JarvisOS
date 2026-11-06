@@ -21,6 +21,7 @@ def test_audit_covers_security_cost_identity_and_runtime() -> None:
         "Storage Queue Data Contributor",
         "Storage Queue Data Message Processor",
         "Container Apps Contributor",
+        "Container Apps Jobs Contributor",
         "$paperJob.id",
         "$deploymentRoles.Count -eq 2",
         '"github-$branch"',
