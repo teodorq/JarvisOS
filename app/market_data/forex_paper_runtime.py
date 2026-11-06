@@ -24,6 +24,7 @@ from app.trading.forex_performance_review import (
     ForexPaperPerformanceReviewPacket,
 )
 from app.trading.forex_risk import ForexRateBook
+from app.trading.forex_v3_shadow import ForexV3ShadowInitializer
 from app.trading.forex_v3_shadow_plan_observer import (
     ForexV3ShadowPlanObserver,
 )
@@ -49,6 +50,7 @@ class ForexDemoPaperRuntime:
         v3_forward_evidence: ForexV3ForwardEvidenceReport | None = None,
         forward_review: ForexV2OwnerReviewPacket | None = None,
         performance_review: ForexPaperPerformanceReviewPacket | None = None,
+        v3_shadow_initializer: ForexV3ShadowInitializer | None = None,
         v3_shadow_observer: ForexV3ShadowPlanObserver | None = None,
         v3_shadow_activator: ForexV3ShadowSimulationActivator | None = None,
         v3_shadow_executor: ForexV3ShadowSimulationEngine | None = None,
@@ -72,6 +74,13 @@ class ForexDemoPaperRuntime:
         self.performance_review = (
             performance_review
             or ForexPaperPerformanceReviewPacket(project_root)
+        )
+        self.v3_shadow_initializer = (
+            v3_shadow_initializer
+            or ForexV3ShadowInitializer(
+                project_root,
+                forward_evidence=self.v3_forward_evidence,
+            )
         )
         self.v3_shadow_observer = (
             v3_shadow_observer
@@ -149,8 +158,13 @@ class ForexDemoPaperRuntime:
                     v3_forward_evidence=v3_forward_evidence,
                     forward_review=forward_review,
                 )
+            v3_shadow_initialization = self._initialize_v3_shadow(
+                v3_forward_evidence,
+                now=selected_now,
+            )
             v3_shadow_activation = self._activate_v3_shadow_simulation(
-                v3_forward_evidence
+                v3_forward_evidence,
+                initialization=v3_shadow_initialization,
             )
             v3_shadow_plan = self._observe_v3_shadow_plan(
                 bundle=bundle,
@@ -201,6 +215,7 @@ class ForexDemoPaperRuntime:
             "forward_evidence": forward_evidence,
             "v3_forward_evidence": v3_forward_evidence,
             "forward_review": forward_review,
+            "v3_shadow_initialization": v3_shadow_initialization,
             "v3_shadow_plan_observation": v3_shadow_plan,
             "v3_shadow_activation": v3_shadow_activation,
             "v3_shadow_simulation": v3_shadow_simulation,
@@ -211,9 +226,103 @@ class ForexDemoPaperRuntime:
             "real_money_access": False,
         }
 
+    def _initialize_v3_shadow(
+        self,
+        forward_evidence: Mapping[str, Any],
+        *,
+        now: datetime,
+    ) -> dict[str, Any]:
+        if not self.settings.v3_shadow_auto_initialize_enabled:
+            return self._v3_initialization_result(
+                "SHADOW_AUTO_INITIALIZATION_DISABLED",
+                "CONFIGURATION_DISABLED",
+            )
+        if not self.settings.v3_shadow_simulation_enabled:
+            return self._v3_initialization_result(
+                "SHADOW_AUTO_INITIALIZATION_BLOCKED",
+                "SHADOW_SIMULATION_DISABLED",
+            )
+        if not verify_forex_v3_forward_evidence_report(
+            forward_evidence,
+            require_complete=False,
+        ):
+            return self._v3_initialization_result(
+                "SHADOW_AUTO_INITIALIZATION_BLOCKED",
+                "V3_FORWARD_EVIDENCE_INVALID",
+            )
+        if not verify_forex_v3_forward_evidence_report(
+            forward_evidence,
+            require_complete=True,
+        ):
+            return self._v3_initialization_result(
+                "SHADOW_AUTO_INITIALIZATION_WAITING",
+                "V3_FORWARD_EVIDENCE_INCOMPLETE",
+            )
+        try:
+            result = self.v3_shadow_initializer.initialize(now=now)
+        except (
+            OSError,
+            RuntimeError,
+            TradingValidationError,
+            TypeError,
+            ValueError,
+        ) as error:
+            return self._v3_initialization_result(
+                "SHADOW_AUTO_INITIALIZATION_BLOCKED",
+                str(error)[:160] or "INITIALIZATION_FAILED",
+            )
+        if not isinstance(result, Mapping):
+            return self._v3_initialization_result(
+                "SHADOW_AUTO_INITIALIZATION_BLOCKED",
+                "INVALID_INITIALIZATION_RESULT",
+            )
+        if (
+            result.get("status") not in {
+                "INITIALIZED_SHADOW_INACTIVE",
+                "ALREADY_INITIALIZED_SHADOW_INACTIVE",
+            }
+            or any(
+                result.get(key) is not False
+                for key in (
+                    "shadow_execution_enabled",
+                    "paper_orders_sent",
+                    "broker_orders_sent",
+                    "live_orders_sent",
+                    "network_access",
+                    "real_money_access",
+                )
+            )
+        ):
+            return self._v3_initialization_result(
+                "SHADOW_AUTO_INITIALIZATION_BLOCKED",
+                str(
+                    result.get("reason")
+                    or result.get("status")
+                    or "UNSAFE_RESULT"
+                ),
+            )
+        return dict(result)
+
+    @staticmethod
+    def _v3_initialization_result(status: str, reason: str) -> dict[str, Any]:
+        return {
+            "status": status,
+            "mode": "FOREX_V3_SHADOW_INITIALIZATION_ONLY",
+            "reason": str(reason)[:160],
+            "shadow_ledger_created": False,
+            "shadow_execution_enabled": False,
+            "paper_orders_sent": False,
+            "broker_orders_sent": False,
+            "live_orders_sent": False,
+            "network_access": False,
+            "real_money_access": False,
+        }
+
     def _activate_v3_shadow_simulation(
         self,
         forward_evidence: Mapping[str, Any],
+        *,
+        initialization: Mapping[str, Any],
     ) -> dict[str, Any]:
         if not self.settings.v3_shadow_simulation_enabled:
             return self._v3_simulation_result(
@@ -224,6 +333,21 @@ class ForexDemoPaperRuntime:
             existing = self.v3_shadow_activator.activate(confirmation="")
             if existing.get("status") == "ALREADY_ACTIVE":
                 return existing
+            if (
+                self.settings.v3_shadow_auto_initialize_enabled
+                and initialization.get("status") not in {
+                    "INITIALIZED_SHADOW_INACTIVE",
+                    "ALREADY_INITIALIZED_SHADOW_INACTIVE",
+                }
+            ):
+                return self._v3_simulation_result(
+                    "SHADOW_SIMULATION_ACTIVATION_BLOCKED",
+                    str(
+                        initialization.get("reason")
+                        or initialization.get("status")
+                        or "SHADOW_INITIALIZATION_NOT_READY"
+                    ),
+                )
             if not verify_forex_v3_forward_evidence_report(
                 forward_evidence,
                 require_complete=False,
@@ -540,6 +664,7 @@ class ForexDemoPaperRuntime:
         forward_evidence: dict[str, Any] | None = None,
         v3_forward_evidence: dict[str, Any] | None = None,
         forward_review: dict[str, Any] | None = None,
+        v3_shadow_initialization: dict[str, Any] | None = None,
         v3_shadow_plan_observation: dict[str, Any] | None = None,
         v3_shadow_activation: dict[str, Any] | None = None,
         v3_shadow_simulation: dict[str, Any] | None = None,
@@ -553,6 +678,7 @@ class ForexDemoPaperRuntime:
             "forward_evidence": forward_evidence or {},
             "v3_forward_evidence": v3_forward_evidence or {},
             "forward_review": forward_review or {},
+            "v3_shadow_initialization": v3_shadow_initialization or {},
             "v3_shadow_plan_observation": (
                 v3_shadow_plan_observation or {}
             ),

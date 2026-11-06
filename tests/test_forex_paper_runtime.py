@@ -206,6 +206,25 @@ class FakeV3Activator:
         }
 
 
+class FakeV3Initializer:
+    def __init__(self, result: dict | None = None) -> None:
+        self.calls = 0
+        self.result = result or {
+            "status": "INITIALIZED_SHADOW_INACTIVE",
+            "shadow_ledger_created": True,
+            "shadow_execution_enabled": False,
+            "paper_orders_sent": False,
+            "broker_orders_sent": False,
+            "live_orders_sent": False,
+            "network_access": False,
+            "real_money_access": False,
+        }
+
+    def initialize(self, *, now: datetime) -> dict:
+        self.calls += 1
+        return dict(self.result)
+
+
 class FakeV3Observer:
     @staticmethod
     def observe(**_kwargs: object) -> dict:
@@ -284,18 +303,145 @@ class ForexPaperRuntimeTests(unittest.TestCase):
         enabled: bool = True,
         provider: str = "MT5_DEMO",
         base_entries: bool = True,
+        v3_auto_initialize: bool = False,
         v3_simulation: bool = False,
     ):
         return ForexDataSettings(
             enabled=True,
             paper_autopilot_enabled=enabled,
             base_new_entries_enabled=base_entries,
+            v3_shadow_auto_initialize_enabled=v3_auto_initialize,
             v3_shadow_simulation_enabled=v3_simulation,
             v3_shadow_review_fingerprint=(
                 "d" * 64 if v3_simulation else ""
             ),
             primary_provider=provider,
         )
+
+    def test_v3_auto_initialization_is_disabled_by_default(self) -> None:
+        initializer = FakeV3Initializer()
+        result = ForexDemoPaperRuntime(
+            self.root,
+            settings=self.settings(v3_simulation=True),
+            gateway=FakeGateway(),  # type: ignore[arg-type]
+            journal=_ready_journal(self.root),
+            v3_shadow_initializer=initializer,  # type: ignore[arg-type]
+            v3_shadow_activator=FakeV3Activator(),  # type: ignore[arg-type]
+        ).run_once(cycle_id="v3-auto-init-disabled", now=NOW)
+
+        self.assertEqual(
+            result["v3_shadow_initialization"]["status"],
+            "SHADOW_AUTO_INITIALIZATION_DISABLED",
+        )
+        self.assertEqual(initializer.calls, 0)
+
+    def test_v3_auto_initialization_waits_for_complete_evidence(self) -> None:
+        initializer = FakeV3Initializer()
+        result = ForexDemoPaperRuntime(
+            self.root,
+            settings=self.settings(
+                v3_auto_initialize=True,
+                v3_simulation=True,
+            ),
+            gateway=FakeGateway(),  # type: ignore[arg-type]
+            journal=_ready_journal(self.root),
+            v3_shadow_initializer=initializer,  # type: ignore[arg-type]
+            v3_shadow_activator=FakeV3Activator(),  # type: ignore[arg-type]
+        ).run_once(
+            cycle_id="v3-auto-init-waiting",
+            now=datetime(2026, 11, 5, 10, 0, tzinfo=UTC),
+            capture_origin="SCHEDULED_FORWARD",
+            capture_attestation=_scheduled_attestation("v3-auto-init-waiting"),
+        )
+
+        self.assertEqual(
+            result["v3_shadow_initialization"]["status"],
+            "SHADOW_AUTO_INITIALIZATION_WAITING",
+        )
+        self.assertEqual(initializer.calls, 0)
+        self.assertEqual(
+            result["v3_shadow_activation"]["status"],
+            "SHADOW_SIMULATION_ACTIVATION_BLOCKED",
+        )
+
+    def test_v3_auto_initialization_creates_only_inactive_shadow_state(self) -> None:
+        initializer = FakeV3Initializer()
+        executor = FakeV3Executor()
+        with patch(
+            "app.market_data.forex_paper_runtime."
+            "verify_forex_v3_forward_evidence_report",
+            return_value=True,
+        ):
+            result = ForexDemoPaperRuntime(
+                self.root,
+                settings=self.settings(
+                    base_entries=False,
+                    v3_auto_initialize=True,
+                    v3_simulation=True,
+                ),
+                gateway=FakeGateway(),  # type: ignore[arg-type]
+                journal=_ready_journal(self.root),
+                v3_forward_evidence=FixedV3ForwardEvidence({
+                    "status": "FORWARD_OBSERVATION_SAMPLE_COMPLETE",
+                    "observation_sample_complete": True,
+                }),  # type: ignore[arg-type]
+                v3_shadow_initializer=initializer,  # type: ignore[arg-type]
+                v3_shadow_activator=FakeV3Activator(),  # type: ignore[arg-type]
+                v3_shadow_observer=FakeV3Observer(),  # type: ignore[arg-type]
+                v3_shadow_executor=executor,  # type: ignore[arg-type]
+            ).run_once(cycle_id="v3-auto-init-complete", now=NOW)
+
+        initialized = result["v3_shadow_initialization"]
+        self.assertEqual(initialized["status"], "INITIALIZED_SHADOW_INACTIVE")
+        self.assertEqual(initializer.calls, 1)
+        self.assertFalse(initialized["shadow_execution_enabled"])
+        self.assertFalse(initialized["broker_orders_sent"])
+        self.assertFalse(initialized["live_orders_sent"])
+        self.assertFalse(initialized["real_money_access"])
+
+    def test_v3_auto_initialization_fails_closed_on_unsafe_result(self) -> None:
+        initializer = FakeV3Initializer({
+            "status": "INITIALIZED_SHADOW_INACTIVE",
+            "shadow_ledger_created": True,
+            "shadow_execution_enabled": False,
+            "paper_orders_sent": False,
+            "broker_orders_sent": True,
+            "live_orders_sent": False,
+            "network_access": False,
+            "real_money_access": False,
+        })
+        executor = FakeV3Executor()
+        with patch(
+            "app.market_data.forex_paper_runtime."
+            "verify_forex_v3_forward_evidence_report",
+            return_value=True,
+        ):
+            result = ForexDemoPaperRuntime(
+                self.root,
+                settings=self.settings(
+                    v3_auto_initialize=True,
+                    v3_simulation=True,
+                ),
+                gateway=FakeGateway(),  # type: ignore[arg-type]
+                journal=_ready_journal(self.root),
+                v3_forward_evidence=FixedV3ForwardEvidence({
+                    "status": "FORWARD_OBSERVATION_SAMPLE_COMPLETE",
+                }),  # type: ignore[arg-type]
+                v3_shadow_initializer=initializer,  # type: ignore[arg-type]
+                v3_shadow_activator=FakeV3Activator(),  # type: ignore[arg-type]
+                v3_shadow_observer=FakeV3Observer(),  # type: ignore[arg-type]
+                v3_shadow_executor=executor,  # type: ignore[arg-type]
+            ).run_once(cycle_id="v3-auto-init-unsafe", now=NOW)
+
+        self.assertEqual(
+            result["v3_shadow_initialization"]["status"],
+            "SHADOW_AUTO_INITIALIZATION_BLOCKED",
+        )
+        self.assertEqual(
+            result["v3_shadow_activation"]["status"],
+            "SHADOW_SIMULATION_ACTIVATION_BLOCKED",
+        )
+        self.assertEqual(executor.calls, 0)
 
     def test_enabled_v3_simulation_is_routed_to_its_isolated_executor(
         self,

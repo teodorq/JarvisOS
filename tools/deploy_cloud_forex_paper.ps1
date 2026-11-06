@@ -2,6 +2,7 @@
 param(
     [string]$ContainerImage = "",
     [string]$BuildSha = "",
+    [switch]$EnableV3ShadowAutoInitialization,
     [switch]$StartNow
 )
 
@@ -122,6 +123,7 @@ try {
         "namePrefix=jarvis-os",
         "containerImage=$ContainerImage",
         "buildSha=$BuildSha",
+        "v3ShadowAutoInitializeEnabled=$($EnableV3ShadowAutoInitialization.IsPresent.ToString().ToLowerInvariant())",
         "storageAccountName=$StorageAccount",
         "managedEnvironmentName=jarvis-os-env",
         "plannerPrincipalId=$PlannerPrincipalId",
@@ -134,7 +136,7 @@ try {
     $Verified = (& az containerapp job show `
         --name $JobName `
         --resource-group $ResourceGroup `
-        --query "{state:properties.provisioningState,trigger:properties.configuration.triggerType,cron:properties.configuration.scheduleTriggerConfig.cronExpression,identity:identity.type,image:properties.template.containers[0].image,statusContainer:properties.template.containers[0].env[?name=='JARVIS_OS_FOREX_STATUS_CONTAINER'].value | [0],statusBlob:properties.template.containers[0].env[?name=='JARVIS_OS_FOREX_STATUS_BLOB'].value | [0]}" `
+        --query "{state:properties.provisioningState,trigger:properties.configuration.triggerType,cron:properties.configuration.scheduleTriggerConfig.cronExpression,identity:identity.type,image:properties.template.containers[0].image,v3AutoInitialize:properties.template.containers[0].env[?name=='JARVIS_OS_FOREX_V3_SHADOW_AUTO_INITIALIZE_ENABLED'].value | [0],statusContainer:properties.template.containers[0].env[?name=='JARVIS_OS_FOREX_STATUS_CONTAINER'].value | [0],statusBlob:properties.template.containers[0].env[?name=='JARVIS_OS_FOREX_STATUS_BLOB'].value | [0]}" `
         --output json `
         --only-show-errors) | ConvertFrom-Json
     if (
@@ -144,6 +146,7 @@ try {
         $Verified.cron -ne "2 * * * *" -or
         $Verified.identity -ne "SystemAssigned" -or
         $Verified.image -ne $ContainerImage -or
+        $Verified.v3AutoInitialize -ne $EnableV3ShadowAutoInitialization.IsPresent.ToString().ToLowerInvariant() -or
         $Verified.statusContainer -ne "forex-paper-status" -or
         $Verified.statusBlob -ne "status/latest.json"
     ) {

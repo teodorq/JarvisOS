@@ -400,6 +400,10 @@ cryptographically verified post-freeze V3R2 forward sample. An incomplete or
 invalid sample blocks both activation and plan execution before the separate
 manual review fingerprint is evaluated. An already-active isolated PAPER
 ledger may continue its existing simulation, but this gate cannot enable LIVE.
+When the separately allowlisted Azure auto-initialization flag is enabled, the
+scheduled PAPER job may create only the same empty inactive SHADOW ledger after
+that verified sample is complete. It cannot add a position, contact a broker,
+use the order network or bypass the later plan-sample review fingerprint.
 The durable PAPER activity journal records sparse V3R2 progress milestones at
 5, 10 and 15 accepted cycles, plus one deduplicated integrity alert per distinct
 failure class. It remains silent between milestones and archives the events in
@@ -467,13 +471,16 @@ Verified plans can later be stored in the separate bounded
 IDs, while the embedded plan remains explicitly non-executable. A modified plan
 or a corrupted existing journal is preserved and blocks closed. The journal is
 connected to the local cycle through `ForexV3ShadowPlanObserver`, but remains
-idle until the separate ledger has been manually initialized. It never stores
+idle until the separate ledger has been safely initialized. It never stores
 positions or fills, and a planner/journal failure is isolated from the existing
 base PAPER cycle. No shadow plan can be passed to the ordinary PAPER executor.
 The owner can issue `przygotuj portfel V3 SHADOW`; before the threshold the
 command only reports the remaining cycles/days and writes nothing. After a
 complete verified sample it calls the guarded initializer and creates only the
 empty inactive ledger, with execution and all order/network flags still off.
+The Azure PAPER job can perform that exact empty initialization automatically
+only when its dedicated flag is enabled and the same verified evidence gate is
+complete; the application default remains disabled.
 The plan journal then requires at least 20 unique non-executable plans across
 3 market days before it marks the plan-observation sample complete. This gate
 measures only decision frequency and audit continuity: it does not validate

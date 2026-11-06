@@ -10,6 +10,9 @@ param containerImage string
 @description('Exact Git commit represented by the deployed container image.')
 param buildSha string
 
+@description('Allow the PAPER job to create only an empty inactive V3 shadow ledger after complete verified evidence.')
+param v3ShadowAutoInitializeEnabled bool = false
+
 @description('Exact manually reviewed V3 shadow plan-sample fingerprint. Empty keeps activation blocked.')
 param v3ShadowReviewFingerprint string = ''
 
@@ -127,6 +130,10 @@ resource paperJob 'Microsoft.App/jobs@2024-03-01' = {
             {
               name: 'JARVIS_OS_FOREX_BASE_NEW_ENTRIES_ENABLED'
               value: 'false'
+            }
+            {
+              name: 'JARVIS_OS_FOREX_V3_SHADOW_AUTO_INITIALIZE_ENABLED'
+              value: v3ShadowAutoInitializeEnabled ? 'true' : 'false'
             }
             {
               name: 'JARVIS_OS_FOREX_V3_SHADOW_SIMULATION_ENABLED'

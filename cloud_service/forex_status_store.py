@@ -367,6 +367,12 @@ def sanitize_forex_status(value: object) -> dict[str, Any]:
         "v3_activation_status": _code(
             value.get("v3_activation_status", "")
         ),
+        "v3_initialization_status": _code(
+            value.get("v3_initialization_status", "")
+        ),
+        "v3_initialization_reason": _code(
+            value.get("v3_initialization_reason", "")
+        ),
         "v3_activation_reason": _code(
             value.get("v3_activation_reason", "")
         ),
@@ -463,6 +469,8 @@ def forex_status_view(
             "v3_open_positions": [],
             "v3_unrealized_pnl_pln": "0",
             "v3_activation_status": "STATUS_UNAVAILABLE",
+            "v3_initialization_status": "STATUS_UNAVAILABLE",
+            "v3_initialization_reason": "",
             "v3_forward_status": "STATUS_UNAVAILABLE",
             "v3_forward_source_state_valid": False,
             "v3_forward_sample_complete": False,

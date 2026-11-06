@@ -12,6 +12,9 @@ param containerImage string
 @description('Exact Git commit represented by the deployed container image.')
 param buildSha string = 'development'
 
+@description('Allow only empty inactive V3 SHADOW initialization after complete verified PAPER evidence.')
+param v3ShadowAutoInitializeEnabled bool = false
+
 @secure()
 @description('Bearer token shared only by the desktop client and Container App.')
 param apiToken string
@@ -63,6 +66,7 @@ module cloudPlanner './main.bicep' = {
     location: location
     containerImage: containerImage
     buildSha: buildSha
+    v3ShadowAutoInitializeEnabled: v3ShadowAutoInitializeEnabled
     apiToken: apiToken
     twelveDataApiKey: twelveDataApiKey
     fmpApiKey: fmpApiKey

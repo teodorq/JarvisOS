@@ -255,6 +255,7 @@ def _v3_cycle_diagnostics(
     observation: object,
     simulation: object,
     activation: object,
+    initialization: object,
 ) -> dict[str, Any]:
     """Project a small allowlisted explanation of the latest V3 decision."""
 
@@ -266,6 +267,9 @@ def _v3_cycle_diagnostics(
     )
     activation_value = (
         dict(activation) if isinstance(activation, dict) else {}
+    )
+    initialization_value = (
+        dict(initialization) if isinstance(initialization, dict) else {}
     )
     execution_value = simulation_value.get("execution")
     execution = (
@@ -315,6 +319,12 @@ def _v3_cycle_diagnostics(
         return selected if _DIAGNOSTIC_CODE.fullmatch(selected) else ""
 
     return {
+        "v3_initialization_status": safe_code(
+            initialization_value.get("status")
+        ),
+        "v3_initialization_reason": safe_code(
+            initialization_value.get("reason")
+        ),
         "v3_activation_status": safe_code(activation_value.get("status")),
         "v3_activation_reason": safe_code(activation_value.get("reason")),
         "v3_plan_observation_status": safe_code(observed.get("status")),
@@ -415,10 +425,12 @@ def _public_result(
     )
     v3_plan_observation = result.get("v3_shadow_plan_observation")
     v3_activation = result.get("v3_shadow_activation")
+    v3_initialization = result.get("v3_shadow_initialization")
     v3_diagnostics = _v3_cycle_diagnostics(
         v3_plan_observation,
         v3,
         v3_activation,
+        v3_initialization,
     )
     v3_forward_diagnostics = _v3_forward_diagnostics(
         result.get("v3_forward_evidence")

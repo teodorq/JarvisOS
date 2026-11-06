@@ -44,6 +44,8 @@ def test_fresh_cloud_status_projects_current_paper_position() -> None:
     }
     assert snapshot["last_v3_cycle"] == {
         "available": True,
+        "initialization_status": "ALREADY_INITIALIZED_SHADOW_INACTIVE",
+        "initialization_reason": "",
         "activation_status": "ALREADY_ACTIVE",
         "activation_reason": "",
         "status": "SHADOW_PLAN_OBSERVED",

@@ -12,6 +12,15 @@ class CloudForexPaperInfrastructureTests(unittest.TestCase):
         bicep = (ROOT / "infra" / "azure" / "paper-job.bicep").read_text(
             encoding="utf-8"
         )
+        main = (ROOT / "infra" / "azure" / "main.bicep").read_text(
+            encoding="utf-8"
+        )
+        subscription = (
+            ROOT / "infra" / "azure" / "subscription.bicep"
+        ).read_text(encoding="utf-8")
+        workflow = (
+            ROOT / ".github" / "workflows" / "cloud-image.yml"
+        ).read_text(encoding="utf-8")
         self.assertIn("resource paperJob 'Microsoft.App/jobs@2024-03-01'", bicep)
         self.assertIn("cronExpression: '2 * * * *'", bicep)
         self.assertIn("parallelism: 1", bicep)
@@ -19,6 +28,26 @@ class CloudForexPaperInfrastructureTests(unittest.TestCase):
         self.assertIn("JARVIS_OS_FOREX_PRIMARY_PROVIDER", bicep)
         self.assertIn("value: 'TWELVE_DATA_CLOUD'", bicep)
         self.assertIn("JARVIS_OS_FOREX_BASE_NEW_ENTRIES_ENABLED", bicep)
+        self.assertIn(
+            "JARVIS_OS_FOREX_V3_SHADOW_AUTO_INITIALIZE_ENABLED",
+            bicep,
+        )
+        self.assertIn(
+            "param v3ShadowAutoInitializeEnabled bool = false",
+            bicep,
+        )
+        self.assertIn(
+            "v3ShadowAutoInitializeEnabled: v3ShadowAutoInitializeEnabled",
+            main,
+        )
+        self.assertIn(
+            "v3ShadowAutoInitializeEnabled: v3ShadowAutoInitializeEnabled",
+            subscription,
+        )
+        self.assertIn(
+            '"JARVIS_OS_FOREX_V3_SHADOW_AUTO_INITIALIZE_ENABLED=true"',
+            workflow,
+        )
         self.assertIn("JARVIS_OS_FOREX_V3_SHADOW_SIMULATION_ENABLED", bicep)
         self.assertIn("JARVIS_OS_FOREX_V3_SHADOW_REVIEW_FINGERPRINT", bicep)
         self.assertIn("param v3ShadowReviewFingerprint string = ''", bicep)
@@ -72,6 +101,11 @@ class CloudForexPaperInfrastructureTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertIn('--query "identity.principalId"', script)
         self.assertIn('"plannerPrincipalId=$PlannerPrincipalId"', script)
+        self.assertIn(
+            '"v3ShadowAutoInitializeEnabled=$($EnableV3ShadowAutoInitialization',
+            script,
+        )
+        self.assertIn("v3AutoInitialize", script)
         self.assertIn('statusContainer -ne "forex-paper-status"', script)
 
 

@@ -350,6 +350,9 @@ def forex_status_page(
     activation_code = str(
         selected.get("v3_activation_status", "")
     ).strip().upper()
+    initialization_code = str(
+        selected.get("v3_initialization_status", "")
+    ).strip().upper()
     plan_observation_code = str(
         selected.get("v3_plan_observation_status", "")
     ).strip().upper()
@@ -358,9 +361,9 @@ def forex_status_page(
         "ALREADY_ACTIVE",
         "SIMULATION_ACTIVATED",
     }
-    shadow_initialized = shadow_active or plan_observation_code in {
-        "SHADOW_PLAN_OBSERVED",
-        "SHADOW_PLAN_ALREADY_OBSERVED",
+    shadow_initialized = shadow_active or initialization_code in {
+        "INITIALIZED_SHADOW_INACTIVE",
+        "ALREADY_INITIALIZED_SHADOW_INACTIVE",
     }
 
     if selected.get("fresh") is not True:

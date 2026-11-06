@@ -57,6 +57,8 @@ def sample_status() -> dict:
         "v3_forward_exclusions": {"SUPERSEDED_CANDIDATE": 12},
         "v3_forward_invalid_issues": {},
         "v3_activation_status": "ALREADY_ACTIVE",
+        "v3_initialization_status": "ALREADY_INITIALIZED_SHADOW_INACTIVE",
+        "v3_initialization_reason": "",
         "v3_activation_reason": "",
         "v3_plan_observation_status": "SHADOW_PLAN_OBSERVED",
         "v3_plan_reason": "",
@@ -176,6 +178,10 @@ class CloudForexStatusTests(unittest.TestCase):
             {"EUR_USD": ["SECOND_SOURCE_UNAVAILABLE"]},
         )
         self.assertEqual(result["v3_activation_status"], "ALREADY_ACTIVE")
+        self.assertEqual(
+            result["v3_initialization_status"],
+            "ALREADY_INITIALIZED_SHADOW_INACTIVE",
+        )
         self.assertEqual(result["v3_forward_accepted_cycle_count"], 4)
         self.assertEqual(
             result["v3_forward_exclusions"],

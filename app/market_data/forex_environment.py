@@ -14,6 +14,7 @@ ALLOWED_FOREX_ENVIRONMENT_KEYS = frozenset(
         "JARVIS_OS_FOREX_DATA_ENABLED",
         "JARVIS_OS_FOREX_PAPER_AUTOPILOT_ENABLED",
         "JARVIS_OS_FOREX_BASE_NEW_ENTRIES_ENABLED",
+        "JARVIS_OS_FOREX_V3_SHADOW_AUTO_INITIALIZE_ENABLED",
         "JARVIS_OS_FOREX_V3_SHADOW_SIMULATION_ENABLED",
         "JARVIS_OS_FOREX_V3_SHADOW_REVIEW_FINGERPRINT",
         "JARVIS_OS_FOREX_PRIMARY_PROVIDER",
@@ -59,6 +60,7 @@ class ForexDataSettings:
     enabled: bool
     paper_autopilot_enabled: bool = False
     base_new_entries_enabled: bool = True
+    v3_shadow_auto_initialize_enabled: bool = False
     v3_shadow_simulation_enabled: bool = False
     v3_shadow_review_fingerprint: str = field(default="", repr=False)
     primary_provider: str = "MT5_DEMO"
@@ -100,6 +102,9 @@ class ForexDataSettings:
             ).strip().lower() == "true",
             base_new_entries_enabled=os.getenv(
                 "JARVIS_OS_FOREX_BASE_NEW_ENTRIES_ENABLED", ""
+            ).strip().lower() == "true",
+            v3_shadow_auto_initialize_enabled=os.getenv(
+                "JARVIS_OS_FOREX_V3_SHADOW_AUTO_INITIALIZE_ENABLED", ""
             ).strip().lower() == "true",
             v3_shadow_simulation_enabled=os.getenv(
                 "JARVIS_OS_FOREX_V3_SHADOW_SIMULATION_ENABLED", ""
@@ -152,6 +157,9 @@ class ForexDataSettings:
             "enabled": self.enabled,
             "paper_autopilot_enabled": self.paper_autopilot_enabled,
             "base_new_entries_enabled": self.base_new_entries_enabled,
+            "v3_shadow_auto_initialize_enabled": (
+                self.v3_shadow_auto_initialize_enabled
+            ),
             "v3_shadow_simulation_enabled": (
                 self.v3_shadow_simulation_enabled
             ),

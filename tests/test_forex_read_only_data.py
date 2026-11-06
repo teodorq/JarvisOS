@@ -332,6 +332,7 @@ class RequestBoundaryTests(unittest.TestCase):
                 "JARVIS_OS_FOREX_DATA_ENABLED=true\n"
                 "JARVIS_OS_FOREX_PAPER_AUTOPILOT_ENABLED=true\n"
                 "JARVIS_OS_FOREX_BASE_NEW_ENTRIES_ENABLED=false\n"
+                "JARVIS_OS_FOREX_V3_SHADOW_AUTO_INITIALIZE_ENABLED=true\n"
                 "JARVIS_OS_FOREX_V3_SHADOW_SIMULATION_ENABLED=true\n"
                 "JARVIS_OS_FOREX_V3_SHADOW_REVIEW_FINGERPRINT="
                 + "e" * 64
@@ -348,6 +349,7 @@ class RequestBoundaryTests(unittest.TestCase):
                     "JARVIS_OS_FOREX_DATA_ENABLED",
                     "JARVIS_OS_FOREX_PAPER_AUTOPILOT_ENABLED",
                     "JARVIS_OS_FOREX_BASE_NEW_ENTRIES_ENABLED",
+                    "JARVIS_OS_FOREX_V3_SHADOW_AUTO_INITIALIZE_ENABLED",
                     "JARVIS_OS_FOREX_V3_SHADOW_SIMULATION_ENABLED",
                     "JARVIS_OS_FOREX_V3_SHADOW_REVIEW_FINGERPRINT",
                 ),
@@ -357,6 +359,10 @@ class RequestBoundaryTests(unittest.TestCase):
             )
             self.assertFalse(
                 ForexDataSettings.from_environment().base_new_entries_enabled
+            )
+            self.assertTrue(
+                ForexDataSettings.from_environment()
+                .v3_shadow_auto_initialize_enabled
             )
             self.assertTrue(
                 ForexDataSettings.from_environment()

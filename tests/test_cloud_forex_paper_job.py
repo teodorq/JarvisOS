@@ -207,6 +207,10 @@ class CloudForexPaperJobTests(unittest.TestCase):
             "v3_shadow_activation": {
                 "status": "ALREADY_ACTIVE",
             },
+            "v3_shadow_initialization": {
+                "status": "ALREADY_INITIALIZED_SHADOW_INACTIVE",
+                "reason": "",
+            },
             "v3_forward_evidence": {
                 "status": "COLLECTING_FORWARD_EVIDENCE",
                 "candidate_id": "FOREX_STRENGTH_V3R2_20261104",
@@ -279,6 +283,11 @@ class CloudForexPaperJobTests(unittest.TestCase):
             result["v3_plan_observation_status"], "SHADOW_PLAN_OBSERVED"
         )
         self.assertEqual(result["v3_activation_status"], "ALREADY_ACTIVE")
+        self.assertEqual(
+            result["v3_initialization_status"],
+            "ALREADY_INITIALIZED_SHADOW_INACTIVE",
+        )
+        self.assertEqual(result["v3_initialization_reason"], "")
         self.assertEqual(
             result["v3_forward_status"],
             "COLLECTING_FORWARD_EVIDENCE",

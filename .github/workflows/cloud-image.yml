@@ -280,6 +280,7 @@ jobs:
               --memory 0.5Gi \
               --set-env-vars \
                 "JARVIS_OS_BUILD_SHA=${{ github.sha }}" \
+                "JARVIS_OS_FOREX_V3_SHADOW_AUTO_INITIALIZE_ENABLED=true" \
                 "JARVIS_OS_FOREX_STATUS_CONTAINER=forex-paper-status" \
                 "JARVIS_OS_FOREX_STATUS_BLOB=status/latest.json" \
               --only-show-errors \

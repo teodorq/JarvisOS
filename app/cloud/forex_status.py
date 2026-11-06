@@ -308,6 +308,12 @@ def project_cloud_forex_status(
         v3_activation_status = str(
             value.get("v3_activation_status", "")
         ).strip().upper()
+        v3_initialization_status = str(
+            value.get("v3_initialization_status", "")
+        ).strip().upper()
+        v3_initialization_reason = str(
+            value.get("v3_initialization_reason", "")
+        ).strip().upper()
         v3_activation_reason = str(
             value.get("v3_activation_reason", "")
         ).strip().upper()
@@ -323,6 +329,8 @@ def project_cloud_forex_status(
                 v3_decision,
                 v3_status,
                 v3_activation_status,
+                v3_initialization_status,
+                v3_initialization_reason,
                 v3_activation_reason,
                 v3_plan_reason,
                 v3_simulation_reason,
@@ -397,6 +405,8 @@ def project_cloud_forex_status(
         },
         "last_v3_cycle": {
             "available": True,
+            "initialization_status": v3_initialization_status,
+            "initialization_reason": v3_initialization_reason,
             "activation_status": v3_activation_status,
             "activation_reason": v3_activation_reason,
             "status": v3_status,
