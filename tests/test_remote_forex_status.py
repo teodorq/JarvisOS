@@ -103,6 +103,8 @@ class RemoteForexStatusTests(unittest.TestCase):
         self.assertIn("EUR_USD", body)
         self.assertIn("BIEZACY CYKL", body)
         self.assertIn("Brak bezpiecznego sygnalu wejscia", body)
+        self.assertIn("DLACZEGO PARA BYLA ZABLOKOWANA", body)
+        self.assertIn("brak potwierdzenia z drugiego zrodla", body)
         self.assertIn("POSTEP PROBKI V3", body)
         self.assertIn("4 / 20", body)
         self.assertIn("1 / 3", body)

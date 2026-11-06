@@ -25,6 +25,15 @@ _BLOB = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,255}$")
 _CODE = re.compile(r"^[A-Z0-9][A-Z0-9_:.-]{0,159}$")
 _CYCLE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}$")
 _PAIR = re.compile(r"^[A-Z]{3}_[A-Z]{3}$")
+_MAJOR_PAIRS = frozenset({
+    "EUR_USD",
+    "GBP_USD",
+    "USD_JPY",
+    "USD_CHF",
+    "AUD_USD",
+    "USD_CAD",
+    "NZD_USD",
+})
 
 
 class ForexStatusStoreError(RuntimeError):
@@ -203,6 +212,25 @@ def _reason_counts(value: object) -> dict[str, int]:
     return result
 
 
+def _opening_blocks_by_pair(value: object) -> dict[str, list[str]]:
+    if value in (None, {}):
+        return {}
+    if not isinstance(value, dict) or len(value) > len(_MAJOR_PAIRS):
+        raise ForexStatusStoreError("forex_status: invalid_pair_blocks")
+    result: dict[str, list[str]] = {}
+    for raw_pair, raw_codes in sorted(value.items()):
+        pair = str(raw_pair).strip().upper()
+        if pair not in _MAJOR_PAIRS or not isinstance(raw_codes, list):
+            raise ForexStatusStoreError("forex_status: invalid_pair_blocks")
+        if not raw_codes or len(raw_codes) > 12:
+            raise ForexStatusStoreError("forex_status: invalid_pair_blocks")
+        codes = [_code(item, required=True) for item in raw_codes]
+        if len(codes) != len(set(codes)):
+            raise ForexStatusStoreError("forex_status: invalid_pair_blocks")
+        result[pair] = codes
+    return result
+
+
 def sanitize_forex_status(value: object) -> dict[str, Any]:
     """Return the strict public PAPER status allowlist or fail closed."""
 
@@ -253,6 +281,9 @@ def sanitize_forex_status(value: object) -> dict[str, Any]:
             value.get("observation_positions_unchanged") is True
         ),
         "observation_opening_blocks": blocks,
+        "observation_opening_blocks_by_pair": _opening_blocks_by_pair(
+            value.get("observation_opening_blocks_by_pair", {})
+        ),
         "calendar_source_state": _code(
             value.get("calendar_source_state", "")
         ),
@@ -421,6 +452,7 @@ def forex_status_view(
             "v3_instruction_count": 0,
             "v3_execution_count": 0,
             "v3_reason_codes": {},
+            "observation_opening_blocks_by_pair": {},
         })
     return result
 

@@ -179,6 +179,13 @@ class CloudForexPaperJobTests(unittest.TestCase):
                     "FOREX_OBSERVATION:_EXAMPLE_FAILURE",
                     "unsafe value with spaces",
                 ],
+                "opening_blocks_by_pair": {
+                    "EUR_USD": [
+                        "SECOND_SOURCE_UNAVAILABLE",
+                        "unsafe value with spaces",
+                    ],
+                    "BAD_PAIR": ["HIGH_IMPACT_EVENT_WINDOW"],
+                },
                 "execution": {
                     "status": "NOT_EXECUTED",
                     "reason": "FOREX_OBSERVATION:_EXAMPLE_FAILURE",
@@ -313,6 +320,10 @@ class CloudForexPaperJobTests(unittest.TestCase):
         self.assertEqual(
             result["observation_opening_blocks"],
             ["FOREX_OBSERVATION:_EXAMPLE_FAILURE"],
+        )
+        self.assertEqual(
+            result["observation_opening_blocks_by_pair"],
+            {"EUR_USD": ["SECOND_SOURCE_UNAVAILABLE"]},
         )
         self.assertEqual(result["calendar_source_state"], "CACHE_FAILSAFE")
         self.assertEqual(result["nbp_source_state"], "CACHE_FALLBACK")

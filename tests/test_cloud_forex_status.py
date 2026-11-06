@@ -32,6 +32,9 @@ def sample_status() -> dict:
         "observation_fully_cross_checked": True,
         "observation_positions_unchanged": False,
         "observation_opening_blocks": [],
+        "observation_opening_blocks_by_pair": {
+            "EUR_USD": ["SECOND_SOURCE_UNAVAILABLE"],
+        },
         "calendar_source_state": "FRESH",
         "nbp_source_state": "FRESH",
         "runtime_decision": "NO_ENTRY_SIGNAL",
@@ -164,6 +167,10 @@ class CloudForexStatusTests(unittest.TestCase):
         self.assertEqual(result["runtime_ready_pair_count"], 6)
         self.assertEqual(result["runtime_reason_codes"]["NO_ENTRY_SIGNAL"], 6)
         self.assertEqual(result["v3_decision_status"], "NO_ACTION")
+        self.assertEqual(
+            result["observation_opening_blocks_by_pair"],
+            {"EUR_USD": ["SECOND_SOURCE_UNAVAILABLE"]},
+        )
         self.assertEqual(result["v3_activation_status"], "ALREADY_ACTIVE")
         self.assertEqual(result["v3_forward_accepted_cycle_count"], 4)
         self.assertEqual(
@@ -191,6 +198,15 @@ class CloudForexStatusTests(unittest.TestCase):
         value = sample_status()
         value["v3_ready_pair_count"] = 8
         with self.assertRaisesRegex(ForexStatusStoreError, "invalid_count"):
+            sanitize_forex_status(value)
+
+        value = sample_status()
+        value["observation_opening_blocks_by_pair"] = {
+            "BAD_PAIR": ["SECOND_SOURCE_UNAVAILABLE"],
+        }
+        with self.assertRaisesRegex(
+            ForexStatusStoreError, "invalid_pair_blocks"
+        ):
             sanitize_forex_status(value)
 
     def test_memory_store_isolated_and_view_reports_freshness(self) -> None:

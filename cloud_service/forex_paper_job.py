@@ -37,6 +37,9 @@ _STORAGE_ACCOUNT = re.compile(r"^[a-z0-9]{3,24}$")
 _CONTAINER = re.compile(r"^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])$")
 _BLOB = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$")
 _DIAGNOSTIC_CODE = re.compile(r"^[A-Z0-9_:.-]{1,160}$")
+_PAIR_SYMBOL = re.compile(
+    r"^(?:EUR_USD|GBP_USD|USD_JPY|USD_CHF|AUD_USD|USD_CAD|NZD_USD)$"
+)
 _CLOUD_CYCLE_ID = re.compile(r"^AZURE-[0-9]{8}T[0-9]{6}Z-[0-9A-F]{12}$")
 _STATE_ROOT = PurePosixPath("data/trading")
 
@@ -429,6 +432,22 @@ def _public_result(
         for code in (str(value) for value in opening_blocks[:12])
         if _DIAGNOSTIC_CODE.fullmatch(code)
     ]
+    raw_blocks_by_pair = observation.get("opening_blocks_by_pair")
+    raw_blocks_by_pair = (
+        raw_blocks_by_pair if isinstance(raw_blocks_by_pair, dict) else {}
+    )
+    safe_blocks_by_pair: dict[str, list[str]] = {}
+    for raw_pair, raw_codes in sorted(raw_blocks_by_pair.items())[:7]:
+        pair = str(raw_pair).strip().upper()
+        if not _PAIR_SYMBOL.fullmatch(pair) or not isinstance(raw_codes, list):
+            continue
+        codes = sorted({
+            code
+            for code in (str(value) for value in raw_codes[:12])
+            if _DIAGNOSTIC_CODE.fullmatch(code)
+        })
+        if codes:
+            safe_blocks_by_pair[pair] = codes
     raw_observation_reason = str(observation_execution.get("reason", ""))
     observation_reason = (
         raw_observation_reason
@@ -489,6 +508,7 @@ def _public_result(
             observation.get("positions_unchanged") is True
         ),
         "observation_opening_blocks": safe_opening_blocks,
+        "observation_opening_blocks_by_pair": safe_blocks_by_pair,
         "calendar_source_state": calendar_source_state,
         "nbp_source_state": nbp_source_state,
         "runtime_decision": runtime_decision,
