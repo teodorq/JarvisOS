@@ -104,6 +104,18 @@ class RemoteForexStatusTests(unittest.TestCase):
         )
         status["v3_plan_reason"] = "WAITING_FOR_FORWARD_SAMPLE"
         status["v3_decision_status"] = ""
+        status["activity_events"] = [{
+            "sequence": 1,
+            "event_id": "000000000000000000000001",
+            "occurred_at": "2026-11-03T10:01:00+00:00",
+            "kind": "FOREX_V3_FORWARD_PROGRESS",
+            "state": "brief",
+            "message": (
+                "<script>must-not-run</script> Forex V3: zweryfikowana "
+                "probka osiagnela 10/20 cykli. "
+                "To informacja o postepie — nie wlacza LIVE."
+            ),
+        }]
         self.store.write(status)
         with urllib.request.urlopen(
             self.owner_request("/trading"), timeout=2
@@ -127,6 +139,11 @@ class RemoteForexStatusTests(unittest.TestCase):
         self.assertIn("Pozostalo cykli</span>16", body)
         self.assertIn("Pozostalo dni rynkowych</span>2", body)
         self.assertNotIn("V3_FORWARD_EVIDENCE_INCOMPLETE", body)
+        self.assertIn("OSTATNIE ZDARZENIA PAPER", body)
+        self.assertIn("POSTEP V3", body)
+        self.assertIn("zweryfikowana probka osiagnela 10/20 cykli", body)
+        self.assertIn("&lt;script&gt;must-not-run&lt;/script&gt;", body)
+        self.assertNotIn("FOREX_V3_FORWARD_PROGRESS", body)
         self.assertIn("nigdy automatycznie nie wlacza LIVE", body)
         self.assertNotIn("<script", body.lower())
         self.assertIn("script-src 'none'", policy)

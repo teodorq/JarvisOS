@@ -628,6 +628,9 @@ The same report shows the exact number of forward-evidence cycles and market
 days still required before V3 can leave its PAPER observation gate. Internal
 waiting codes are translated into owner-friendly text and never weaken the
 sample threshold or enable LIVE trading.
+The report also renders the latest durable Azure PAPER activity events. Sparse
+V3 progress, completion and integrity milestones remain visible on the phone
+even when the desktop is off; only allowlisted, bounded messages are exposed.
 
 The phone page has a separate owner-only computer power card. Shutdown cannot
 be requested through the free-text command box: the owner must open the red
