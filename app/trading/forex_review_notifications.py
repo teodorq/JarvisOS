@@ -16,6 +16,9 @@ from app.trading.forex_performance_notifications import (
 from app.trading.forex_v3_shadow_notifications import (
     v3_shadow_plan_milestones,
 )
+from app.trading.forex_v3_shadow_initialization_notifications import (
+    v3_shadow_initialization_milestone,
+)
 
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
@@ -24,6 +27,7 @@ _FINGERPRINT_FIELDS = (
     "v3_forward_progress_fingerprint",
     "v3_forward_integrity_fingerprint",
     "v3_shadow_readiness_fingerprint",
+    "v3_shadow_initialization_fingerprint",
     "v3_shadow_first_plan_fingerprint",
     "v3_shadow_plan_sample_fingerprint",
     "performance_review_fingerprint",
@@ -49,6 +53,15 @@ def review_milestones(
             "v3_shadow_readiness_fingerprint",
             "",
         ),
+    )
+    v3_initialization_fingerprint, v3_initialization = (
+        v3_shadow_initialization_milestone(
+            payload,
+            completed_fingerprint=state.get(
+                "v3_shadow_initialization_fingerprint",
+                "",
+            ),
+        )
     )
     v3_progress_fingerprints, v3_progress_milestones = (
         v3_forward_progress_milestones(
@@ -81,6 +94,10 @@ def review_milestones(
         fingerprints["performance_review_fingerprint"] = performance_fingerprint
     if v3_fingerprint:
         fingerprints["v3_shadow_readiness_fingerprint"] = v3_fingerprint
+    if v3_initialization_fingerprint:
+        fingerprints["v3_shadow_initialization_fingerprint"] = (
+            v3_initialization_fingerprint
+        )
     fingerprints.update(v3_progress_fingerprints)
     fingerprints.update(v3_plan_fingerprints)
     return fingerprints, [
@@ -88,6 +105,7 @@ def review_milestones(
             forward,
             *v3_progress_milestones,
             v3_shadow,
+            v3_initialization,
             *v3_plan_milestones,
             performance,
         ) if item

@@ -602,6 +602,82 @@ def test_v3_shadow_readiness_notification_is_durable_and_once_only() -> None:
         assert len(state["v3_shadow_readiness_fingerprint"]) == 64
 
 
+def test_v3_shadow_initialization_notification_is_durable_and_once_only() -> None:
+    with TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        payload = _payload(75)
+        report = _complete_v3_forward_report()
+        payload["v3_forward_evidence"] = report
+        payload["v3_shadow_initialization"] = {
+            "status": "INITIALIZED_SHADOW_INACTIVE",
+            "candidate_id": report["candidate_id"],
+            "shadow_ledger_created": True,
+            "shadow_execution_enabled": False,
+            "paper_orders_sent": False,
+            "broker_orders_sent": False,
+            "live_orders_sent": False,
+            "network_access": False,
+            "real_money_access": False,
+        }
+        journal = ForexPaperActivityJournal(root)
+
+        first = journal.record(payload)
+        repeated = dict(payload, cycle_id="cycle-76")
+        second = journal.record(repeated)
+        events = journal.events(limit=10)
+        state = journal.store.load()
+
+        assert first == {"status": "RECORDED", "events_recorded": 2}
+        assert second == {"status": "RECORDED", "events_recorded": 0}
+        assert [event["kind"] for event in events] == [
+            "FOREX_V3_SHADOW_INITIALIZATION_READY",
+            "FOREX_V3_SHADOW_INITIALIZED",
+        ]
+        assert "pusty, audytowany i nieaktywny" in events[-1]["message"]
+        assert "Nie otworzyłem pozycji" in events[-1]["message"]
+        assert "prawdziwe środki pozostają zablokowane" in events[-1]["message"]
+        assert len(state["v3_shadow_initialization_fingerprint"]) == 64
+
+
+def test_unsafe_or_existing_v3_shadow_never_reports_new_initialization() -> None:
+    with TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        journal = ForexPaperActivityJournal(root)
+        report = _complete_v3_forward_report()
+        ready = _payload(76)
+        ready["v3_forward_evidence"] = report
+        assert journal.record(ready)["events_recorded"] == 1
+
+        unsafe = _payload(77)
+        unsafe["v3_forward_evidence"] = report
+        unsafe["v3_shadow_initialization"] = {
+            "status": "INITIALIZED_SHADOW_INACTIVE",
+            "candidate_id": report["candidate_id"],
+            "shadow_ledger_created": True,
+            "shadow_execution_enabled": True,
+            "paper_orders_sent": False,
+            "broker_orders_sent": False,
+            "live_orders_sent": False,
+            "network_access": False,
+            "real_money_access": False,
+        }
+        existing = _payload(78)
+        existing["v3_forward_evidence"] = report
+        existing["v3_shadow_initialization"] = {
+            **unsafe["v3_shadow_initialization"],
+            "status": "ALREADY_INITIALIZED_SHADOW_INACTIVE",
+            "shadow_ledger_created": False,
+            "shadow_execution_enabled": False,
+        }
+
+        assert journal.record(unsafe)["events_recorded"] == 0
+        assert journal.record(existing)["events_recorded"] == 0
+        assert all(
+            event["kind"] != "FOREX_V3_SHADOW_INITIALIZED"
+            for event in journal.events(limit=10)
+        )
+
+
 def test_v3_forward_progress_notifies_only_at_sparse_milestones() -> None:
     with TemporaryDirectory() as temporary:
         root = Path(temporary)
@@ -1123,6 +1199,7 @@ def test_new_activity_modules_remain_bounded() -> None:
     limits = {
         "app/trading/forex_activity_journal.py": 540,
         "app/trading/forex_activity.py": 260,
+        "app/trading/forex_v3_shadow_initialization_notifications.py": 100,
         "app/gui/forex_paper_page.py": 380,
     }
     for relative, limit in limits.items():

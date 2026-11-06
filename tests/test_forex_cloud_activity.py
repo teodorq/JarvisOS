@@ -78,6 +78,17 @@ def test_cloud_activity_transport_is_strict_and_drops_extra_fields() -> None:
         sanitize_forex_cloud_activity_events([event])
 
 
+def test_cloud_activity_transport_accepts_shadow_initialized_milestone() -> None:
+    event = _event()
+    event["kind"] = "FOREX_V3_SHADOW_INITIALIZED"
+    event["state"] = "important"
+
+    sanitized = sanitize_forex_cloud_activity_events([event])
+
+    assert sanitized[0]["kind"] == "FOREX_V3_SHADOW_INITIALIZED"
+    assert sanitized[0]["state"] == "important"
+
+
 def test_private_status_preserves_only_valid_activity_events() -> None:
     value = sample_status()
     value["activity_events"] = [_event()]
