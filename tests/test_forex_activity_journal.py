@@ -678,6 +678,41 @@ def test_unsafe_or_existing_v3_shadow_never_reports_new_initialization() -> None
         )
 
 
+def test_v3_shadow_activation_notification_is_durable_and_once_only() -> None:
+    with TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        payload = _payload(79)
+        payload["v3_shadow_activation"] = {
+            "status": "SIMULATION_ACTIVATED",
+            "mode": "FOREX_V3_SHADOW_SIMULATION_CONTROL",
+            "simulation_activated": True,
+            "shadow_simulation_enabled": True,
+            "shadow_execution_enabled": True,
+            "review_fingerprint_sha256": "d" * 64,
+            "candidate_id": "FOREX_STRENGTH_V3R2_20261104",
+            "paper_orders_sent": False,
+            "broker_orders_sent": False,
+            "live_orders_sent": False,
+            "network_access": False,
+            "real_money_access": False,
+        }
+        journal = ForexPaperActivityJournal(root)
+
+        first = journal.record(payload)
+        second = journal.record(dict(payload, cycle_id="cycle-80"))
+        events = journal.events(limit=10)
+        state = journal.store.load()
+
+        assert first == {"status": "RECORDED", "events_recorded": 1}
+        assert second == {"status": "RECORDED", "events_recorded": 0}
+        assert [event["kind"] for event in events] == [
+            "FOREX_V3_SHADOW_SIMULATION_ACTIVATED"
+        ]
+        assert "wyłącznie izolowaną symulację PAPER" in events[0]["message"]
+        assert "Aktywacja nie otworzyła pozycji" in events[0]["message"]
+        assert len(state["v3_shadow_activation_fingerprint"]) == 64
+
+
 def test_v3_forward_progress_notifies_only_at_sparse_milestones() -> None:
     with TemporaryDirectory() as temporary:
         root = Path(temporary)
@@ -1200,6 +1235,7 @@ def test_new_activity_modules_remain_bounded() -> None:
         "app/trading/forex_activity_journal.py": 540,
         "app/trading/forex_activity.py": 260,
         "app/trading/forex_v3_shadow_initialization_notifications.py": 100,
+        "app/trading/forex_v3_shadow_activation_notifications.py": 100,
         "app/gui/forex_paper_page.py": 380,
     }
     for relative, limit in limits.items():

@@ -497,6 +497,10 @@ The durable PAPER activity history also records one deduplicated owner notice
 when the first verified V3 plan is archived and another when the 20-plan/3-day
 sample becomes complete. Both notices are derived from the audited journal,
 survive a closed JARVIS window and explicitly keep execution disabled.
+If the exact reviewed fingerprint is later approved and the isolated PAPER
+simulation is actually activated, the same history records a separate one-time
+notice. That notice is accepted only from the activator's verified success
+result and states that broker, LIVE, network and real-money access remain off.
 
 When that threshold is reached, the existing durable PAPER activity history
 adds one owner notification for the frozen candidate. The notification survives

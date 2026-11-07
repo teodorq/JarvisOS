@@ -175,6 +175,27 @@ class RemoteForexStatusTests(unittest.TestCase):
         self.assertIn("PORTFEL V3 UTWORZONY", body)
         self.assertNotIn("FOREX_V3_SHADOW_INITIALIZED", body)
 
+    def test_owner_page_labels_shadow_simulation_activation_event(self) -> None:
+        status = sample_status()
+        status["observed_at"] = datetime.now(timezone.utc).isoformat()
+        status["activity_events"] = [{
+            "sequence": 1,
+            "event_id": "000000000000000000000001",
+            "occurred_at": "2026-11-03T10:01:00+00:00",
+            "kind": "FOREX_V3_SHADOW_SIMULATION_ACTIVATED",
+            "state": "important",
+            "message": "Izolowana symulacja V3 PAPER zostala uruchomiona.",
+        }]
+        self.store.write(status)
+
+        with urllib.request.urlopen(
+            self.owner_request("/trading"), timeout=2
+        ) as response:
+            body = response.read().decode("utf-8")
+
+        self.assertIn("SYMULACJA V3 AKTYWNA", body)
+        self.assertNotIn("FOREX_V3_SHADOW_SIMULATION_ACTIVATED", body)
+
     def test_owner_stage_map_keeps_existing_shadow_separate_from_live(
         self,
     ) -> None:

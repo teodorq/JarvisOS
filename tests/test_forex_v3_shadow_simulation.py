@@ -327,6 +327,8 @@ def test_activation_creates_audited_paper_only_simulation_state(
     assert result["broker_orders_sent"] is False
     assert result["live_orders_sent"] is False
     assert result["real_money_access"] is False
+    assert result["review_fingerprint_sha256"] == ReadySimulation.fingerprint
+    assert result["candidate_id"] == "FOREX_STRENGTH_V3R2_20261104"
     assert state["initialization"]["status"] == (
         "INITIALIZED_SHADOW_SIMULATION_ACTIVE"
     )

@@ -89,6 +89,17 @@ def test_cloud_activity_transport_accepts_shadow_initialized_milestone() -> None
     assert sanitized[0]["state"] == "important"
 
 
+def test_cloud_activity_transport_accepts_shadow_activation_milestone() -> None:
+    event = _event()
+    event["kind"] = "FOREX_V3_SHADOW_SIMULATION_ACTIVATED"
+    event["state"] = "important"
+
+    sanitized = sanitize_forex_cloud_activity_events([event])
+
+    assert sanitized[0]["kind"] == "FOREX_V3_SHADOW_SIMULATION_ACTIVATED"
+    assert sanitized[0]["state"] == "important"
+
+
 def test_private_status_preserves_only_valid_activity_events() -> None:
     value = sample_status()
     value["activity_events"] = [_event()]

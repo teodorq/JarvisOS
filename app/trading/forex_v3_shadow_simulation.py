@@ -298,7 +298,12 @@ class ForexV3ShadowSimulationActivator:
                 "BLOCKED_SIMULATION_ACTIVATION",
                 reason="ACTIVATION_POSTCHECK_FAILED",
             )
-        return self._result("SIMULATION_ACTIVATED", activated=True)
+        return self._result(
+            "SIMULATION_ACTIVATED",
+            activated=True,
+            review_fingerprint_sha256=fingerprint,
+            candidate_id=str(state.get("candidate_id", "")),
+        )
 
     @staticmethod
     def _result(
@@ -306,11 +311,17 @@ class ForexV3ShadowSimulationActivator:
         *,
         activated: bool = False,
         reason: str = "",
+        review_fingerprint_sha256: object = "",
+        candidate_id: object = "",
     ) -> dict[str, Any]:
         return {
             "status": status,
             "mode": "FOREX_V3_SHADOW_SIMULATION_CONTROL",
             "reason": str(reason)[:160],
+            "review_fingerprint_sha256": str(
+                review_fingerprint_sha256
+            )[:64],
+            "candidate_id": str(candidate_id)[:96],
             "simulation_activated": activated,
             "shadow_simulation_enabled": status in {
                 "SIMULATION_ACTIVATED",
