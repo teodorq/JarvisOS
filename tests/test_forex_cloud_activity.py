@@ -100,6 +100,21 @@ def test_cloud_activity_transport_accepts_shadow_activation_milestone() -> None:
     assert sanitized[0]["state"] == "important"
 
 
+@pytest.mark.parametrize("kind", [
+    "FOREX_V3_SHADOW_POSITION_OPENED",
+    "FOREX_V3_SHADOW_POSITION_CLOSED",
+])
+def test_cloud_activity_transport_accepts_v3_shadow_fill_events(kind: str) -> None:
+    event = _event()
+    event["kind"] = kind
+    event["state"] = "important"
+
+    sanitized = sanitize_forex_cloud_activity_events([event])
+
+    assert sanitized[0]["kind"] == kind
+    assert sanitized[0]["state"] == "important"
+
+
 def test_private_status_preserves_only_valid_activity_events() -> None:
     value = sample_status()
     value["activity_events"] = [_event()]

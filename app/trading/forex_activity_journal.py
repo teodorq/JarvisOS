@@ -20,6 +20,9 @@ from app.trading.forex_entry_blocks import activity_block_message
 from app.trading.forex_review_notifications import (
     normalized_review_fingerprints, review_milestones,
 )
+from app.trading.forex_v3_shadow_trade_notifications import (
+    v3_shadow_trade_specs,
+)
 
 _PAIR = re.compile(r"^[A-Z]{3}_[A-Z]{3}$")
 
@@ -279,6 +282,7 @@ class ForexPaperActivityJournal:
         for spec in specs:
             spec["occurred_at"] = occurred_at or spec.get("occurred_at", "")
         specs.extend(milestones or [])
+        specs.extend(v3_shadow_trade_specs(payload))
         if specs:
             return specs
         if health == "BLOCKED" and previous_health != "BLOCKED":

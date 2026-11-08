@@ -196,6 +196,39 @@ class RemoteForexStatusTests(unittest.TestCase):
         self.assertIn("SYMULACJA V3 AKTYWNA", body)
         self.assertNotIn("FOREX_V3_SHADOW_SIMULATION_ACTIVATED", body)
 
+    def test_owner_page_labels_v3_shadow_fill_events(self) -> None:
+        status = sample_status()
+        status["observed_at"] = datetime.now(timezone.utc).isoformat()
+        status["activity_events"] = [
+            {
+                "sequence": 1,
+                "event_id": "000000000000000000000001",
+                "occurred_at": "2026-11-08T13:02:20+00:00",
+                "kind": "FOREX_V3_SHADOW_POSITION_OPENED",
+                "state": "important",
+                "message": "V3 SHADOW PAPER otworzył pozycję symulowaną.",
+            },
+            {
+                "sequence": 2,
+                "event_id": "000000000000000000000002",
+                "occurred_at": "2026-11-08T14:02:20+00:00",
+                "kind": "FOREX_V3_SHADOW_POSITION_CLOSED",
+                "state": "important",
+                "message": "V3 SHADOW PAPER zamknął pozycję symulowaną.",
+            },
+        ]
+        self.store.write(status)
+
+        with urllib.request.urlopen(
+            self.owner_request("/trading"), timeout=2
+        ) as response:
+            body = response.read().decode("utf-8")
+
+        self.assertIn("V3 OTWARCIE PAPER", body)
+        self.assertIn("V3 ZAMKNIECIE PAPER", body)
+        self.assertNotIn("FOREX_V3_SHADOW_POSITION_OPENED", body)
+        self.assertNotIn("FOREX_V3_SHADOW_POSITION_CLOSED", body)
+
     def test_owner_stage_map_keeps_existing_shadow_separate_from_live(
         self,
     ) -> None:

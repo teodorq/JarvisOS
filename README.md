@@ -501,6 +501,12 @@ If the exact reviewed fingerprint is later approved and the isolated PAPER
 simulation is actually activated, the same history records a separate one-time
 notice. That notice is accepted only from the activator's verified success
 result and states that broker, LIVE, network and real-money access remain off.
+Every later V3 SHADOW simulated fill is also recorded as its own durable,
+deduplicated open or close event. These events are accepted only from the exact
+isolated V3 PAPER execution contract and use the V3 fill identity, so the phone
+cannot confuse them with the existing base PAPER strategy. Close events include
+only the bounded simulated PLN result; they never grant broker, LIVE, network
+or real-money access.
 
 When that threshold is reached, the existing durable PAPER activity history
 adds one owner notification for the frozen candidate. The notification survives
