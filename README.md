@@ -507,6 +507,11 @@ isolated V3 PAPER execution contract and use the V3 fill identity, so the phone
 cannot confuse them with the existing base PAPER strategy. Close events include
 only the bounded simulated PLN result; they never grant broker, LIVE, network
 or real-money access.
+The phone report separates the current simulated result from the review sample.
+It shows valid closed trades against the required threshold and how many remain,
+while stale reports hide the metrics. Reaching the sample size is described only
+as readiness for manual review: it never proves profitability, changes a strategy
+or enables broker/LIVE access.
 
 When that threshold is reached, the existing durable PAPER activity history
 adds one owner notification for the frozen candidate. The notification survives

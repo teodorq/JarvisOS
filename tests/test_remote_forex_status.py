@@ -229,6 +229,61 @@ class RemoteForexStatusTests(unittest.TestCase):
         self.assertNotIn("FOREX_V3_SHADOW_POSITION_OPENED", body)
         self.assertNotIn("FOREX_V3_SHADOW_POSITION_CLOSED", body)
 
+    def test_owner_page_separates_v3_result_from_review_sample(self) -> None:
+        status = sample_status()
+        status["observed_at"] = datetime.now(timezone.utc).isoformat()
+        self.store.write(status)
+
+        with urllib.request.urlopen(
+            self.owner_request("/trading"), timeout=2
+        ) as response:
+            body = response.read().decode("utf-8")
+
+        self.assertIn("PROBKA WYNIKOW V3", body)
+        self.assertIn("JARVIS nadal zbiera zamkniete transakcje", body)
+        self.assertIn("Wazne zamkniecia</span>4 / 30", body)
+        self.assertIn("Pozostalo do przegladu</span>26", body)
+        self.assertIn("Nie potwierdza rentownosci", body)
+        self.assertNotIn("COLLECTING_SAMPLE", body)
+
+    def test_owner_page_labels_complete_v3_sample_as_manual_review_only(
+        self,
+    ) -> None:
+        status = sample_status()
+        status["observed_at"] = datetime.now(timezone.utc).isoformat()
+        status["v3_performance"]["status"] = "READY_FOR_MANUAL_REVIEW"
+        status["v3_performance"]["valid_closed_trade_count"] = 30
+        status["v3_performance"]["sample_progress_pct"] = "100.00"
+        self.store.write(status)
+
+        with urllib.request.urlopen(
+            self.owner_request("/trading"), timeout=2
+        ) as response:
+            body = response.read().decode("utf-8")
+
+        self.assertIn("Probka gotowa do recznej oceny", body)
+        self.assertIn("Wazne zamkniecia</span>30 / 30", body)
+        self.assertIn("Pozostalo do przegladu</span>0", body)
+        self.assertIn("nadal nie potwierdza zysku i nie wlacza LIVE", body)
+        self.assertNotIn("READY_FOR_MANUAL_REVIEW", body)
+
+    def test_owner_page_hides_stale_v3_performance_metrics(self) -> None:
+        status = sample_status()
+        status["observed_at"] = "2026-01-01T00:00:00+00:00"
+        status["v3_performance"]["profit_factor"] = "9.8765"
+        status["v3_realized_pnl_pln"] = "987.65"
+        self.store.write(status)
+
+        with urllib.request.urlopen(
+            self.owner_request("/trading"), timeout=2
+        ) as response:
+            body = response.read().decode("utf-8")
+
+        self.assertIn("Wyniki ukryte do czasu swiezego raportu", body)
+        self.assertIn("Wazne zamkniecia</span>N/D / N/D", body)
+        self.assertNotIn("9.8765", body)
+        self.assertNotIn("987.65", body)
+
     def test_owner_stage_map_keeps_existing_shadow_separate_from_live(
         self,
     ) -> None:
