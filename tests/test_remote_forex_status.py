@@ -244,6 +244,13 @@ class RemoteForexStatusTests(unittest.TestCase):
         self.assertIn("Wazne zamkniecia</span>4 / 30", body)
         self.assertIn("Pozostalo do przegladu</span>26", body)
         self.assertIn("Nie potwierdza rentownosci", body)
+        self.assertIn("RYZYKO V3 W JEDNOSTKACH R", body)
+        self.assertIn("Pelne dane ryzyka dla biezacej probki", body)
+        self.assertIn("Pokrycie danych ryzyka</span>100.00%", body)
+        self.assertIn("Laczny wynik</span>0.5000 R", body)
+        self.assertIn("Srednio na transakcje</span>0.1250 R", body)
+        self.assertIn("Maks. obsuniecie</span>0.3000 R", body)
+        self.assertNotIn("must-not-leak", body)
         self.assertNotIn("COLLECTING_SAMPLE", body)
 
     def test_owner_page_labels_complete_v3_sample_as_manual_review_only(
@@ -271,6 +278,9 @@ class RemoteForexStatusTests(unittest.TestCase):
         status = sample_status()
         status["observed_at"] = "2026-01-01T00:00:00+00:00"
         status["v3_performance"]["profit_factor"] = "9.8765"
+        status["v3_performance"]["risk_diagnostics"][
+            "net_r_multiple"
+        ] = "8.7654"
         status["v3_realized_pnl_pln"] = "987.65"
         self.store.write(status)
 
@@ -281,7 +291,9 @@ class RemoteForexStatusTests(unittest.TestCase):
 
         self.assertIn("Wyniki ukryte do czasu swiezego raportu", body)
         self.assertIn("Wazne zamkniecia</span>N/D / N/D", body)
+        self.assertIn("Dane ryzyka ukryte do czasu swiezego raportu", body)
         self.assertNotIn("9.8765", body)
+        self.assertNotIn("8.7654", body)
         self.assertNotIn("987.65", body)
 
     def test_owner_stage_map_keeps_existing_shadow_separate_from_live(

@@ -512,6 +512,12 @@ It shows valid closed trades against the required threshold and how many remain,
 while stale reports hide the metrics. Reaching the sample size is described only
 as readiness for manual review: it never proves profitability, changes a strategy
 or enables broker/LIVE access.
+The same owner-only report now exposes bounded risk-normalized V3 diagnostics:
+coverage of recorded initial risk, total/average/median R, maximum observed
+drawdown in R and the longest loss streak. The cloud allowlist rejects non-finite
+or oversized values and never transports fills, credentials or executable
+instructions. These diagnostics make differently sized PAPER trades comparable;
+they remain descriptive and cannot validate profitability or enable LIVE.
 
 When that threshold is reached, the existing durable PAPER activity history
 adds one owner notification for the frozen candidate. The notification survives

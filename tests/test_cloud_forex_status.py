@@ -109,6 +109,21 @@ def sample_status() -> dict:
             "maximum_closed_trade_drawdown_pln": "3.00",
             "maximum_closed_trade_drawdown_pct": "0.03",
             "maximum_consecutive_losses": 1,
+            "risk_diagnostics": {
+                "status": "COMPLETE",
+                "closed_trade_count": 4,
+                "risk_observed_trade_count": 4,
+                "risk_missing_trade_count": 0,
+                "realized_r_mismatch_count": 0,
+                "risk_coverage_pct": "100.00",
+                "net_r_multiple": "0.5000",
+                "average_r_multiple": "0.1250",
+                "median_r_multiple": "0.1000",
+                "maximum_observed_drawdown_r": "0.3000",
+                "maximum_observed_consecutive_losses": 1,
+                "risk_coverage_complete": True,
+                "secret": "must-not-leak",
+            },
             "pair_breakdown": {
                 "EUR_USD": {
                     "closed_trade_count": 4,
@@ -193,6 +208,11 @@ class CloudForexStatusTests(unittest.TestCase):
             result["v3_reason_codes_by_pair"]["GBP_USD"],
             ["CANDIDATE_V3_SIGNAL_STRENGTH_TOO_LOW"],
         )
+        risk = result["v3_performance"]["risk_diagnostics"]
+        self.assertEqual(risk["status"], "COMPLETE")
+        self.assertEqual(risk["risk_coverage_pct"], "100.00")
+        self.assertEqual(risk["net_r_multiple"], "0.5000")
+        self.assertNotIn("secret", risk)
 
         value["real_money_access"] = True
         with self.assertRaisesRegex(ForexStatusStoreError, "unsafe_mode"):
@@ -206,6 +226,13 @@ class CloudForexStatusTests(unittest.TestCase):
 
         value = sample_status()
         value["v3_balance_pln"] = "NaN"
+        with self.assertRaisesRegex(ForexStatusStoreError, "invalid_decimal"):
+            sanitize_forex_status(value)
+
+        value = sample_status()
+        value["v3_performance"]["risk_diagnostics"][
+            "average_r_multiple"
+        ] = "Infinity"
         with self.assertRaisesRegex(ForexStatusStoreError, "invalid_decimal"):
             sanitize_forex_status(value)
 

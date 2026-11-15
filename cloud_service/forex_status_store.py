@@ -159,6 +159,48 @@ def _pair_breakdown(value: object) -> dict[str, dict[str, Any]]:
     return result
 
 
+def _risk_diagnostics(value: object) -> dict[str, Any]:
+    """Return bounded, read-only R-multiple diagnostics for the owner."""
+
+    selected = dict(value) if isinstance(value, dict) else {}
+    return {
+        "status": _code(selected.get("status", "")),
+        "closed_trade_count": _count(
+            selected.get("closed_trade_count", 0)
+        ),
+        "risk_observed_trade_count": _count(
+            selected.get("risk_observed_trade_count", 0)
+        ),
+        "risk_missing_trade_count": _count(
+            selected.get("risk_missing_trade_count", 0)
+        ),
+        "realized_r_mismatch_count": _count(
+            selected.get("realized_r_mismatch_count", 0)
+        ),
+        "risk_coverage_pct": _decimal_text(
+            selected.get("risk_coverage_pct", "0")
+        ),
+        "net_r_multiple": _decimal_text(
+            selected.get("net_r_multiple"), optional=True
+        ),
+        "average_r_multiple": _decimal_text(
+            selected.get("average_r_multiple"), optional=True
+        ),
+        "median_r_multiple": _decimal_text(
+            selected.get("median_r_multiple"), optional=True
+        ),
+        "maximum_observed_drawdown_r": _decimal_text(
+            selected.get("maximum_observed_drawdown_r"), optional=True
+        ),
+        "maximum_observed_consecutive_losses": _count(
+            selected.get("maximum_observed_consecutive_losses", 0)
+        ),
+        "risk_coverage_complete": (
+            selected.get("risk_coverage_complete") is True
+        ),
+    }
+
+
 def _performance(value: object) -> dict[str, Any]:
     selected = dict(value) if isinstance(value, dict) else {}
     return {
@@ -193,6 +235,9 @@ def _performance(value: object) -> dict[str, Any]:
         ),
         "pair_breakdown": _pair_breakdown(
             selected.get("pair_breakdown", {})
+        ),
+        "risk_diagnostics": _risk_diagnostics(
+            selected.get("risk_diagnostics", {})
         ),
     }
 
