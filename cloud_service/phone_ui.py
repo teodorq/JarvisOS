@@ -349,6 +349,7 @@ def forex_status_page(
     risk_mismatch_count = bounded_count(
         risk.get("realized_r_mismatch_count", 0)
     )
+    risk_coverage_complete = risk.get("risk_coverage_complete") is True
 
     def risk_metric(key: str, suffix: str = "") -> str:
         if not fresh_performance:
@@ -380,7 +381,11 @@ def forex_status_page(
         risk_detail = (
             "Kolejny raport PAPER uzupelni wynik wzgledem ryzyka startowego."
         )
-    elif risk_code == "COMPLETE" and risk_mismatch_count == 0:
+    elif (
+        risk_code == "COMPLETE"
+        and risk_mismatch_count == 0
+        and risk_coverage_complete
+    ):
         risk_class = "ok"
         risk_label = "Pelne dane ryzyka dla biezacej probki"
         risk_detail = (

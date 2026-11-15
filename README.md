@@ -515,9 +515,11 @@ or enables broker/LIVE access.
 The same owner-only report now exposes bounded risk-normalized V3 diagnostics:
 coverage of recorded initial risk, total/average/median R, maximum observed
 drawdown in R and the longest loss streak. The cloud allowlist rejects non-finite
-or oversized values and never transports fills, credentials or executable
-instructions. These diagnostics make differently sized PAPER trades comparable;
-they remain descriptive and cannot validate profitability or enable LIVE.
+or oversized values, and it also rejects inconsistent trade counts, coverage,
+status or missing R metrics. It never transports fills, credentials or
+executable instructions. These diagnostics make differently sized PAPER trades
+comparable; they remain descriptive and cannot validate profitability or enable
+LIVE.
 
 When that threshold is reached, the existing durable PAPER activity history
 adds one owner notification for the frozen candidate. The notification survives

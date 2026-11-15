@@ -259,6 +259,42 @@ class CloudForexStatusTests(unittest.TestCase):
         ):
             sanitize_forex_status(value)
 
+    def test_inconsistent_risk_diagnostics_fail_closed(self) -> None:
+        mutations = (
+            ("closed_trade_count", 5),
+            ("risk_observed_trade_count", 3),
+            ("risk_missing_trade_count", 1),
+            ("risk_coverage_pct", "99.99"),
+            ("risk_coverage_complete", False),
+            ("status", "PARTIAL"),
+            ("maximum_observed_consecutive_losses", 5),
+            ("net_r_multiple", ""),
+        )
+        for field, replacement in mutations:
+            with self.subTest(field=field):
+                value = sample_status()
+                value["v3_performance"]["risk_diagnostics"][field] = (
+                    replacement
+                )
+                with self.assertRaisesRegex(
+                    ForexStatusStoreError,
+                    "invalid_risk_diagnostics",
+                ):
+                    sanitize_forex_status(value)
+
+    def test_legacy_status_without_risk_diagnostics_remains_readable(
+        self,
+    ) -> None:
+        value = sample_status()
+        value["v3_performance"].pop("risk_diagnostics")
+
+        result = sanitize_forex_status(value)
+
+        risk = result["v3_performance"]["risk_diagnostics"]
+        self.assertEqual(risk["status"], "")
+        self.assertFalse(risk["risk_coverage_complete"])
+        self.assertEqual(risk["net_r_multiple"], "")
+
     def test_memory_store_isolated_and_view_reports_freshness(self) -> None:
         store = MemoryForexStatusStore(sample_status())
         first = store.read()

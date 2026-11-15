@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import datetime, timezone
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 import json
 import os
 from pathlib import PurePosixPath
@@ -162,42 +162,87 @@ def _pair_breakdown(value: object) -> dict[str, dict[str, Any]]:
 def _risk_diagnostics(value: object) -> dict[str, Any]:
     """Return bounded, read-only R-multiple diagnostics for the owner."""
 
-    selected = dict(value) if isinstance(value, dict) else {}
+    if value in (None, {}):
+        return {
+            "status": "",
+            "closed_trade_count": 0,
+            "risk_observed_trade_count": 0,
+            "risk_missing_trade_count": 0,
+            "realized_r_mismatch_count": 0,
+            "risk_coverage_pct": "0",
+            "net_r_multiple": "",
+            "average_r_multiple": "",
+            "median_r_multiple": "",
+            "maximum_observed_drawdown_r": "",
+            "maximum_observed_consecutive_losses": 0,
+            "risk_coverage_complete": False,
+        }
+    if not isinstance(value, dict):
+        raise ForexStatusStoreError(
+            "forex_status: invalid_risk_diagnostics"
+        )
+    selected = dict(value)
+    status = _code(selected.get("status", ""), required=True)
+    closed = _count(selected.get("closed_trade_count", 0))
+    observed = _count(selected.get("risk_observed_trade_count", 0))
+    missing = _count(selected.get("risk_missing_trade_count", 0))
+    mismatched = _count(selected.get("realized_r_mismatch_count", 0))
+    coverage_text = _decimal_text(selected.get("risk_coverage_pct", "0"))
+    net_r = _decimal_text(selected.get("net_r_multiple"), optional=True)
+    average_r = _decimal_text(
+        selected.get("average_r_multiple"), optional=True
+    )
+    median_r = _decimal_text(
+        selected.get("median_r_multiple"), optional=True
+    )
+    drawdown_r = _decimal_text(
+        selected.get("maximum_observed_drawdown_r"), optional=True
+    )
+    loss_streak = _count(
+        selected.get("maximum_observed_consecutive_losses", 0)
+    )
+    coverage_complete = selected.get("risk_coverage_complete") is True
+    expected_status = (
+        "NO_CLOSED_TRADES"
+        if closed == 0
+        else (
+            "NO_RISK_TELEMETRY"
+            if observed == 0
+            else ("COMPLETE" if missing == 0 else "PARTIAL")
+        )
+    )
+    expected_coverage = (
+        Decimal(observed) * Decimal("100") / Decimal(closed)
+        if closed
+        else Decimal("0")
+    ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    metrics = (net_r, average_r, median_r, drawdown_r)
+    if (
+        status != expected_status
+        or closed != observed + missing
+        or mismatched > closed
+        or loss_streak > observed
+        or Decimal(coverage_text) != expected_coverage
+        or coverage_complete is not (closed == observed)
+        or (observed == 0 and any(metrics))
+        or (observed > 0 and not all(metrics))
+    ):
+        raise ForexStatusStoreError(
+            "forex_status: invalid_risk_diagnostics"
+        )
     return {
-        "status": _code(selected.get("status", "")),
-        "closed_trade_count": _count(
-            selected.get("closed_trade_count", 0)
-        ),
-        "risk_observed_trade_count": _count(
-            selected.get("risk_observed_trade_count", 0)
-        ),
-        "risk_missing_trade_count": _count(
-            selected.get("risk_missing_trade_count", 0)
-        ),
-        "realized_r_mismatch_count": _count(
-            selected.get("realized_r_mismatch_count", 0)
-        ),
-        "risk_coverage_pct": _decimal_text(
-            selected.get("risk_coverage_pct", "0")
-        ),
-        "net_r_multiple": _decimal_text(
-            selected.get("net_r_multiple"), optional=True
-        ),
-        "average_r_multiple": _decimal_text(
-            selected.get("average_r_multiple"), optional=True
-        ),
-        "median_r_multiple": _decimal_text(
-            selected.get("median_r_multiple"), optional=True
-        ),
-        "maximum_observed_drawdown_r": _decimal_text(
-            selected.get("maximum_observed_drawdown_r"), optional=True
-        ),
-        "maximum_observed_consecutive_losses": _count(
-            selected.get("maximum_observed_consecutive_losses", 0)
-        ),
-        "risk_coverage_complete": (
-            selected.get("risk_coverage_complete") is True
-        ),
+        "status": status,
+        "closed_trade_count": closed,
+        "risk_observed_trade_count": observed,
+        "risk_missing_trade_count": missing,
+        "realized_r_mismatch_count": mismatched,
+        "risk_coverage_pct": coverage_text,
+        "net_r_multiple": net_r,
+        "average_r_multiple": average_r,
+        "median_r_multiple": median_r,
+        "maximum_observed_drawdown_r": drawdown_r,
+        "maximum_observed_consecutive_losses": loss_streak,
+        "risk_coverage_complete": coverage_complete,
     }
 
 
