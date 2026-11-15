@@ -131,6 +131,20 @@ def sample_status() -> dict:
                     "net_realized_pnl_pln": "5.00",
                     "average_trade_pnl_pln": "1.25",
                     "profit_factor": "1.50",
+                    "risk_diagnostics": {
+                        "status": "COMPLETE",
+                        "closed_trade_count": 4,
+                        "risk_observed_trade_count": 4,
+                        "risk_missing_trade_count": 0,
+                        "realized_r_mismatch_count": 0,
+                        "risk_coverage_pct": "100.00",
+                        "net_r_multiple": "0.5000",
+                        "average_r_multiple": "0.1250",
+                        "median_r_multiple": "0.1000",
+                        "maximum_observed_drawdown_r": "0.3000",
+                        "maximum_observed_consecutive_losses": 1,
+                        "risk_coverage_complete": True,
+                    },
                 },
             },
         },
@@ -213,6 +227,11 @@ class CloudForexStatusTests(unittest.TestCase):
         self.assertEqual(risk["risk_coverage_pct"], "100.00")
         self.assertEqual(risk["net_r_multiple"], "0.5000")
         self.assertNotIn("secret", risk)
+        pair_risk = result["v3_performance"]["pair_breakdown"][
+            "EUR_USD"
+        ]["risk_diagnostics"]
+        self.assertEqual(pair_risk["net_r_multiple"], "0.5000")
+        self.assertEqual(pair_risk["average_r_multiple"], "0.1250")
 
         value["real_money_access"] = True
         with self.assertRaisesRegex(ForexStatusStoreError, "unsafe_mode"):
@@ -281,6 +300,16 @@ class CloudForexStatusTests(unittest.TestCase):
                     "invalid_risk_diagnostics",
                 ):
                     sanitize_forex_status(value)
+
+        value = sample_status()
+        value["v3_performance"]["pair_breakdown"]["EUR_USD"][
+            "risk_diagnostics"
+        ]["risk_coverage_pct"] = "75.00"
+        with self.assertRaisesRegex(
+            ForexStatusStoreError,
+            "invalid_risk_diagnostics",
+        ):
+            sanitize_forex_status(value)
 
     def test_legacy_status_without_risk_diagnostics_remains_readable(
         self,

@@ -155,6 +155,9 @@ def _pair_breakdown(value: object) -> dict[str, dict[str, Any]]:
             "profit_factor": _decimal_text(
                 raw_metrics.get("profit_factor"), optional=True
             ),
+            "risk_diagnostics": _risk_diagnostics(
+                raw_metrics.get("risk_diagnostics", {})
+            ),
         }
     return result
 

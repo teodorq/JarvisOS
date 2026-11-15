@@ -520,6 +520,10 @@ status or missing R metrics. It never transports fills, credentials or
 executable instructions. These diagnostics make differently sized PAPER trades
 comparable; they remain descriptive and cannot validate profitability or enable
 LIVE.
+The per-pair owner table carries the same strictly sanitized diagnostics. It
+shows profit factor, total R and average R beside the existing PAPER trade count,
+win rate and PLN result. Missing legacy telemetry is labelled unavailable, and
+the table never enables, disables or ranks pairs automatically.
 
 When that threshold is reached, the existing durable PAPER activity history
 adds one owner notification for the frozen candidate. The notification survives
