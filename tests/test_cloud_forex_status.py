@@ -316,13 +316,49 @@ class CloudForexStatusTests(unittest.TestCase):
     ) -> None:
         value = sample_status()
         value["v3_performance"].pop("risk_diagnostics")
+        value["v3_performance"]["pair_breakdown"]["EUR_USD"].pop(
+            "risk_diagnostics"
+        )
+
+        result = sanitize_forex_status(value)
+        repeated = sanitize_forex_status(result)
+
+        risk = result["v3_performance"]["risk_diagnostics"]
+        pair_risk = result["v3_performance"]["pair_breakdown"][
+            "EUR_USD"
+        ]["risk_diagnostics"]
+        self.assertEqual(risk, {})
+        self.assertEqual(pair_risk, {})
+        self.assertEqual(repeated, result)
+
+    def test_legacy_empty_risk_sentinel_is_normalized_exactly(self) -> None:
+        sentinel = {
+            "status": "",
+            "closed_trade_count": 0,
+            "risk_observed_trade_count": 0,
+            "risk_missing_trade_count": 0,
+            "realized_r_mismatch_count": 0,
+            "risk_coverage_pct": "0",
+            "net_r_multiple": "",
+            "average_r_multiple": "",
+            "median_r_multiple": "",
+            "maximum_observed_drawdown_r": "",
+            "maximum_observed_consecutive_losses": 0,
+            "risk_coverage_complete": False,
+        }
+        value = sample_status()
+        value["v3_performance"]["risk_diagnostics"] = dict(sentinel)
 
         result = sanitize_forex_status(value)
 
-        risk = result["v3_performance"]["risk_diagnostics"]
-        self.assertEqual(risk["status"], "")
-        self.assertFalse(risk["risk_coverage_complete"])
-        self.assertEqual(risk["net_r_multiple"], "")
+        self.assertEqual(result["v3_performance"]["risk_diagnostics"], {})
+        sentinel["risk_coverage_pct"] = "1"
+        value["v3_performance"]["risk_diagnostics"] = sentinel
+        with self.assertRaisesRegex(
+            ForexStatusStoreError,
+            "invalid_code",
+        ):
+            sanitize_forex_status(value)
 
     def test_memory_store_isolated_and_view_reports_freshness(self) -> None:
         store = MemoryForexStatusStore(sample_status())
@@ -368,6 +404,10 @@ class CloudForexStatusTests(unittest.TestCase):
         store = AzureBlobForexStatusStore(blob)
         value = sample_status()
         value["secret"] = "must-not-leak"
+        value["v3_performance"].pop("risk_diagnostics")
+        value["v3_performance"]["pair_breakdown"]["EUR_USD"].pop(
+            "risk_diagnostics"
+        )
         fake_blob_module = types.ModuleType("azure.storage.blob")
         fake_blob_module.ContentSettings = FakeContentSettings
         with patch.dict(
@@ -382,7 +422,15 @@ class CloudForexStatusTests(unittest.TestCase):
             blob.options["content_settings"].content_type,
             "application/json; charset=utf-8",
         )
-        self.assertEqual(store.read()["cycle_id"], "cycle-123")
+        stored = store.read()
+        self.assertEqual(stored["cycle_id"], "cycle-123")
+        self.assertEqual(stored["v3_performance"]["risk_diagnostics"], {})
+        self.assertEqual(
+            stored["v3_performance"]["pair_breakdown"]["EUR_USD"][
+                "risk_diagnostics"
+            ],
+            {},
+        )
         self.assertTrue(store.access_verified)
 
     def test_environment_rejects_blob_path_traversal(self) -> None:

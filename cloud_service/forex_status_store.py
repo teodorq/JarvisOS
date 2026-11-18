@@ -34,6 +34,20 @@ _MAJOR_PAIRS = frozenset({
     "USD_CAD",
     "NZD_USD",
 })
+_LEGACY_EMPTY_RISK_DIAGNOSTICS = {
+    "status": "",
+    "closed_trade_count": 0,
+    "risk_observed_trade_count": 0,
+    "risk_missing_trade_count": 0,
+    "realized_r_mismatch_count": 0,
+    "risk_coverage_pct": "0",
+    "net_r_multiple": "",
+    "average_r_multiple": "",
+    "median_r_multiple": "",
+    "maximum_observed_drawdown_r": "",
+    "maximum_observed_consecutive_losses": 0,
+    "risk_coverage_complete": False,
+}
 
 
 class ForexStatusStoreError(RuntimeError):
@@ -165,21 +179,8 @@ def _pair_breakdown(value: object) -> dict[str, dict[str, Any]]:
 def _risk_diagnostics(value: object) -> dict[str, Any]:
     """Return bounded, read-only R-multiple diagnostics for the owner."""
 
-    if value in (None, {}):
-        return {
-            "status": "",
-            "closed_trade_count": 0,
-            "risk_observed_trade_count": 0,
-            "risk_missing_trade_count": 0,
-            "realized_r_mismatch_count": 0,
-            "risk_coverage_pct": "0",
-            "net_r_multiple": "",
-            "average_r_multiple": "",
-            "median_r_multiple": "",
-            "maximum_observed_drawdown_r": "",
-            "maximum_observed_consecutive_losses": 0,
-            "risk_coverage_complete": False,
-        }
+    if value in (None, {}) or value == _LEGACY_EMPTY_RISK_DIAGNOSTICS:
+        return {}
     if not isinstance(value, dict):
         raise ForexStatusStoreError(
             "forex_status: invalid_risk_diagnostics"

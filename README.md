@@ -524,6 +524,9 @@ The per-pair owner table carries the same strictly sanitized diagnostics. It
 shows profit factor, total R and average R beside the existing PAPER trade count,
 win rate and PLN result. Missing legacy telemetry is labelled unavailable, and
 the table never enables, disables or ranks pairs automatically.
+An absent legacy risk report is normalized to one empty representation before
+storage. The Azure status snapshot is therefore safe to sanitize repeatedly,
+while any non-empty but inconsistent risk report still fails closed.
 
 When that threshold is reached, the existing durable PAPER activity history
 adds one owner notification for the frozen candidate. The notification survives
