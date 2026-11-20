@@ -206,6 +206,7 @@ class CloudForexPaperJobTests(unittest.TestCase):
             },
             "v3_shadow_activation": {
                 "status": "ALREADY_ACTIVE",
+                "review_fingerprint_sha256": "d" * 64,
             },
             "v3_shadow_initialization": {
                 "status": "ALREADY_INITIALIZED_SHADOW_INACTIVE",
@@ -283,6 +284,7 @@ class CloudForexPaperJobTests(unittest.TestCase):
             result["v3_plan_observation_status"], "SHADOW_PLAN_OBSERVED"
         )
         self.assertEqual(result["v3_activation_status"], "ALREADY_ACTIVE")
+        self.assertEqual(result["v3_review_fingerprint_sha256"], "d" * 64)
         self.assertEqual(
             result["v3_initialization_status"],
             "ALREADY_INITIALIZED_SHADOW_INACTIVE",
@@ -373,6 +375,7 @@ class CloudForexPaperJobTests(unittest.TestCase):
             "v3_shadow_activation": {
                 "status": "unsafe status with spaces",
                 "reason": {"secret": "no"},
+                "review_fingerprint_sha256": "not-a-fingerprint",
             },
             "v3_shadow_plan_observation": {
                 "plan": {"reason": "unsafe reason with spaces"},
@@ -386,6 +389,7 @@ class CloudForexPaperJobTests(unittest.TestCase):
         self.assertEqual(result["nbp_source_state"], "")
         self.assertEqual(result["v3_activation_status"], "")
         self.assertEqual(result["v3_activation_reason"], "")
+        self.assertEqual(result["v3_review_fingerprint_sha256"], "")
         self.assertEqual(result["v3_plan_reason"], "")
         self.assertEqual(result["v3_simulation_reason"], "")
 

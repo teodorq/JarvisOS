@@ -305,6 +305,7 @@ class ForexPaperRuntimeTests(unittest.TestCase):
         base_entries: bool = True,
         v3_auto_initialize: bool = False,
         v3_simulation: bool = False,
+        v3_review_fingerprint: str | None = None,
     ):
         return ForexDataSettings(
             enabled=True,
@@ -313,7 +314,9 @@ class ForexPaperRuntimeTests(unittest.TestCase):
             v3_shadow_auto_initialize_enabled=v3_auto_initialize,
             v3_shadow_simulation_enabled=v3_simulation,
             v3_shadow_review_fingerprint=(
-                "d" * 64 if v3_simulation else ""
+                v3_review_fingerprint
+                if v3_review_fingerprint is not None
+                else "d" * 64 if v3_simulation else ""
             ),
             primary_provider=provider,
         )
@@ -522,6 +525,43 @@ class ForexPaperRuntimeTests(unittest.TestCase):
             result["v3_shadow_simulation"]["status"],
             "SHADOW_SIMULATION_WAITING",
         )
+        self.assertEqual(executor.calls, 0)
+        self.assertFalse(result["broker_orders_sent"])
+        self.assertFalse(result["live_orders_sent"])
+        self.assertFalse(result["real_money_access"])
+
+    def test_v3_review_mismatch_reports_only_the_current_fingerprint(self) -> None:
+        executor = FakeV3Executor()
+        with patch(
+            "app.market_data.forex_paper_runtime."
+            "verify_forex_v3_forward_evidence_report",
+            return_value=True,
+        ):
+            result = ForexDemoPaperRuntime(
+                self.root,
+                settings=self.settings(
+                    base_entries=False,
+                    v3_simulation=True,
+                    v3_review_fingerprint="e" * 64,
+                ),
+                gateway=FakeGateway(),  # type: ignore[arg-type]
+                journal=_ready_journal(self.root),
+                v3_forward_evidence=FixedV3ForwardEvidence({
+                    "status": "FORWARD_OBSERVATION_SAMPLE_COMPLETE",
+                    "observation_sample_complete": True,
+                }),  # type: ignore[arg-type]
+                v3_shadow_activator=FakeV3Activator(),  # type: ignore[arg-type]
+                v3_shadow_observer=FakeV3Observer(),  # type: ignore[arg-type]
+                v3_shadow_executor=executor,  # type: ignore[arg-type]
+            ).run_once(cycle_id="v3-review-mismatch", now=NOW)
+
+        activation = result["v3_shadow_activation"]
+        self.assertEqual(
+            activation["status"],
+            "SHADOW_SIMULATION_ACTIVATION_BLOCKED",
+        )
+        self.assertEqual(activation["reason"], "REVIEW_FINGERPRINT_MISMATCH")
+        self.assertEqual(activation["review_fingerprint_sha256"], "d" * 64)
         self.assertEqual(executor.calls, 0)
         self.assertFalse(result["broker_orders_sent"])
         self.assertFalse(result["live_orders_sent"])

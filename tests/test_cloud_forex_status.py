@@ -60,6 +60,7 @@ def sample_status() -> dict:
         "v3_initialization_status": "ALREADY_INITIALIZED_SHADOW_INACTIVE",
         "v3_initialization_reason": "",
         "v3_activation_reason": "",
+        "v3_review_fingerprint_sha256": "d" * 64,
         "v3_plan_observation_status": "SHADOW_PLAN_OBSERVED",
         "v3_plan_reason": "",
         "v3_decision_status": "NO_ACTION",
@@ -207,6 +208,7 @@ class CloudForexStatusTests(unittest.TestCase):
             {"EUR_USD": ["SECOND_SOURCE_UNAVAILABLE"]},
         )
         self.assertEqual(result["v3_activation_status"], "ALREADY_ACTIVE")
+        self.assertEqual(result["v3_review_fingerprint_sha256"], "d" * 64)
         self.assertEqual(
             result["v3_initialization_status"],
             "ALREADY_INITIALIZED_SHADOW_INACTIVE",
@@ -258,6 +260,14 @@ class CloudForexStatusTests(unittest.TestCase):
         value = sample_status()
         value["v3_ready_pair_count"] = 8
         with self.assertRaisesRegex(ForexStatusStoreError, "invalid_count"):
+            sanitize_forex_status(value)
+
+        value = sample_status()
+        value["v3_review_fingerprint_sha256"] = "not-a-fingerprint"
+        with self.assertRaisesRegex(
+            ForexStatusStoreError,
+            "invalid_fingerprint",
+        ):
             sanitize_forex_status(value)
 
         value = sample_status()
@@ -383,6 +393,7 @@ class CloudForexStatusTests(unittest.TestCase):
         self.assertEqual(stale["v3_open_positions"], [])
         self.assertEqual(stale["v3_decision_status"], "STATUS_UNAVAILABLE")
         self.assertEqual(stale["v3_activation_status"], "STATUS_UNAVAILABLE")
+        self.assertEqual(stale["v3_review_fingerprint_sha256"], "")
         self.assertEqual(stale["v3_plan_reason"], "")
         self.assertEqual(stale["v3_reason_codes"], {})
         self.assertEqual(stale["v3_reason_codes_by_pair"], {})

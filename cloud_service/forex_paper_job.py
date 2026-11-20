@@ -37,6 +37,7 @@ _STORAGE_ACCOUNT = re.compile(r"^[a-z0-9]{3,24}$")
 _CONTAINER = re.compile(r"^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])$")
 _BLOB = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$")
 _DIAGNOSTIC_CODE = re.compile(r"^[A-Z0-9_:.-]{1,160}$")
+_SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _PAIR_SYMBOL = re.compile(
     r"^(?:EUR_USD|GBP_USD|USD_JPY|USD_CHF|AUD_USD|USD_CAD|NZD_USD)$"
 )
@@ -318,6 +319,10 @@ def _v3_cycle_diagnostics(
         selected = str(value or "")
         return selected if _DIAGNOSTIC_CODE.fullmatch(selected) else ""
 
+    def safe_fingerprint(value: object) -> str:
+        selected = str(value or "").strip()
+        return selected if _SHA256.fullmatch(selected) else ""
+
     return {
         "v3_initialization_status": safe_code(
             initialization_value.get("status")
@@ -327,6 +332,9 @@ def _v3_cycle_diagnostics(
         ),
         "v3_activation_status": safe_code(activation_value.get("status")),
         "v3_activation_reason": safe_code(activation_value.get("reason")),
+        "v3_review_fingerprint_sha256": safe_fingerprint(
+            activation_value.get("review_fingerprint_sha256")
+        ),
         "v3_plan_observation_status": safe_code(observed.get("status")),
         "v3_plan_reason": safe_code(plan.get("reason")),
         "v3_decision_status": safe_code(plan.get("decision_status")),

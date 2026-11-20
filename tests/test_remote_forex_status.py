@@ -196,6 +196,31 @@ class RemoteForexStatusTests(unittest.TestCase):
         self.assertIn("SYMULACJA V3 AKTYWNA", body)
         self.assertNotIn("FOREX_V3_SHADOW_SIMULATION_ACTIVATED", body)
 
+    def test_owner_page_explains_review_fingerprint_migration_block(self) -> None:
+        status = sample_status()
+        status["observed_at"] = datetime.now(timezone.utc).isoformat()
+        status["v3_forward_sample_complete"] = True
+        status["v3_forward_accepted_cycle_count"] = 20
+        status["v3_forward_accepted_market_day_count"] = 3
+        status["v3_activation_status"] = (
+            "SHADOW_SIMULATION_ACTIVATION_BLOCKED"
+        )
+        status["v3_activation_reason"] = "REVIEW_FINGERPRINT_MISMATCH"
+        status["v3_status"] = "SHADOW_SIMULATION_WAITING"
+        self.store.write(status)
+
+        with urllib.request.urlopen(
+            self.owner_request("/trading"), timeout=2
+        ) as response:
+            body = response.read().decode("utf-8")
+
+        self.assertIn(
+            "Probka gotowa - zatwierdzenie wymaga odswiezenia",
+            body,
+        )
+        self.assertIn("CZEKA NA ODSWIEZENIE ZATWIERDZENIA", body)
+        self.assertNotIn("REVIEW_FINGERPRINT_MISMATCH", body)
+
     def test_owner_page_labels_v3_shadow_fill_events(self) -> None:
         status = sample_status()
         status["observed_at"] = datetime.now(timezone.utc).isoformat()

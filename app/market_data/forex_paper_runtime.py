@@ -374,6 +374,7 @@ class ForexDemoPaperRuntime:
                 return self._v3_simulation_result(
                     "SHADOW_SIMULATION_ACTIVATION_BLOCKED",
                     "REVIEW_FINGERPRINT_MISMATCH",
+                    review_fingerprint_sha256=fingerprint,
                 )
             confirmation = (
                 self.v3_shadow_activator.confirmation_for(fingerprint)
@@ -482,11 +483,26 @@ class ForexDemoPaperRuntime:
             )
 
     @staticmethod
-    def _v3_simulation_result(status: str, reason: str) -> dict[str, Any]:
+    def _v3_simulation_result(
+        status: str,
+        reason: str,
+        *,
+        review_fingerprint_sha256: object = "",
+    ) -> dict[str, Any]:
+        fingerprint = str(review_fingerprint_sha256 or "").strip()
+        if (
+            len(fingerprint) != 64
+            or any(
+                character not in "0123456789abcdef"
+                for character in fingerprint
+            )
+        ):
+            fingerprint = ""
         return {
             "status": status,
             "mode": "FOREX_V3_SHADOW_PAPER_ONLY",
             "reason": str(reason)[:160],
+            "review_fingerprint_sha256": fingerprint,
             "executions": [],
             "shadow_execution_enabled": False,
             "paper_orders_sent": False,

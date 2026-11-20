@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from types import SimpleNamespace
 
 from PySide6.QtCore import (
     QCoreApplication,
@@ -14,6 +15,20 @@ from app.gui.client_background_reads import (
     ClientBackgroundReadRuntime,
     submit_client_read,
 )
+from app.gui.client_forex_activity import ClientForexActivityRuntime
+
+
+class _ClosedClientWindow(QObject):
+    def __init__(self) -> None:
+        super().__init__()
+        self.owner_window = SimpleNamespace(
+            performance_profile=None,
+            assistant=None,
+        )
+
+    @staticmethod
+    def isVisible() -> bool:
+        raise RuntimeError("Internal C++ object already deleted")
 
 
 def test_client_read_lane_is_isolated_from_global_worker_backlog() -> None:
@@ -74,3 +89,10 @@ def test_client_read_lane_rejects_overlapping_network_work() -> None:
     assert first is True
     assert second is False
     assert results == ["first"]
+
+
+def test_delayed_forex_poll_ignores_a_closed_qt_window() -> None:
+    QCoreApplication.instance() or QCoreApplication([])
+    runtime = ClientForexActivityRuntime(_ClosedClientWindow())
+
+    runtime.poll()

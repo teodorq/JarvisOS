@@ -477,12 +477,24 @@ def forex_status_page(
         "WAITING_FOR_FORWARD_SAMPLE": (
             "Plan V3 czeka na ukonczenie wymaganej probki."
         ),
+        "REVIEW_FINGERPRINT_MISMATCH": (
+            "Probka jest kompletna, ale po migracji wymaga odswiezenia "
+            "kontrolowanego zatwierdzenia PAPER."
+        ),
         "STATUS_UNAVAILABLE": "Status V3 jest chwilowo niedostepny.",
     }
     if selected.get("fresh") is not True:
         evidence_class = "warn"
         evidence_label = "Postep niedostepny do czasu swiezego raportu"
         evidence_detail = "Najpierw potrzebny jest nowy poprawny cykl PAPER."
+    elif (
+        evidence_complete
+        and evidence_valid
+        and evidence_reason_code == "REVIEW_FINGERPRINT_MISMATCH"
+    ):
+        evidence_class = "warn"
+        evidence_label = "Probka gotowa - zatwierdzenie wymaga odswiezenia"
+        evidence_detail = evidence_reason_labels[evidence_reason_code]
     elif evidence_complete and evidence_valid:
         evidence_class = "ok"
         evidence_label = "Probka gotowa do recznego przegladu"
@@ -616,6 +628,13 @@ def forex_status_page(
                 "AKTYWNA - TYLKO PAPER",
                 "ok",
                 "Wyniki powstaja wyłącznie w izolowanym portfelu symulacyjnym.",
+            )
+        elif evidence_reason_code == "REVIEW_FINGERPRINT_MISMATCH":
+            simulation_gate = (
+                "CZEKA NA ODSWIEZENIE ZATWIERDZENIA",
+                "warn",
+                "Probka jest kompletna, a symulacja pozostaje bezpiecznie "
+                "wylaczona do zgodnosci odcisku PAPER.",
             )
         elif "BLOCKED" in simulation_code:
             simulation_gate = (

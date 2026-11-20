@@ -24,6 +24,7 @@ _CONTAINER = re.compile(r"^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])?$")
 _BLOB = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,255}$")
 _CODE = re.compile(r"^[A-Z0-9][A-Z0-9_:.-]{0,159}$")
 _CYCLE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}$")
+_SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _PAIR = re.compile(r"^[A-Z]{3}_[A-Z]{3}$")
 _MAJOR_PAIRS = frozenset({
     "EUR_USD",
@@ -79,6 +80,15 @@ def _cycle_id(value: object) -> str:
     selected = str(value or "").strip()
     if not _CYCLE_ID.fullmatch(selected):
         raise ForexStatusStoreError("forex_status: invalid_cycle_id")
+    return selected
+
+
+def _fingerprint(value: object) -> str:
+    selected = str(value or "").strip()
+    if not selected:
+        return ""
+    if not _SHA256.fullmatch(selected):
+        raise ForexStatusStoreError("forex_status: invalid_fingerprint")
     return selected
 
 
@@ -470,6 +480,9 @@ def sanitize_forex_status(value: object) -> dict[str, Any]:
         "v3_activation_reason": _code(
             value.get("v3_activation_reason", "")
         ),
+        "v3_review_fingerprint_sha256": _fingerprint(
+            value.get("v3_review_fingerprint_sha256", "")
+        ),
         "v3_plan_observation_status": _code(
             value.get("v3_plan_observation_status", "")
         ),
@@ -574,6 +587,7 @@ def forex_status_view(
             "v3_forward_exclusions": {},
             "v3_forward_invalid_issues": {},
             "v3_activation_reason": "",
+            "v3_review_fingerprint_sha256": "",
             "v3_plan_reason": "",
             "v3_decision_status": "STATUS_UNAVAILABLE",
             "v3_simulation_reason": "",

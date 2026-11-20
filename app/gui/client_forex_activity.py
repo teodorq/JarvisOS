@@ -29,10 +29,15 @@ class ClientForexActivityRuntime:
         QTimer.singleShot(1200, self.poll)
 
     def poll(self) -> None:
-        visible = getattr(self.window, "isVisible", None)
-        if callable(visible) and not visible():
+        try:
+            visible = getattr(self.window, "isVisible", None)
+            if callable(visible) and not visible():
+                return
+            owner_window = self.window.owner_window
+        except (AttributeError, RuntimeError):
+            # A delayed single-shot may outlive the underlying Qt window.
             return
-        assistant = getattr(self.window.owner_window, "assistant", None)
+        assistant = getattr(owner_window, "assistant", None)
         trading = getattr(assistant, "trading", None)
         feed = getattr(trading, "forex_activity", None)
         poll = getattr(feed, "poll", None)
@@ -41,10 +46,13 @@ class ClientForexActivityRuntime:
         submit_client_read(self.window, poll, self._deliver, lambda _error: None)
 
     def _deliver(self, event: object) -> None:
-        if isinstance(event, dict):
-            self.window._safe_proactivity_runtime().deliver(
-                event, priority=30, kind="forex_paper"
-            )
+        if not isinstance(event, dict):
+            return
+        try:
+            runtime = self.window._safe_proactivity_runtime()
+        except (AttributeError, RuntimeError):
+            return
+        runtime.deliver(event, priority=30, kind="forex_paper")
 
 
 def arm_client_forex_activity(window: Any) -> None:
