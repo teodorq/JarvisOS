@@ -95,19 +95,26 @@ def _market_closed(
     *,
     observed_at: str,
     age_seconds: int,
+    awaiting_cloud_sync: bool = False,
 ) -> dict[str, Any]:
     """Hide time-sensitive values without presenting a weekend as a fault."""
 
     result = _blocked(
-        "Rynek Forex jest zamknięty. Ostatnie potwierdzenie z Azure "
-        "pozostaje zapisane, ale wyceny i pozycje są ukryte do pierwszego "
-        "świeżego cyklu po otwarciu rynku.",
+        (
+            "Rynek Forex jest zamknięty. Trwa bezpieczne pobieranie "
+            "ostatniego potwierdzenia z Azure."
+            if awaiting_cloud_sync
+            else "Rynek Forex jest zamknięty. Ostatnie potwierdzenie z "
+            "Azure pozostaje zapisane, ale wyceny i pozycje są ukryte do "
+            "pierwszego świeżego cyklu po otwarciu rynku."
+        ),
         observed_at=observed_at,
         age_seconds=age_seconds,
     )
     result.update({
         "status": "MARKET_CLOSED_IDLE",
         "market_window_open": False,
+        "awaiting_cloud_sync": awaiting_cloud_sync,
         "performance_review": {
             "status": "MARKET_CLOSED_IDLE",
             "source_valid": False,
@@ -528,6 +535,7 @@ class CloudForexStatusSource:
         self._latest: dict[str, Any] | None = None
         self._last_attempt = float("-inf")
         self._refreshing = False
+        self._last_refresh_failed = False
 
     @property
     def is_configured(self) -> bool:
@@ -539,10 +547,22 @@ class CloudForexStatusSource:
         self._start_refresh_if_due()
         with self._lock:
             latest = deepcopy(self._latest)
+            last_refresh_failed = self._last_refresh_failed
         if latest is None:
+            if (
+                not last_refresh_failed
+                and not forex_market_open(self.now())
+            ):
+                return _market_closed(
+                    observed_at="",
+                    age_seconds=0,
+                    awaiting_cloud_sync=True,
+                )
             return _blocked(
-                "Czekam na aktualne potwierdzenie Azure PAPER. Stare pozycje "
-                "pozostają ukryte."
+                "Nie udało się jeszcze pobrać potwierdzenia Azure PAPER. "
+                "Stare pozycje pozostają ukryte."
+                if last_refresh_failed
+                else "Łączę z Azure PAPER. Stare pozycje pozostają ukryte."
             )
         return project_cloud_forex_status(latest, now=self.now())
 
@@ -554,6 +574,9 @@ class CloudForexStatusSource:
         with self._lock:
             if isinstance(value, dict):
                 self._latest = deepcopy(value)
+                self._last_refresh_failed = False
+            else:
+                self._last_refresh_failed = True
             self._last_attempt = self.monotonic()
             self._refreshing = False
 

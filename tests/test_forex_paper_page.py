@@ -197,6 +197,13 @@ class _MarketClosedCloudDashboard(_StaleCloudDashboard):
         return value
 
 
+class _MarketClosedSyncDashboard(_MarketClosedCloudDashboard):
+    def snapshot(self) -> dict:
+        value = super().snapshot()
+        value.update({"awaiting_cloud_sync": True, "observed_at": ""})
+        return value
+
+
 def test_forex_page_shows_position_and_has_no_execution_controls() -> None:
     app = QApplication.instance() or QApplication([])
     page = ForexPaperPage(_Dashboard(), activity=_Activity())
@@ -308,6 +315,21 @@ def test_forex_page_presents_weekend_as_safe_pause_not_failure() -> None:
         assert page.metrics["balance"].value_label.text() == "N/D"
         assert page.metrics["positions"].value_label.text() == "N/D"
         assert "WYMAGA UWAGI" not in page.overall.full_text
+    finally:
+        page.timer.stop()
+        page.deleteLater()
+        app.processEvents()
+
+
+def test_forex_page_presents_initial_weekend_sync_without_red_alarm() -> None:
+    app = QApplication.instance() or QApplication([])
+    page = ForexPaperPage(_MarketClosedSyncDashboard())
+    try:
+        assert page.data_warning.isHidden()
+        assert not page.market_closed_notice.isHidden()
+        assert "SYNCHRONIZACJA" in page.market_closed_notice.text().upper()
+        assert page.updated.text() == "Synchronizacja z Azure: w toku"
+        assert page.overall.full_text == "RYNEK ZAMKNIĘTY"
     finally:
         page.timer.stop()
         page.deleteLater()

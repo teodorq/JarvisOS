@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import threading
 
 from app.cloud.forex_status import (
     CloudForexStatusSource,
@@ -23,6 +24,22 @@ class _Client:
     def forex_status(self) -> dict:
         self.calls += 1
         return dict(self.value)
+
+
+class _BlockingClient(_Client):
+    def __init__(self, value: dict) -> None:
+        super().__init__(value)
+        self.release = threading.Event()
+
+    def forex_status(self) -> dict:
+        self.release.wait(timeout=2)
+        return super().forex_status()
+
+
+class _FailingClient(_Client):
+    def forex_status(self) -> dict:
+        self.calls += 1
+        raise OSError("offline")
 
 
 def test_fresh_cloud_status_projects_current_paper_position() -> None:
@@ -177,3 +194,36 @@ def test_source_refreshes_the_private_status_without_ui_thread_networking() -> N
     assert snapshot is not None
     assert snapshot["data_fresh"] is True
     assert snapshot["positions"][0]["pair"] == "EUR_USD"
+
+
+def test_source_shows_neutral_market_pause_during_first_background_sync() -> None:
+    saturday = datetime(2026, 11, 21, 12, 0, tzinfo=timezone.utc)
+    payload = forex_status_view(sample_status(), now=NOW)
+    client = _BlockingClient(payload)
+    source = CloudForexStatusSource(client, now=lambda: saturday)
+
+    try:
+        snapshot = source.snapshot()
+
+        assert snapshot is not None
+        assert snapshot["status"] == "MARKET_CLOSED_IDLE"
+        assert snapshot["awaiting_cloud_sync"] is True
+        assert snapshot["positions"] == []
+        assert "pobieranie" in snapshot["message"]
+    finally:
+        client.release.set()
+
+
+def test_source_does_not_hide_a_failed_refresh_as_weekend_sync() -> None:
+    saturday = datetime(2026, 11, 21, 12, 0, tzinfo=timezone.utc)
+    source = CloudForexStatusSource(
+        _FailingClient({}),
+        now=lambda: saturday,
+    )
+
+    source.refresh_now()
+    snapshot = source.snapshot()
+
+    assert snapshot is not None
+    assert snapshot["status"] == "STALE_DATA_BLOCKED"
+    assert "Nie udało" in snapshot["message"]

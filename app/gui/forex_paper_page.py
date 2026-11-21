@@ -201,9 +201,18 @@ class ForexPaperPage(QWidget):
         except Exception:
             snapshot = {"status": "BLOCKED", "positions": [], "message": "Podgląd jest chwilowo niedostępny."}
         market_closed = snapshot.get("status") == "MARKET_CLOSED_IDLE"
+        awaiting_cloud = snapshot.get("awaiting_cloud_sync") is True
         stale_data = snapshot.get("data_fresh") is False
         self.data_warning.setVisible(stale_data and not market_closed)
         self.market_closed_notice.setVisible(market_closed)
+        self.market_closed_notice.setText(
+            "RYNEK FOREX JEST ZAMKNIĘTY — trwa bezpieczna synchronizacja "
+            "ostatniego potwierdzenia z Azure."
+            if awaiting_cloud else
+            "RYNEK FOREX JEST ZAMKNIĘTY — ostatni potwierdzony stan został "
+            "zachowany. Wyceny i pozycje pojawią się po pierwszym świeżym "
+            "cyklu po otwarciu rynku."
+        )
         label, tone, safety_banner = forex_paper_safety_view(snapshot)
         self.overall.set_status(label, tone)
         review_label, review_tone, review_detail = (
@@ -307,6 +316,8 @@ class ForexPaperPage(QWidget):
             else "Ostatnia aktualizacja: "
         )
         self.updated.setText(
+            "Synchronizacja z Azure: w toku"
+            if awaiting_cloud else
             update_prefix + visible_forex_time(snapshot.get("observed_at"))
         )
         self.safety.setText(safety_banner)
