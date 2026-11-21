@@ -13,6 +13,11 @@ def _count(value: object) -> int:
 def forex_v2_research_text(value: object) -> str:
     review = dict(value) if isinstance(value, dict) else {}
     status = str(review.get("status", ""))
+    if status == "MARKET_CLOSED_IDLE":
+        return (
+            "Badanie V2: pauza rynkowa. Dowody pozostają bez zmian, "
+            "a zbieranie danych wznowi się po otwarciu Forex."
+        )
     if review.get("source_valid") is not True:
         return (
             "Badanie V2: dowody są niespójne lub niedostępne. "

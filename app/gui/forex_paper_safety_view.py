@@ -8,6 +8,14 @@ from typing import Any, Mapping
 def forex_paper_safety_view(
     snapshot: Mapping[str, Any],
 ) -> tuple[str, str, str]:
+    if snapshot.get("status") == "MARKET_CLOSED_IDLE":
+        return (
+            "RYNEK ZAMKNIĘTY",
+            "neutral",
+            "● PAPER ONLY   ● BROKER: BRAK ZLECEŃ   "
+            "● PRAWDZIWE PIENIĄDZE: BRAK DOSTĘPU   "
+            "● NOWE WEJŚCIA: RYNEK ZAMKNIĘTY",
+        )
     ready = snapshot.get("status") == "READY"
     raw = snapshot.get("loss_streak_safety")
     safety = dict(raw) if isinstance(raw, dict) else {}

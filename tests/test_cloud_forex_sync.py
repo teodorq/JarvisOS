@@ -100,6 +100,38 @@ def test_desktop_clock_blocks_stale_payload_even_if_server_claims_fresh() -> Non
     assert "nieaktualne" in snapshot["message"]
 
 
+def test_weekend_projects_safe_market_pause_without_exposing_old_prices() -> None:
+    friday_close = datetime(2026, 11, 20, 20, 2, tzinfo=timezone.utc)
+    status = sample_status()
+    status["observed_at"] = friday_close.isoformat()
+    payload = forex_status_view(status, now=friday_close)
+
+    snapshot = project_cloud_forex_status(
+        payload,
+        now=datetime(2026, 11, 21, 12, 0, tzinfo=timezone.utc),
+    )
+
+    assert snapshot["status"] == "MARKET_CLOSED_IDLE"
+    assert snapshot["data_fresh"] is False
+    assert snapshot["valuation_available"] is False
+    assert snapshot["positions"] == []
+    assert snapshot["position_protection"]["market_window_open"] is False
+    assert snapshot["position_protection"]["attention_required"] is False
+    assert "zamknięty" in snapshot["message"]
+
+
+def test_weekend_does_not_hide_an_ancient_cloud_outage_as_market_pause() -> None:
+    payload = forex_status_view(sample_status(), now=NOW)
+
+    snapshot = project_cloud_forex_status(
+        payload,
+        now=datetime(2026, 11, 28, 12, 0, tzinfo=timezone.utc),
+    )
+
+    assert snapshot["status"] == "STALE_DATA_BLOCKED"
+    assert "nieaktualne" in snapshot["message"]
+
+
 def test_unsafe_cloud_flags_block_the_entire_current_state() -> None:
     payload = forex_status_view(sample_status(), now=NOW)
     payload["real_money_access"] = True

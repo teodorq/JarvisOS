@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from PySide6.QtCore import Qt, QTimer
@@ -23,6 +21,11 @@ from PySide6.QtWidgets import (
 
 from app.gui.business_widgets import MetricCard, SectionCard, StatusPill
 from app.gui.forex_pair_results_table import ForexPairResultsTable
+from app.gui.forex_paper_formatting import (
+    fill_forex_positions,
+    forex_pnl_hint,
+    visible_forex_time,
+)
 from app.gui.forex_performance_review_view import forex_performance_review_view
 from app.gui.forex_paper_safety_view import forex_paper_safety_view
 from app.gui.forex_paper_table_style import configure_forex_table
@@ -123,6 +126,15 @@ class ForexPaperPage(QWidget):
         self.data_warning.setWordWrap(True)
         self.data_warning.hide()
         card.content_layout.addWidget(self.data_warning)
+        self.market_closed_notice = QLabel(
+            "RYNEK FOREX JEST ZAMKNIĘTY — ostatni potwierdzony stan został "
+            "zachowany. Wyceny i pozycje pojawią się po pierwszym świeżym "
+            "cyklu po otwarciu rynku."
+        )
+        self.market_closed_notice.setObjectName("Muted")
+        self.market_closed_notice.setWordWrap(True)
+        self.market_closed_notice.hide()
+        card.content_layout.addWidget(self.market_closed_notice)
         self.updated = QLabel("Ostatnia aktualizacja: —")
         self.updated.setObjectName("Muted")
         card.content_layout.addWidget(self.updated)
@@ -188,8 +200,10 @@ class ForexPaperPage(QWidget):
             snapshot = dict(value) if isinstance(value, dict) else {}
         except Exception:
             snapshot = {"status": "BLOCKED", "positions": [], "message": "Podgląd jest chwilowo niedostępny."}
+        market_closed = snapshot.get("status") == "MARKET_CLOSED_IDLE"
         stale_data = snapshot.get("data_fresh") is False
-        self.data_warning.setVisible(stale_data)
+        self.data_warning.setVisible(stale_data and not market_closed)
+        self.market_closed_notice.setVisible(market_closed)
         label, tone, safety_banner = forex_paper_safety_view(snapshot)
         self.overall.set_status(label, tone)
         review_label, review_tone, review_detail = (
@@ -205,7 +219,10 @@ class ForexPaperPage(QWidget):
         )
         self.protection.set_status(protection_label, protection_tone)
         self.protection_detail.setText(protection_detail)
-        self.metrics["balance"].set_value(f"{snapshot.get('balance_pln', '0.00')} PLN")
+        self.metrics["balance"].set_value(
+            "N/D" if market_closed
+            else f"{snapshot.get('balance_pln', '0.00')} PLN"
+        )
         valuation_available = snapshot.get("valuation_available") is not False
         if valuation_available:
             self.metrics["equity"].set_value(
@@ -214,7 +231,7 @@ class ForexPaperPage(QWidget):
             self.metrics["equity"].set_hint("")
             pnl = str(snapshot.get("unrealized_pnl_pln", "0.00"))
             self.metrics["unrealized"].set_value(f"{pnl} PLN")
-            self.metrics["unrealized"].set_hint(self._pnl_hint(pnl))
+            self.metrics["unrealized"].set_hint(forex_pnl_hint(pnl))
         else:
             self.metrics["equity"].set_value("N/D")
             self.metrics["equity"].set_hint(
@@ -227,7 +244,9 @@ class ForexPaperPage(QWidget):
         raw_positions = [] if stale_data else snapshot.get("positions")
         raw_positions = raw_positions if isinstance(raw_positions, list) else []
         positions = [dict(item) for item in raw_positions[:5] if isinstance(item, dict)]
-        self.metrics["positions"].set_value(str(len(positions)))
+        self.metrics["positions"].set_value(
+            "N/D" if market_closed else str(len(positions))
+        )
         performance = snapshot.get("performance")
         performance = (
             dict(performance) if isinstance(performance, dict) else {}
@@ -236,17 +255,22 @@ class ForexPaperPage(QWidget):
         required = int(
             performance.get("minimum_closed_trades_for_review", 20) or 20
         )
-        self.metrics["closed"].set_value(f"{closed} / {required}")
+        self.metrics["closed"].set_value(
+            "N/D" if market_closed else f"{closed} / {required}"
+        )
         pair_review = performance.get("pair_review")
         pair_review = dict(pair_review) if isinstance(pair_review, dict) else {}
         self.metrics["closed"].set_hint(
             f"Pary do przeglądu: {pair_review.get('ready_pair_count', 0)}/7"
         )
         average = str(performance.get("average_trade_pnl_pln", "0.00"))
-        self.metrics["average"].set_value(f"{average} PLN")
+        self.metrics["average"].set_value(
+            "N/D" if market_closed else f"{average} PLN"
+        )
         factor = performance.get("profit_factor")
         self.metrics["profit_factor"].set_value(
-            str(factor) if factor is not None else "N/D"
+            "N/D" if market_closed
+            else str(factor) if factor is not None else "N/D"
         )
         drawdown = str(
             performance.get("maximum_closed_trade_drawdown_pln", "0.00")
@@ -254,12 +278,22 @@ class ForexPaperPage(QWidget):
         drawdown_pct = str(
             performance.get("maximum_closed_trade_drawdown_pct", "0.00")
         )
-        self.metrics["drawdown"].set_value(f"{drawdown} PLN")
+        self.metrics["drawdown"].set_value(
+            "N/D" if market_closed else f"{drawdown} PLN"
+        )
         self.metrics["drawdown"].set_hint(f"{drawdown_pct}% zamkniętej krzywej")
         raw_pairs = performance.get("pair_breakdown")
         pair_breakdown = dict(raw_pairs) if isinstance(raw_pairs, dict) else {}
         self.pair_table.set_values(pair_breakdown)
-        self._fill_positions(positions)
+        fill_forex_positions(
+            self.table,
+            positions,
+            column_count=len(self.HEADERS),
+            empty_message=(
+                "POZYCJE UKRYTE DO PIERWSZEGO CYKLU PO OTWARCIU RYNKU"
+                if market_closed else "BRAK OTWARTYCH POZYCJI PAPER"
+            ),
+        )
         history = []
         if self.activity is not None:
             try:
@@ -268,15 +302,19 @@ class ForexPaperPage(QWidget):
                 history = []
         self._fill_history(history)
         update_prefix = (
-            "Dane nieaktualne od: " if stale_data else "Ostatnia aktualizacja: "
+            "Ostatni potwierdzony stan: " if market_closed
+            else "Dane nieaktualne od: " if stale_data
+            else "Ostatnia aktualizacja: "
         )
         self.updated.setText(
-            update_prefix + self._visible_time(snapshot.get("observed_at"))
+            update_prefix + visible_forex_time(snapshot.get("observed_at"))
         )
         self.safety.setText(safety_banner)
         message = str(snapshot.get("message", "Gotowy."))[:240]
         decision = forex_runtime_cycle_text(snapshot.get("last_runtime_cycle"))
-        self.message.setText(f"{message}\n{decision}")
+        self.message.setText(
+            message if market_closed else f"{message}\n{decision}"
+        )
 
     def _fill_history(self, history: list[object]) -> None:
         events = [dict(item) for item in history[-50:] if isinstance(item, dict)]
@@ -309,7 +347,7 @@ class ForexPaperPage(QWidget):
         }
         for row, event in enumerate(reversed(events)):
             values = (
-                self._visible_time(event.get("occurred_at")),
+                visible_forex_time(event.get("occurred_at")),
                 names.get(str(event.get("kind", "")), "AKTYWNOŚĆ"),
                 str(event.get("message", ""))[:420],
                 str(event.get("delivery_status", "HISTORIA")),
@@ -322,51 +360,5 @@ class ForexPaperPage(QWidget):
                     else Qt.AlignCenter
                 )
                 self.history_table.setItem(row, column, item)
-
-    def _fill_positions(self, positions: list[dict[str, Any]]) -> None:
-        self.table.clearSpans()
-        if not positions:
-            self.table.setRowCount(1)
-            item = QTableWidgetItem("BRAK OTWARTYCH POZYCJI PAPER")
-            item.setTextAlignment(Qt.AlignCenter)
-            self.table.setItem(0, 0, item)
-            self.table.setSpan(0, 0, 1, len(self.HEADERS))
-            return
-        self.table.setRowCount(len(positions))
-        keys = ("pair", "side", "units", "entry_price", "current_price", "stop_loss", "take_profit", "initial_risk_pln")
-        for row, position in enumerate(positions):
-            values = [str(position.get(key, "—")) for key in keys]
-            values[0] = values[0].replace("_", "/")
-            values[1] = "KUPNO / LONG" if values[1] == "LONG" else "SPRZEDAŻ / SHORT"
-            values[-1] = f"{values[-1]} PLN" if position.get("risk_recorded") else "BRAK ZAPISU"
-            for column, value in enumerate(values):
-                item = QTableWidgetItem(value)
-                item.setTextAlignment(Qt.AlignCenter)
-                self.table.setItem(row, column, item)
-
-    @staticmethod
-    def _visible_time(value: object) -> str:
-        text = str(value or "").strip()
-        if not text:
-            return "lokalna księga"
-        try:
-            return datetime.fromisoformat(text.replace("Z", "+00:00")).astimezone().strftime("%d.%m.%Y %H:%M:%S")
-        except ValueError:
-            return text[:32]
-
-    @staticmethod
-    def _pnl_hint(value: object) -> str:
-        try:
-            number = Decimal(str(value))
-        except (InvalidOperation, ValueError):
-            number = Decimal("0")
-        if not number.is_finite():
-            number = Decimal("0")
-        if number > 0:
-            return "ZYSK"
-        if number < 0:
-            return "STRATA"
-        return "BEZ ZMIAN"
-
 
 __all__ = ["ForexPaperPage"]

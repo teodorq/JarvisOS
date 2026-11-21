@@ -15,9 +15,11 @@ from app.trading.forex_cloud_activity import (
     ForexCloudActivityError,
     sanitize_forex_cloud_activity_events,
 )
+from app.trading.forex_market_hours import forex_market_open
 
 
 FOREX_CLOUD_STATUS_MAX_AGE_SECONDS = 7_200
+FOREX_CLOUD_CLOSED_GRACE_SECONDS = 72 * 60 * 60
 FOREX_CLOUD_STATUS_REFRESH_SECONDS = 60.0
 _PAIRS = {
     "EUR_USD", "GBP_USD", "USD_JPY", "USD_CHF",
@@ -87,6 +89,42 @@ def _blocked(
         "real_money_access": False,
         "message": message,
     }
+
+
+def _market_closed(
+    *,
+    observed_at: str,
+    age_seconds: int,
+) -> dict[str, Any]:
+    """Hide time-sensitive values without presenting a weekend as a fault."""
+
+    result = _blocked(
+        "Rynek Forex jest zamknięty. Ostatnie potwierdzenie z Azure "
+        "pozostaje zapisane, ale wyceny i pozycje są ukryte do pierwszego "
+        "świeżego cyklu po otwarciu rynku.",
+        observed_at=observed_at,
+        age_seconds=age_seconds,
+    )
+    result.update({
+        "status": "MARKET_CLOSED_IDLE",
+        "market_window_open": False,
+        "performance_review": {
+            "status": "MARKET_CLOSED_IDLE",
+            "source_valid": False,
+            "packet_persisted": False,
+            "review_snapshot_frozen": False,
+            "live_activation_ready": False,
+        },
+        "v2_research": {"status": "MARKET_CLOSED_IDLE"},
+        "position_protection": {
+            "available": True,
+            "status": "MARKET_CLOSED_IDLE",
+            "attention_required": False,
+            "stale": False,
+            "market_window_open": False,
+        },
+    })
+    return result
 
 
 def _position(value: object) -> dict[str, Any]:
@@ -211,6 +249,27 @@ def project_cloud_forex_status(
     except (TypeError, ValueError, OverflowError):
         return _blocked("Raport Azure PAPER ma nieprawidłowy czas odczytu.")
     age = max(0, raw_age)
+    paper_only_confirmed = bool(
+        all(
+            value.get(key) is False
+            for key in (
+                "broker_orders_sent",
+                "live_orders_sent",
+                "real_money_access",
+            )
+        )
+        and "PAPER" in str(value.get("mode", "")).upper()
+    )
+    if (
+        raw_age >= -300
+        and age <= FOREX_CLOUD_CLOSED_GRACE_SECONDS
+        and paper_only_confirmed
+        and not forex_market_open(selected_now)
+    ):
+        return _market_closed(
+            observed_at=observed.astimezone(timezone.utc).isoformat(),
+            age_seconds=age,
+        )
     stale = bool(
         raw_age < -300
         or age > FOREX_CLOUD_STATUS_MAX_AGE_SECONDS

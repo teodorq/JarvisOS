@@ -34,6 +34,7 @@ from app.trading.forex_models import (
     MAJOR_FOREX_PAIRS,
     USD_PLN_CONVERSION_PAIR,
 )
+from app.trading.forex_market_hours import forex_market_open
 from app.trading.models import TradingValidationError, aware_utc
 
 
@@ -361,15 +362,7 @@ class ForexReadOnlyDataGateway:
 
     @staticmethod
     def market_open(now: datetime) -> bool:
-        selected = aware_utc(now)
-        weekday = selected.weekday()
-        if weekday <= 3:
-            return True
-        if weekday == 4:
-            return selected.hour < 21
-        if weekday == 5:
-            return False
-        return selected.hour >= 22
+        return forex_market_open(now)
 
 
 __all__ = ["ForexDataGatePolicy", "ForexReadOnlyDataGateway"]

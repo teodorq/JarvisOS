@@ -90,6 +90,13 @@ def forex_performance_review_view(
     source_valid = review.get("source_valid") is True
     persisted = review.get("packet_persisted") is True
     frozen = review.get("review_snapshot_frozen") is True
+    if status == "MARKET_CLOSED_IDLE":
+        return (
+            "PRÓBKA: PAUZA RYNKOWA",
+            "neutral",
+            "Próbka PAPER nie zmienia się podczas zamkniętego rynku. "
+            "Aktualny wynik pojawi się po pierwszym świeżym cyklu.",
+        )
     if _risk_evidence_invalid(performance):
         return (
             "PRÓBKA: BLOKADA",

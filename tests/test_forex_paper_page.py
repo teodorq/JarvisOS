@@ -177,6 +177,26 @@ class _StaleCloudDashboard(_Dashboard):
         return value
 
 
+class _MarketClosedCloudDashboard(_StaleCloudDashboard):
+    def snapshot(self) -> dict:
+        value = super().snapshot()
+        value.update({
+            "status": "MARKET_CLOSED_IDLE",
+            "message": "Rynek Forex jest zamknięty.",
+            "performance": {},
+            "performance_review": {"status": "MARKET_CLOSED_IDLE"},
+            "v2_research": {"status": "MARKET_CLOSED_IDLE"},
+            "position_protection": {
+                "available": True,
+                "status": "MARKET_CLOSED_IDLE",
+                "attention_required": False,
+                "stale": False,
+                "market_window_open": False,
+            },
+        })
+        return value
+
+
 def test_forex_page_shows_position_and_has_no_execution_controls() -> None:
     app = QApplication.instance() or QApplication([])
     page = ForexPaperPage(_Dashboard(), activity=_Activity())
@@ -267,6 +287,27 @@ def test_forex_page_hides_positions_and_warns_when_cloud_status_is_stale() -> No
         assert "NIEAKTUALNE" in page.data_warning.text()
         assert page.updated.text().startswith("Dane nieaktualne od:")
         assert page.overall.full_text == "WYMAGA UWAGI"
+    finally:
+        page.timer.stop()
+        page.deleteLater()
+        app.processEvents()
+
+
+def test_forex_page_presents_weekend_as_safe_pause_not_failure() -> None:
+    app = QApplication.instance() or QApplication([])
+    page = ForexPaperPage(_MarketClosedCloudDashboard())
+    try:
+        assert page.data_warning.isHidden()
+        assert not page.market_closed_notice.isHidden()
+        assert "RYNEK FOREX JEST ZAMKNIĘTY" in page.market_closed_notice.text()
+        assert "POZYCJE UKRYTE" in page.table.item(0, 0).text()
+        assert page.updated.text().startswith("Ostatni potwierdzony stan:")
+        assert page.overall.full_text == "RYNEK ZAMKNIĘTY"
+        assert page.sample_review.full_text == "PRÓBKA: PAUZA RYNKOWA"
+        assert page.protection.full_text == "OCHRONA: RYNEK ZAMKNIĘTY"
+        assert page.metrics["balance"].value_label.text() == "N/D"
+        assert page.metrics["positions"].value_label.text() == "N/D"
+        assert "WYMAGA UWAGI" not in page.overall.full_text
     finally:
         page.timer.stop()
         page.deleteLater()
