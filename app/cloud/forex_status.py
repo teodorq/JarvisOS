@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
 import re
 import threading
@@ -361,6 +361,28 @@ def project_cloud_forex_status(
         v3_forward_invalid_issues = _runtime_reason_codes(
             value.get("v3_forward_invalid_issues", {})
         )
+        v3_forward_latest_market_day = str(
+            value.get("v3_forward_latest_market_day", "")
+        ).strip()
+        if v3_forward_latest_market_day:
+            parsed_market_day = date.fromisoformat(
+                v3_forward_latest_market_day
+            )
+            if parsed_market_day.isoformat() != v3_forward_latest_market_day:
+                raise ValueError("invalid V3 market day")
+        v3_forward_latest_market_day_cycles = _count(
+            value.get("v3_forward_latest_market_day_cycle_count", 0),
+            96,
+        )
+        v3_forward_base_signals = _count(
+            value.get("v3_forward_base_entry_signal_count", 0)
+        )
+        v3_forward_retained_signals = _count(
+            value.get("v3_forward_retained_entry_signal_count", 0)
+        )
+        v3_forward_filtered_signals = _count(
+            value.get("v3_forward_filtered_entry_signal_count", 0)
+        )
         v3_forward_source_valid = (
             value.get("v3_forward_source_state_valid") is True
         )
@@ -408,6 +430,10 @@ def project_cloud_forex_status(
         if (
             v3_ready_pair_count + v3_blocked_pair_count > 7
             or v3_execution_count > v3_instruction_count
+            or (
+                v3_forward_retained_signals + v3_forward_filtered_signals
+                != v3_forward_base_signals
+            )
             or (
                 v3_forward_complete
                 and (
@@ -496,6 +522,13 @@ def project_cloud_forex_status(
                 "invalid_cycle_count": v3_forward_invalid_cycles,
                 "exclusions": v3_forward_exclusions,
                 "invalid_issues": v3_forward_invalid_issues,
+                "latest_market_day": v3_forward_latest_market_day,
+                "latest_market_day_cycle_count": (
+                    v3_forward_latest_market_day_cycles
+                ),
+                "base_entry_signal_count": v3_forward_base_signals,
+                "retained_entry_signal_count": v3_forward_retained_signals,
+                "filtered_entry_signal_count": v3_forward_filtered_signals,
             },
             "paper_orders_sent": v3_execution_count > 0,
             "broker_orders_sent": False,

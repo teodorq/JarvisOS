@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 import json
 import os
@@ -101,6 +101,19 @@ def _timestamp(value: object) -> str:
     if parsed.tzinfo is None or parsed.utcoffset() is None:
         raise ForexStatusStoreError("forex_status: invalid_timestamp")
     return parsed.astimezone(timezone.utc).isoformat()
+
+
+def _market_day(value: object) -> str:
+    selected = str(value or "").strip()
+    if not selected:
+        return ""
+    try:
+        parsed = date.fromisoformat(selected)
+    except ValueError as error:
+        raise ForexStatusStoreError("forex_status: invalid_market_day") from error
+    if parsed.isoformat() != selected:
+        raise ForexStatusStoreError("forex_status: invalid_market_day")
+    return selected
 
 
 def _count(value: object, *, maximum: int = 1_000_000) -> int:
@@ -468,6 +481,22 @@ def sanitize_forex_status(value: object) -> dict[str, Any]:
         "v3_forward_invalid_issues": _reason_counts(
             value.get("v3_forward_invalid_issues", {})
         ),
+        "v3_forward_latest_market_day": _market_day(
+            value.get("v3_forward_latest_market_day", "")
+        ),
+        "v3_forward_latest_market_day_cycle_count": _count(
+            value.get("v3_forward_latest_market_day_cycle_count", 0),
+            maximum=96,
+        ),
+        "v3_forward_base_entry_signal_count": _count(
+            value.get("v3_forward_base_entry_signal_count", 0)
+        ),
+        "v3_forward_retained_entry_signal_count": _count(
+            value.get("v3_forward_retained_entry_signal_count", 0)
+        ),
+        "v3_forward_filtered_entry_signal_count": _count(
+            value.get("v3_forward_filtered_entry_signal_count", 0)
+        ),
         "v3_activation_status": _code(
             value.get("v3_activation_status", "")
         ),
@@ -586,6 +615,11 @@ def forex_status_view(
             "v3_forward_invalid_cycle_count": 0,
             "v3_forward_exclusions": {},
             "v3_forward_invalid_issues": {},
+            "v3_forward_latest_market_day": "",
+            "v3_forward_latest_market_day_cycle_count": 0,
+            "v3_forward_base_entry_signal_count": 0,
+            "v3_forward_retained_entry_signal_count": 0,
+            "v3_forward_filtered_entry_signal_count": 0,
             "v3_activation_reason": "",
             "v3_review_fingerprint_sha256": "",
             "v3_plan_reason": "",

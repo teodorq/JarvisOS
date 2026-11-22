@@ -90,6 +90,11 @@ def test_fresh_cloud_status_projects_current_paper_position() -> None:
             "invalid_cycle_count": 0,
             "exclusions": {"SUPERSEDED_CANDIDATE": 12},
             "invalid_issues": {},
+            "latest_market_day": "2026-11-03",
+            "latest_market_day_cycle_count": 4,
+            "base_entry_signal_count": 3,
+            "retained_entry_signal_count": 1,
+            "filtered_entry_signal_count": 2,
         },
         "paper_orders_sent": False,
         "broker_orders_sent": False,
@@ -164,6 +169,17 @@ def test_inconsistent_v3_diagnostics_fail_closed() -> None:
     payload = forex_status_view(sample_status(), now=NOW)
     payload["v3_instruction_count"] = 0
     payload["v3_execution_count"] = 1
+
+    snapshot = project_cloud_forex_status(payload, now=NOW)
+
+    assert snapshot["status"] == "STALE_DATA_BLOCKED"
+    assert snapshot["last_v3_cycle"]["available"] is False
+    assert snapshot["positions"] == []
+
+
+def test_inconsistent_v3_signal_totals_fail_closed() -> None:
+    payload = forex_status_view(sample_status(), now=NOW)
+    payload["v3_forward_filtered_entry_signal_count"] = 1
 
     snapshot = project_cloud_forex_status(payload, now=NOW)
 

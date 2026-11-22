@@ -38,6 +38,7 @@ _CONTAINER = re.compile(r"^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])$")
 _BLOB = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$")
 _DIAGNOSTIC_CODE = re.compile(r"^[A-Z0-9_:.-]{1,160}$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
+_MARKET_DAY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _PAIR_SYMBOL = re.compile(
     r"^(?:EUR_USD|GBP_USD|USD_JPY|USD_CHF|AUD_USD|USD_CAD|NZD_USD)$"
 )
@@ -381,6 +382,28 @@ def _v3_forward_diagnostics(value: object) -> dict[str, Any]:
                 selected[code] = value
         return selected
 
+    accepted_by_day = report.get("accepted_by_market_day")
+    accepted_by_day = (
+        accepted_by_day if isinstance(accepted_by_day, dict) else {}
+    )
+    latest_market_day = ""
+    latest_market_day_cycle_count = 0
+    for raw_day, raw_count in sorted(accepted_by_day.items()):
+        day = str(raw_day or "")
+        if not _MARKET_DAY.fullmatch(day):
+            continue
+        try:
+            datetime.strptime(day, "%Y-%m-%d")
+        except ValueError:
+            continue
+        latest_market_day = day
+        latest_market_day_cycle_count = safe_count(raw_count, maximum=96)
+
+    signal_comparison = report.get("signal_comparison")
+    signal_comparison = (
+        signal_comparison if isinstance(signal_comparison, dict) else {}
+    )
+
     return {
         "v3_forward_status": safe_code(report.get("status")),
         "v3_forward_candidate_id": safe_code(report.get("candidate_id")),
@@ -408,6 +431,19 @@ def _v3_forward_diagnostics(value: object) -> dict[str, Any]:
         "v3_forward_exclusions": safe_counts(report.get("exclusions")),
         "v3_forward_invalid_issues": safe_counts(
             report.get("invalid_issues")
+        ),
+        "v3_forward_latest_market_day": latest_market_day,
+        "v3_forward_latest_market_day_cycle_count": (
+            latest_market_day_cycle_count
+        ),
+        "v3_forward_base_entry_signal_count": safe_count(
+            signal_comparison.get("base_entry_signal_count")
+        ),
+        "v3_forward_retained_entry_signal_count": safe_count(
+            signal_comparison.get("retained_entry_signal_count")
+        ),
+        "v3_forward_filtered_entry_signal_count": safe_count(
+            signal_comparison.get("filtered_entry_signal_count")
         ),
     }
 

@@ -224,6 +224,12 @@ class CloudForexPaperJobTests(unittest.TestCase):
                 "invalid_cycle_count": 0,
                 "exclusions": {"SUPERSEDED_CANDIDATE": 12},
                 "invalid_issues": {},
+                "accepted_by_market_day": {"2026-11-03": 4},
+                "signal_comparison": {
+                    "base_entry_signal_count": 3,
+                    "retained_entry_signal_count": 1,
+                    "filtered_entry_signal_count": 2,
+                },
                 "accepted_observations": [{"secret": "must-not-leak"}],
             },
             "v3_shadow_plan_observation": {
@@ -299,6 +305,13 @@ class CloudForexPaperJobTests(unittest.TestCase):
             "FOREX_STRENGTH_V3R2_20261104",
         )
         self.assertEqual(result["v3_forward_accepted_cycle_count"], 4)
+        self.assertEqual(result["v3_forward_latest_market_day"], "2026-11-03")
+        self.assertEqual(
+            result["v3_forward_latest_market_day_cycle_count"], 4
+        )
+        self.assertEqual(result["v3_forward_base_entry_signal_count"], 3)
+        self.assertEqual(result["v3_forward_retained_entry_signal_count"], 1)
+        self.assertEqual(result["v3_forward_filtered_entry_signal_count"], 2)
         self.assertEqual(
             result["v3_forward_exclusions"],
             {"SUPERSEDED_CANDIDATE": 12},

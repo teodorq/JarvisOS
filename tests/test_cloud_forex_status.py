@@ -56,6 +56,11 @@ def sample_status() -> dict:
         "v3_forward_invalid_cycle_count": 0,
         "v3_forward_exclusions": {"SUPERSEDED_CANDIDATE": 12},
         "v3_forward_invalid_issues": {},
+        "v3_forward_latest_market_day": "2026-11-03",
+        "v3_forward_latest_market_day_cycle_count": 4,
+        "v3_forward_base_entry_signal_count": 3,
+        "v3_forward_retained_entry_signal_count": 1,
+        "v3_forward_filtered_entry_signal_count": 2,
         "v3_activation_status": "ALREADY_ACTIVE",
         "v3_initialization_status": "ALREADY_INITIALIZED_SHADOW_INACTIVE",
         "v3_initialization_reason": "",
@@ -214,6 +219,13 @@ class CloudForexStatusTests(unittest.TestCase):
             "ALREADY_INITIALIZED_SHADOW_INACTIVE",
         )
         self.assertEqual(result["v3_forward_accepted_cycle_count"], 4)
+        self.assertEqual(result["v3_forward_latest_market_day"], "2026-11-03")
+        self.assertEqual(
+            result["v3_forward_latest_market_day_cycle_count"], 4
+        )
+        self.assertEqual(result["v3_forward_base_entry_signal_count"], 3)
+        self.assertEqual(result["v3_forward_retained_entry_signal_count"], 1)
+        self.assertEqual(result["v3_forward_filtered_entry_signal_count"], 2)
         self.assertEqual(
             result["v3_forward_exclusions"],
             {"SUPERSEDED_CANDIDATE": 12},
@@ -248,6 +260,11 @@ class CloudForexStatusTests(unittest.TestCase):
         value = sample_status()
         value["v3_balance_pln"] = "NaN"
         with self.assertRaisesRegex(ForexStatusStoreError, "invalid_decimal"):
+            sanitize_forex_status(value)
+
+        value = sample_status()
+        value["v3_forward_latest_market_day"] = "2026-02-31"
+        with self.assertRaisesRegex(ForexStatusStoreError, "invalid_market_day"):
             sanitize_forex_status(value)
 
         value = sample_status()
