@@ -109,19 +109,15 @@ class FakeForexTransport:
                 "timestamp": int(NOW.timestamp()),
             }
         if parsed.hostname == FmpForexReadOnlySource.HOST:
-            if parsed.path != "/stable/quote-short":
+            if parsed.path != "/stable/batch-forex-quotes":
                 raise AssertionError(request.public_summary())
-            compact = query["symbol"][0]
-            pair = next(
-                item
-                for item in MAJOR_FOREX_PAIRS
-                if item.symbol.replace("_", "") == compact
-            )
+            if query.get("short") != ["true"]:
+                raise AssertionError(request.public_summary())
             return [{
-                "symbol": compact,
+                "symbol": pair.symbol.replace("_", ""),
                 "price": str(PRICES[pair.symbol]),
                 "timestamp": int(NOW.timestamp()),
-            }]
+            } for pair in MAJOR_FOREX_PAIRS]
         if parsed.hostname == NbpPlnReadOnlySource.HOST:
             return {
                 "table": "A",
@@ -555,37 +551,45 @@ class ProviderParserTests(unittest.TestCase):
             call for call in fake.calls
             if urlsplit(call.url).hostname == FmpForexReadOnlySource.HOST
         ]
-        self.assertEqual(len(calls), len(MAJOR_FOREX_PAIRS))
-        self.assertTrue(all(
-            urlsplit(call.url).path == "/stable/quote-short"
-            for call in calls
-        ))
+        self.assertEqual(len(calls), 1)
         self.assertEqual(
-            {
-                parse_qs(urlsplit(call.url).query)["symbol"][0]
-                for call in calls
-            },
-            {pair.symbol.replace("_", "") for pair in MAJOR_FOREX_PAIRS},
+            urlsplit(calls[0].url).path,
+            "/stable/batch-forex-quotes",
+        )
+        self.assertEqual(
+            parse_qs(urlsplit(calls[0].url).query)["short"],
+            ["true"],
         )
 
     def test_fmp_short_payload_uses_bounded_fetch_timestamp(self) -> None:
         def transport(request: PreparedJsonRequest) -> object:
-            compact = parse_qs(urlsplit(request.url).query)["symbol"][0]
-            pair = next(
-                item
-                for item in MAJOR_FOREX_PAIRS
-                if item.symbol.replace("_", "") == compact
-            )
             return [{
-                "symbol": compact,
+                "symbol": pair.symbol.replace("_", ""),
                 "price": str(PRICES[pair.symbol]),
-            }]
+            } for pair in MAJOR_FOREX_PAIRS]
 
         rates = FmpForexReadOnlySource("key", transport).fetch_rates(
             MAJOR_FOREX_PAIRS,
             fetched_at=NOW,
         )
         self.assertTrue(all(rate.timestamp == NOW for rate in rates.values()))
+
+    def test_fmp_batch_fails_closed_on_missing_or_duplicate_pair(self) -> None:
+        rows = [{
+            "symbol": pair.symbol.replace("_", ""),
+            "price": str(PRICES[pair.symbol]),
+        } for pair in MAJOR_FOREX_PAIRS]
+
+        with self.assertRaisesRegex(TradingValidationError, "incomplete_universe"):
+            FmpForexReadOnlySource("key", lambda request: rows[:-1]).fetch_rates(
+                MAJOR_FOREX_PAIRS,
+                fetched_at=NOW,
+            )
+        with self.assertRaisesRegex(TradingValidationError, "duplicate_pair"):
+            FmpForexReadOnlySource(
+                "key",
+                lambda request: rows + [dict(rows[0])],
+            ).fetch_rates(MAJOR_FOREX_PAIRS, fetched_at=NOW)
 
     def test_forex_factory_calendar_fails_closed_on_empty_feed(self) -> None:
         source = ForexFactoryEconomicCalendarReadOnlySource(lambda request: [])
