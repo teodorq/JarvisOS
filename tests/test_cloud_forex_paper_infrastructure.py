@@ -22,9 +22,13 @@ class CloudForexPaperInfrastructureTests(unittest.TestCase):
             ROOT / ".github" / "workflows" / "cloud-image.yml"
         ).read_text(encoding="utf-8")
         self.assertIn("resource paperJob 'Microsoft.App/jobs@2024-03-01'", bicep)
-        self.assertIn("cronExpression: '2,17,32,47 * * * *'", bicep)
-        self.assertIn("Seven Twelve Data credits", bicep)
-        self.assertIn("FMP is fetched once in batch", bicep)
+        self.assertIn("cronExpression: '2,17,32,47 8-15 * * 1-5'", bicep)
+        self.assertIn("32 runs use 224", bicep)
+        self.assertIn("Basic plan's 250 daily requests", bicep)
+        self.assertIn(
+            '--cron-expression "2,17,32,47 8-15 * * 1-5"',
+            workflow,
+        )
         self.assertIn("parallelism: 1", bicep)
         self.assertIn("replicaCompletionCount: 1", bicep)
         self.assertIn("JARVIS_OS_FOREX_PRIMARY_PROVIDER", bicep)

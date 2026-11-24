@@ -82,10 +82,10 @@ resource paperJob 'Microsoft.App/jobs@2024-03-01' = {
       replicaTimeout: 600
       replicaRetryLimit: 1
       scheduleTriggerConfig: {
-        // Scan two minutes after every M15 close. Seven Twelve Data credits per
-        // run remain below the Basic 800-credit daily cap (672 on a full day),
-        // while FMP is fetched once in batch (at most 96 calls per day).
-        cronExpression: '2,17,32,47 * * * *'
+        // Scan two minutes after every M15 close during the liquid weekday
+        // window. Each run checks all seven pairs independently in FMP, so
+        // 32 runs use 224 of the Basic plan's 250 daily requests (UTC).
+        cronExpression: '2,17,32,47 8-15 * * 1-5'
         parallelism: 1
         replicaCompletionCount: 1
       }

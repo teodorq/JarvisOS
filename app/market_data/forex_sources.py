@@ -327,27 +327,28 @@ class FmpForexReadOnlySource:
         expected = {pair.symbol.replace("_", ""): pair for pair in selected}
         if not expected or len(expected) != len(selected):
             raise TradingValidationError("fmp_forex: invalid_universe")
-        request = PreparedJsonRequest.build(
-            host=self.HOST,
-            path="/stable/batch-forex-quotes",
-            query=(
-                ("short", "true"),
-                ("apikey", self._api_key),
-            ),
-            headers={"Accept": "application/json"},
-        )
-        payload = self._transport(request)
-        if not isinstance(payload, list):
-            raise TradingValidationError("fmp_forex: invalid_response")
         rates: dict[str, IndependentRate] = {}
-        for raw in payload:
-            row = _mapping(raw, "fmp_forex: invalid_quote")
+        # The Basic FMP plan exposes the single-symbol Forex Short Quote route,
+        # but not Batch Forex Quotes.  Query every required pair separately so
+        # the independent safety cross-check remains complete.  The Azure job
+        # schedule keeps the resulting request count below the daily plan cap.
+        for compact_symbol, pair in expected.items():
+            request = PreparedJsonRequest.build(
+                host=self.HOST,
+                path="/stable/quote-short",
+                query=(
+                    ("symbol", compact_symbol),
+                    ("apikey", self._api_key),
+                ),
+                headers={"Accept": "application/json"},
+            )
+            payload = self._transport(request)
+            if not isinstance(payload, list) or len(payload) != 1:
+                raise TradingValidationError("fmp_forex: invalid_response")
+            row = _mapping(payload[0], "fmp_forex: invalid_quote")
             returned = str(row.get("symbol", "")).upper()
-            pair = expected.get(returned)
-            if pair is None:
-                continue
-            if pair.symbol in rates:
-                raise TradingValidationError("fmp_forex: duplicate_pair")
+            if returned != compact_symbol:
+                raise TradingValidationError("fmp_forex: unexpected_pair")
             timestamp = selected_time
             if row.get("timestamp") not in (None, ""):
                 try:

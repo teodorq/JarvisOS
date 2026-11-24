@@ -278,6 +278,7 @@ jobs:
               --image "ghcr.io/${{ github.repository_owner }}/jarvis-os-cloud:sha-${{ github.sha }}" \
               --cpu 0.25 \
               --memory 0.5Gi \
+              --cron-expression "2,17,32,47 8-15 * * 1-5" \
               --set-env-vars \
                 "JARVIS_OS_BUILD_SHA=${{ github.sha }}" \
                 "JARVIS_OS_FOREX_V3_SHADOW_AUTO_INITIALIZE_ENABLED=true" \
