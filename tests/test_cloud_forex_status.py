@@ -17,6 +17,7 @@ from cloud_service.forex_status_store import (
     forex_status_view,
     sanitize_forex_status,
 )
+from cloud_service.phone_ui import forex_status_page
 
 
 def sample_status() -> dict:
@@ -422,6 +423,59 @@ class CloudForexStatusTests(unittest.TestCase):
         self.assertFalse(future["fresh"])
         self.assertEqual(future["reason"], "STATUS_TIMESTAMP_IN_FUTURE")
         self.assertEqual(future["v3_open_positions"], [])
+
+    def test_expected_pause_preserves_stale_safety_and_shows_next_cycle(self) -> None:
+        value = sample_status()
+        value.update({
+            "observed_at": "2026-11-27T16:47:20+01:00",
+            "scheduled_job_cron": "2,17,32,47 8-15 * * 1-5",
+        })
+        friday = datetime(2026, 11, 27, 19, tzinfo=timezone.utc)
+        pause = forex_status_view(MemoryForexStatusStore(value).read(), now=friday)
+        self.assertTrue(pause["schedule_pause_expected"])
+        self.assertEqual(pause["next_scheduled_cycle_at"], "2026-11-30T08:02:00+00:00")
+        self.assertEqual(pause["status"], "PAPER_STATUS_STALE")
+        self.assertFalse(pause["fresh"])
+        self.assertFalse(pause["v3_open_positions"])
+        page = forex_status_page(pause)
+        self.assertIn("PLANOWANA PRZERWA PAPER", page)
+        self.assertRegex(page, r"Następny zaplanowany cykl: 30\.11\.2026, (08|09):02")
+        self.assertIn("Pozycje ukryte do czasu świeżego raportu PAPER", page)
+        self.assertNotIn("Brak otwartych pozycji PAPER", page)
+
+    def test_pause_does_not_mask_missed_final_cycle_or_invalid_schedule(self) -> None:
+        value = sample_status()
+        value.update({
+            "observed_at": "2026-11-27T15:32:20+00:00",
+            "scheduled_job_cron": "2,17,32,47 8-15 * * 1-5",
+            "schedule_pause_expected": True,
+        })
+        friday = datetime(2026, 11, 27, 19, tzinfo=timezone.utc)
+        missed = forex_status_view(value, now=friday)
+        self.assertFalse(missed["schedule_pause_expected"])
+        self.assertIn("DANE NIEAKTUALNE", forex_status_page(missed))
+        value["observed_at"] = "2026-11-27T15:47:20+00:00"
+        monday = datetime(2026, 11, 30, 8, 8, tzinfo=timezone.utc)
+        active = forex_status_view(value, now=monday)
+        self.assertFalse(active["schedule_pause_expected"])
+        self.assertEqual(active["next_scheduled_cycle_at"], "2026-11-30T08:17:00+00:00")
+        value["observation_fully_cross_checked"] = False
+        self.assertFalse(forex_status_view(value, now=friday)["schedule_pause_expected"])
+        value["scheduled_job_cron"] = "*/5 * * * *"
+        self.assertNotIn("next_scheduled_cycle_at", forex_status_view(value, now=friday))
+
+    def test_legacy_status_can_use_verified_deployment_schedule_but_not_a_conflict(self) -> None:
+        value = sample_status()
+        value["observed_at"] = "2026-11-27T15:47:20+00:00"
+        friday = datetime(2026, 11, 27, 19, tzinfo=timezone.utc)
+        schedule = "2,17,32,47 8-15 * * 1-5"
+        report = forex_status_view(value, now=friday, configured_job_cron=schedule)
+        self.assertTrue(report["schedule_pause_expected"])
+        self.assertFalse(report["fresh"])
+        value["scheduled_job_cron"] = "2,17,32,47 9-16 * * 1-5"
+        report = forex_status_view(value, now=friday, configured_job_cron=schedule)
+        self.assertNotIn("schedule_pause_expected", report)
+        self.assertIn("DANE NIEAKTUALNE", forex_status_page(report))
 
     def test_empty_memory_store_is_not_ready(self) -> None:
         with self.assertRaises(ForexStatusNotReady):

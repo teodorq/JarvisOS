@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from datetime import datetime
 from html import escape
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
 PHONE_MANIFEST = r'''{
@@ -125,6 +127,22 @@ function targetDevice(){const value=device.value.trim().toLowerCase();if(!/^[a-z
 window.addEventListener("beforeinstallprompt",event=>{event.preventDefault();installPrompt=event;install.hidden=false});install.addEventListener("click",async()=>{if(!installPrompt)return;installPrompt.prompt();const choice=await installPrompt.userChoice;installPrompt=null;install.hidden=true;installHint.textContent=choice.outcome==="accepted"?"JARVIS OS został dodany do telefonu.":"Możesz zainstalować aplikację później z menu przeglądarki."});window.addEventListener("appinstalled",()=>{install.hidden=true;installHint.textContent="JARVIS OS jest zainstalowany na tym telefonie."});document.querySelectorAll("[data-command]").forEach(button=>button.addEventListener("click",()=>{command.value=button.dataset.command}));send.addEventListener("click",submit);powerOpen.addEventListener("click",()=>{powerConfirm.hidden=false;powerPhrase.focus()});powerBack.addEventListener("click",()=>{powerConfirm.hidden=true;powerPhrase.value="";powerSubmit.disabled=true});powerPhrase.addEventListener("input",()=>{powerSubmit.disabled=powerPhrase.value.trim().toUpperCase()!=="WYLACZ"});powerSubmit.addEventListener("click",()=>submitPower("shutdown"));powerCancel.addEventListener("click",()=>submitPower("cancel_shutdown"));device.addEventListener("change",probe);device.value=sessionStorage.getItem("jarvisPhoneDevice")||device.value;if("serviceWorker" in navigator)navigator.serviceWorker.register("/phone-sw.js",{scope:"/phone"});loadIdentity();if(restoreReference())refresh();setTimeout(probe,250)})();</script></body></html>'''
 
 
+def _scheduled_cycle_text(raw: object) -> str:
+    if not isinstance(raw, str) or len(raw) > 40:
+        return ""
+    try:
+        stamp = datetime.fromisoformat(raw)
+        if stamp.utcoffset() is None:
+            return ""
+        try:
+            local = stamp.astimezone(ZoneInfo("Europe/Warsaw"))
+        except ZoneInfoNotFoundError:
+            return stamp.strftime("%d.%m.%Y, %H:%M UTC%z")
+        return local.strftime("%d.%m.%Y, %H:%M") + " czasu polskiego"
+    except (ValueError, OverflowError):
+        return ""
+
+
 def forex_status_page(
     snapshot: dict[str, object] | None,
     *,
@@ -180,6 +198,7 @@ def forex_status_page(
             return 0
         return value if 0 <= value <= maximum else 0
 
+    next_cycle = _scheduled_cycle_text(selected.get("next_scheduled_cycle_at"))
     if unavailable:
         state_class = "warn"
         state_label = "RAPORT JESZCZE NIEDOSTEPNY"
@@ -190,10 +209,16 @@ def forex_status_page(
         state_class = "ok"
         state_label = "DANE AKTUALNE"
         state_message = "Ostatni cykl zakonczyl sie i raport jest aktualny."
+    elif next_cycle and selected.get("schedule_pause_expected") is True:
+        state_class = ""
+        state_label = "PLANOWANA PRZERWA PAPER"
+        state_message = "Ostatni zaplanowany cykl potwierdził dane. Nowa wycena pojawi się po kolejnym skanie."
     else:
         state_class = "warn"
         state_label = "DANE NIEAKTUALNE"
         state_message = "JARVIS zachowal ostatni raport, ale wymaga on odswiezenia."
+    if next_cycle and not unavailable:
+        state_message += "<br>Następny zaplanowany cykl: " + safe(next_cycle) + "."
 
     position_rows = "".join(
         "<tr><td>" + safe(item.get("pair")) + "</td><td>"
@@ -204,7 +229,11 @@ def forex_status_page(
         + safe(item.get("take_profit")) + "</td></tr>"
         for item in positions
         if isinstance(item, dict)
-    ) or '<tr><td colspan="6">Brak otwartych pozycji PAPER.</td></tr>'
+    ) or (
+        '<tr><td colspan="6">Brak otwartych pozycji PAPER.</td></tr>'
+        if selected.get("fresh") is True
+        else '<tr><td colspan="6">Pozycje ukryte do czasu świeżego raportu PAPER.</td></tr>'
+    )
     def pair_risk_metric(metrics: dict[str, object], key: str) -> str:
         raw_risk = metrics.get("risk_diagnostics", {})
         pair_risk = raw_risk if isinstance(raw_risk, dict) else {}
@@ -304,9 +333,11 @@ def forex_status_page(
         "PAIR_DATA_BLOCKED": "Czesc par zablokowana przez dane",
         "DATA_BLOCKED": "Cykl zablokowany przez dane",
     }.get(runtime_code, runtime_code or "Brak wyniku")
-    ready_pairs = count("runtime_ready_pair_count", 7)
-    blocked_pairs = count("runtime_blocked_pair_count", 7)
-    execution_count = count("runtime_execution_count", 20)
+    if selected.get("fresh") is not True:
+        runtime_label = "Brak bieżącego odczytu"
+    ready_pairs = count("runtime_ready_pair_count", 7) if selected.get("fresh") is True else "N/D"
+    blocked_pairs = count("runtime_blocked_pair_count", 7) if selected.get("fresh") is True else "N/D"
+    execution_count = count("runtime_execution_count", 20) if selected.get("fresh") is True else "N/D"
     latest_market_day = (
         safe(selected.get("v3_forward_latest_market_day"), "brak")
         if selected.get("fresh") is True

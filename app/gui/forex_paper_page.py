@@ -254,7 +254,7 @@ class ForexPaperPage(QWidget):
         raw_positions = raw_positions if isinstance(raw_positions, list) else []
         positions = [dict(item) for item in raw_positions[:5] if isinstance(item, dict)]
         self.metrics["positions"].set_value(
-            "N/D" if market_closed else str(len(positions))
+            "N/D" if stale_data else str(len(positions))
         )
         performance = snapshot.get("performance")
         performance = (
@@ -300,7 +300,9 @@ class ForexPaperPage(QWidget):
             column_count=len(self.HEADERS),
             empty_message=(
                 "POZYCJE UKRYTE DO PIERWSZEGO CYKLU PO OTWARCIU RYNKU"
-                if market_closed else "BRAK OTWARTYCH POZYCJI PAPER"
+                if market_closed
+                else "POZYCJE UKRYTE DO CZASU ŚWIEŻEGO RAPORTU PAPER"
+                if stale_data else "BRAK OTWARTYCH POZYCJI PAPER"
             ),
         )
         history = []

@@ -160,6 +160,10 @@ resource plannerApp 'Microsoft.App/containerApps@2024-03-01' = {
               value: 'status/latest.json'
             }
             {
+              name: 'JARVIS_OS_FOREX_CLOUD_JOB_CRON'
+              value: trim(loadTextContent('paper-job.cron'))
+            }
+            {
               name: 'JARVIS_OS_CLOUD_REQUESTS_PER_MINUTE'
               value: '30'
             }

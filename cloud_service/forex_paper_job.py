@@ -26,6 +26,7 @@ from app.trading.forex_cloud_activity import (
     sanitize_forex_cloud_activity_events,
 )
 from app.trading.forex_runtime_summary import ForexRuntimeCycleSummary
+from cloud_service.forex_paper_schedule import declared_paper_cron
 from cloud_service.forex_status_store import (
     FOREX_STATUS_SCHEMA_VERSION,
     ForexStatusStoreError,
@@ -562,6 +563,9 @@ def _public_result(
         "mode": str(result.get("mode", "AUTONOMOUS_AZURE_FOREX_PAPER")),
         "cycle_id": str(result.get("cycle_id", "")),
         "observed_at": str(result.get("observed_at", "")),
+        "scheduled_job_cron": declared_paper_cron(
+            os.getenv("JARVIS_OS_FOREX_CLOUD_JOB_CRON", "")
+        ),
         "reason": result_reason,
         "observation_status": str(observation.get("status", "")),
         "observation_reason": observation_reason,

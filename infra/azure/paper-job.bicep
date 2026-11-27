@@ -39,6 +39,8 @@ var tags = {
   costProfile: '4-60-eur-budget-alert'
 }
 
+var paperCron = trim(loadTextContent('paper-job.cron'))
+
 resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' existing = {
   name: storageAccountName
 }
@@ -85,7 +87,7 @@ resource paperJob 'Microsoft.App/jobs@2024-03-01' = {
         // Scan two minutes after every M15 close during the liquid weekday
         // window. Each run checks all seven pairs independently in FMP, so
         // 32 runs use 224 of the Basic plan's 250 daily requests (UTC).
-        cronExpression: '2,17,32,47 8-15 * * 1-5'
+        cronExpression: paperCron
         parallelism: 1
         replicaCompletionCount: 1
       }
@@ -176,6 +178,10 @@ resource paperJob 'Microsoft.App/jobs@2024-03-01' = {
             {
               name: 'JARVIS_OS_FOREX_STATUS_BLOB'
               value: 'status/latest.json'
+            }
+            {
+              name: 'JARVIS_OS_FOREX_CLOUD_JOB_CRON'
+              value: paperCron
             }
           ]
           resources: {

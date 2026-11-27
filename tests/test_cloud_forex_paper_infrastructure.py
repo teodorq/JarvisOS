@@ -22,13 +22,21 @@ class CloudForexPaperInfrastructureTests(unittest.TestCase):
             ROOT / ".github" / "workflows" / "cloud-image.yml"
         ).read_text(encoding="utf-8")
         self.assertIn("resource paperJob 'Microsoft.App/jobs@2024-03-01'", bicep)
-        self.assertIn("cronExpression: '2,17,32,47 8-15 * * 1-5'", bicep)
+        schedule = (ROOT / "infra" / "azure" / "paper-job.cron").read_text(encoding="utf-8")
+        self.assertEqual(schedule.strip(), "2,17,32,47 8-15 * * 1-5")
+        self.assertIn("var paperCron = trim(loadTextContent('paper-job.cron'))", bicep)
+        self.assertIn("cronExpression: paperCron", bicep)
+        self.assertRegex(bicep, r"name: 'JARVIS_OS_FOREX_CLOUD_JOB_CRON'\s+value: paperCron")
         self.assertIn("32 runs use 224", bicep)
         self.assertIn("Basic plan's 250 daily requests", bicep)
         self.assertIn(
-            '--cron-expression "2,17,32,47 8-15 * * 1-5"',
+            '--cron-expression "${paper_cron}"',
             workflow,
         )
+        self.assertIn('IFS= read -r paper_cron < infra/azure/paper-job.cron', workflow)
+        self.assertIn('"JARVIS_OS_FOREX_CLOUD_JOB_CRON=${paper_cron}"', workflow)
+        self.assertIn('"${existing_paper_cron}" == "${declared_paper_cron}"', workflow)
+        self.assertIn('"JARVIS_OS_FOREX_CLOUD_JOB_CRON=${VERIFIED_PAPER_CRON}"', workflow)
         self.assertIn("parallelism: 1", bicep)
         self.assertIn("replicaCompletionCount: 1", bicep)
         self.assertIn("JARVIS_OS_FOREX_PRIMARY_PROVIDER", bicep)
@@ -113,6 +121,8 @@ class CloudForexPaperInfrastructureTests(unittest.TestCase):
         )
         self.assertIn("v3AutoInitialize", script)
         self.assertIn('statusContainer -ne "forex-paper-status"', script)
+        self.assertIn('infra\\azure\\paper-job.cron', script)
+        self.assertIn('$Verified.cron -ne $ExpectedCron', script)
 
 
 if __name__ == "__main__":

@@ -179,6 +179,15 @@ jobs:
             --resource-group rg-jarvis-os-cloud \
             --query "properties.template.containers[0].env[?name=='JARVIS_OS_REMOTE_STORAGE_ACCOUNT'].value | [0]" \
             --output tsv)"
+          IFS= read -r declared_paper_cron < infra/azure/paper-job.cron
+          existing_paper_cron="$(az containerapp job show \
+            --name jarvis-os-forex-paper \
+            --resource-group rg-jarvis-os-cloud \
+            --query properties.configuration.scheduleTriggerConfig.cronExpression \
+            --output tsv --only-show-errors 2>/dev/null || true)"
+          if [[ "${existing_paper_cron}" == "${declared_paper_cron}" ]]; then
+            echo "paper_job_cron=${declared_paper_cron}" >> "${GITHUB_OUTPUT}"
+          fi
           if [[ ! "${storage_account}" =~ ^[a-z0-9]{3,24}$ ]]; then
             echo "The declared JARVIS OS Storage account is missing or invalid."
             exit 1
@@ -209,6 +218,8 @@ jobs:
 
       - name: Deploy the verified image
         shell: bash
+        env:
+          VERIFIED_PAPER_CRON: ${{ steps.previous.outputs.paper_job_cron }}
         run: |
           az config set extension.use_dynamic_install=yes_without_prompt
           for attempt in $(seq 1 5); do
@@ -230,6 +241,7 @@ jobs:
                 "JARVIS_OS_REMOTE_QUEUE=commands" \
                 "JARVIS_OS_FOREX_STATUS_CONTAINER=forex-paper-status" \
                 "JARVIS_OS_FOREX_STATUS_BLOB=status/latest.json" \
+                "JARVIS_OS_FOREX_CLOUD_JOB_CRON=${VERIFIED_PAPER_CRON}" \
                 "JARVIS_OS_CLOUD_REQUESTS_PER_MINUTE=30" \
                 "PORT=8000" \
               --only-show-errors \
@@ -272,15 +284,17 @@ jobs:
             --resource-group rg-jarvis-os-cloud \
             --only-show-errors \
             --output none 2>/dev/null; then
+            IFS= read -r paper_cron < infra/azure/paper-job.cron
             az containerapp job update \
               --name jarvis-os-forex-paper \
               --resource-group rg-jarvis-os-cloud \
               --image "ghcr.io/${{ github.repository_owner }}/jarvis-os-cloud:sha-${{ github.sha }}" \
               --cpu 0.25 \
               --memory 0.5Gi \
-              --cron-expression "2,17,32,47 8-15 * * 1-5" \
+              --cron-expression "${paper_cron}" \
               --set-env-vars \
                 "JARVIS_OS_BUILD_SHA=${{ github.sha }}" \
+                "JARVIS_OS_FOREX_CLOUD_JOB_CRON=${paper_cron}" \
                 "JARVIS_OS_FOREX_V3_SHADOW_AUTO_INITIALIZE_ENABLED=true" \
                 "JARVIS_OS_FOREX_STATUS_CONTAINER=forex-paper-status" \
                 "JARVIS_OS_FOREX_STATUS_BLOB=status/latest.json" \

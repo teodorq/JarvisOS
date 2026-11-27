@@ -13,6 +13,7 @@ from app.trading.forex_cloud_activity import (
     ForexCloudActivityError,
     sanitize_forex_cloud_activity_events,
 )
+from cloud_service.forex_paper_schedule import declared_paper_cron, paper_schedule_projection
 
 
 FOREX_STATUS_SCHEMA_VERSION = 1
@@ -413,6 +414,7 @@ def sanitize_forex_status(value: object) -> dict[str, Any]:
         "mode": mode,
         "cycle_id": _cycle_id(value.get("cycle_id")),
         "observed_at": _timestamp(value.get("observed_at")),
+        "scheduled_job_cron": declared_paper_cron(value.get("scheduled_job_cron")),
         "reason": _code(value.get("reason", "")),
         "observation_status": _code(value.get("observation_status", "")),
         "observation_reason": _code(value.get("observation_reason", "")),
@@ -577,6 +579,7 @@ def forex_status_view(
     value: object,
     *,
     now: datetime | None = None,
+    configured_job_cron: str = "",
 ) -> dict[str, Any]:
     snapshot = sanitize_forex_status(value)
     selected_now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
@@ -587,10 +590,26 @@ def forex_status_view(
         raw_age_seconds >= -300
         and age_seconds <= FOREX_STATUS_FRESH_SECONDS
     )
+    snapshot_cron = snapshot["scheduled_job_cron"]
+    configured_cron = declared_paper_cron(configured_job_cron)
+    # The planner can cover the first read of a legacy snapshot. If the job
+    # and planner declare different schedules, don't infer a planned pause.
+    schedule = snapshot_cron or configured_cron
+    if snapshot_cron and configured_cron and snapshot_cron != configured_cron:
+        schedule = ""
     result = {
         **snapshot,
         "age_seconds": age_seconds,
         "fresh": fresh,
+        **paper_schedule_projection(
+            schedule, now=selected_now, observed=observed,
+            completed_and_verified=(
+                snapshot["mode"] == "AUTONOMOUS_AZURE_FOREX_PAPER"
+                and snapshot["status"] == "PAPER_CYCLE_COMPLETED"
+                and snapshot["observation_fully_cross_checked"] is True
+                and not snapshot["reason"]
+            ),
+        ),
     }
     if not fresh:
         result.update({

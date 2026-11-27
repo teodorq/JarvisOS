@@ -12,6 +12,7 @@ $ConfigPath = Join-Path $ProjectRoot "config\forex.env"
 $ResourceGroup = "rg-jarvis-os-cloud"
 $PlannerName = "jarvis-os-planner"
 $JobName = "jarvis-os-forex-paper"
+$ExpectedCron = (Get-Content -LiteralPath (Join-Path $ProjectRoot "infra\azure\paper-job.cron") -Raw -Encoding UTF8).Trim()
 
 function Get-PrivateSetting([string]$Name) {
     if (-not (Test-Path -LiteralPath $ConfigPath -PathType Leaf)) {
@@ -143,7 +144,7 @@ try {
         $LASTEXITCODE -ne 0 -or
         $Verified.state -ne "Succeeded" -or
         $Verified.trigger -ne "Schedule" -or
-        $Verified.cron -ne "2 * * * *" -or
+        $Verified.cron -ne $ExpectedCron -or
         $Verified.identity -ne "SystemAssigned" -or
         $Verified.image -ne $ContainerImage -or
         $Verified.v3AutoInitialize -ne $EnableV3ShadowAutoInitialization.IsPresent.ToString().ToLowerInvariant() -or

@@ -133,6 +133,14 @@ class CloudForexPaperJobTests(unittest.TestCase):
         self.assertFalse(result["live_orders_sent"])
         self.assertFalse(result["real_money_access"])
 
+    def test_published_job_report_only_accepts_the_supported_cron_shape(self) -> None:
+        setting = "JARVIS_OS_FOREX_CLOUD_JOB_CRON"
+        schedule = "2,17,32,47 8-15 * * 1-5"
+        with patch.dict("os.environ", {setting: schedule}):
+            self.assertEqual(_public_result({})["scheduled_job_cron"], schedule)
+        with patch.dict("os.environ", {setting: "0 0 * * *"}):
+            self.assertEqual(_public_result({})["scheduled_job_cron"], "")
+
     def test_state_archive_round_trip_keeps_only_trading_json(self) -> None:
         state = PaperStateArchive()
         with TemporaryDirectory() as source_dir, TemporaryDirectory() as target_dir:

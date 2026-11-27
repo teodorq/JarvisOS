@@ -700,7 +700,10 @@ class JarvisOSCloudHandler(BaseHTTPRequestHandler):
     def _read_forex_status(self) -> dict[str, Any]:
         if self.server.forex_status_store is None:
             raise ForexStatusNotReady("forex_status: not_configured")
-        return forex_status_view(self.server.forex_status_store.read())
+        return forex_status_view(
+            self.server.forex_status_store.read(),
+            configured_job_cron=os.getenv("JARVIS_OS_FOREX_CLOUD_JOB_CRON", ""),
+        )
 
     def _handle_forex_status_api(self) -> None:
         if not (self._phone_identity_authorized() or self._authorized()):

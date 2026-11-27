@@ -289,7 +289,8 @@ def test_forex_page_hides_positions_and_warns_when_cloud_status_is_stale() -> No
     page = ForexPaperPage(_StaleCloudDashboard())
     try:
         assert page.table.rowCount() == 1
-        assert "BRAK OTWARTYCH POZYCJI" in page.table.item(0, 0).text()
+        assert "POZYCJE UKRYTE" in page.table.item(0, 0).text()
+        assert page.metrics["positions"].value_label.text() == "N/D"
         assert not page.data_warning.isHidden()
         assert "NIEAKTUALNE" in page.data_warning.text()
         assert page.updated.text().startswith("Dane nieaktualne od:")
